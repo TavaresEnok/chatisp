@@ -18,4 +18,4 @@ npm run build
 npm run generate:api
 ```
 
-`generate:api` lê `../backend/api/openapi.json` e grava `src/api/schema.ts`. Enquanto o OpenAPI do backend não existe, o arquivo versionado não declara rotas.
+`generate:api` lê `../backend/api/openapi.json` e grava `src/api/schema.ts`. O contrato publicado tem `/healthz` e `/readyz`. Essas rotas não alimentam as áreas: fila, diretório, equipe e relatório continuam vazios até existirem no OpenAPI.

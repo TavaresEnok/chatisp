@@ -16,8 +16,9 @@ export async function fetchAreaSnapshot(
   area: AreaId,
   tenantId: string,
 ): Promise<AreaSnapshot> {
-  // The generated client has no panel operation until the backend publishes OpenAPI.
-  // The client stays wired here so a later route replaces this empty snapshot.
+  // /healthz and /readyz only describe the process. They are not a queue,
+  // a directory, or a report, so this snapshot stays empty until a collection
+  // route exists. The client stays referenced for that route.
   void api;
 
   return {

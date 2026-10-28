@@ -57,7 +57,7 @@ export function AppShell() {
         </aside>
         <div className="flex min-w-0 flex-col">
           <header className="border-b px-4 py-3 md:px-8">
-            <p className="text-sm text-foreground">
+            <p className="min-w-0 text-sm break-words text-foreground">
               {sessionSummary(tenantId, displayName)}
             </p>
           </header>
