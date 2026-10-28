@@ -1,0 +1,984 @@
+package topicwriterinternal
+
+import (
+	"context"
+	"crypto/rand"
+	"errors"
+	"fmt"
+	"math"
+	"math/big"
+	"runtime"
+	"sync/atomic"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jonboulle/clockwork"
+
+	"github.com/ydb-platform/ydb-go-sdk/v3/credentials"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/background"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/config"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/empty"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/endpoint"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/grpcwrapper/rawtopic"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/grpcwrapper/rawtopic/rawtopiccommon"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/grpcwrapper/rawtopic/rawtopicwriter"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/topic"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/topic/gtrace"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/topic/topicwritercommon"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/value"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/xcontext"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/xerrors"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/xsync"
+	"github.com/ydb-platform/ydb-go-sdk/v3/topic/topictypes"
+	"github.com/ydb-platform/ydb-go-sdk/v3/trace"
+)
+
+var (
+	errConnTimeout           = xerrors.Wrap(errors.New("ydb: connection timeout"))
+	errStopWriterReconnector = xerrors.Wrap(errors.New("ydb: stop writer reconnector"))
+	ErrNonZeroSeqNo          = xerrors.Wrap(errors.New("ydb: non zero seqno for auto set seqno mode"))
+	errNoAllowedCodecs       = xerrors.Wrap(errors.New("ydb: no allowed codecs for write to topic"))
+	errLargeMessage          = xerrors.Wrap(errors.New("ydb: message uncompressed size more, then limit"))
+	ErrPublicQueueIsFull     = xerrors.Wrap(
+		errors.New("ydb: queue is full"),
+	)
+	// ErrPublicWriterClosed is returned by Writer.Write when the writer has been closed
+	// due to a terminal error or explicit Close call. Use errors.Is to check for this error
+	// and recreate the writer if needed.
+	ErrPublicWriterClosed                          = xerrors.Wrap(errors.New("ydb: writer is closed"))
+	ErrPublicMessagesPutToInternalQueueBeforeError = xerrors.Wrap(errors.New("ydb: the messages was put to internal buffer before the error happened. It mean about the messages can be delivered to the server"))                                                                                                           //nolint:lll
+	errDiffetentTransactions                       = xerrors.Wrap(errors.New("ydb: internal writer has messages from different trasactions. It is internal logic error, write issue please: https://github.com/ydb-platform/ydb-go-sdk/issues/new?assignees=&labels=bug&projects=&template=01_BUG_REPORT.md&title=bug%3A+")) //nolint:lll
+	errWritingByKeyNotSupported                    = xerrors.Wrap(errors.New("ydb: writing by key is not supported for single writer, use WithWriterPartitionByKey or WithPartitionByPartitionID options"))                                                                                                                  //nolint:lll
+
+	// errProducerIDNotEqualMessageGroupID is temporary
+	// WithMessageGroupID is optional parameter because it allowed to be skipped by protocol.
+	// But right not YDB server doesn't implement it.
+	// It is fast check for return error at writer create context instead of stream initialization
+	// The error will remove in the future, when skip message group id will be allowed by server.
+	errProducerIDNotEqualMessageGroupID = xerrors.Wrap(errors.New("ydb: producer id not equal to message group id, use option WithMessageGroupID(producerID) for create writer")) //nolint:lll
+	errDirectWritePartitionNotFound     = xerrors.Wrap(
+		errors.New("ydb: direct write: target partition not found in topic description"),
+	)
+	errDirectWriteRequiresPartitionOrProducer = xerrors.Wrap(
+		errors.New("ydb: direct write: requires WithWriterPartitionID or WithProducerID"),
+	)
+)
+
+type WriterReconnectorConfig struct {
+	WritersCommonConfig
+
+	MaxMessageSize               int
+	MaxQueueLen                  int
+	Common                       config.Common
+	AdditionalEncoders           map[rawtopiccommon.Codec]topicwritercommon.PublicCreateEncoderFunc
+	Connect                      ConnectFunc
+	WaitServerAck                bool
+	AutoSetSeqNo                 bool
+	AutoSetCreatedTime           bool
+	OnWriterInitResponseCallback PublicOnWriterInitResponseCallback
+	OnAckReceivedCallback        func(seqNo int64)
+	MultiMode                    bool
+
+	// ErrOnQueueFull controls Write behavior when the internal message queue is full.
+	// false (default): Write blocks until queue space becomes available or ctx is cancelled.
+	// true: Write returns ErrPublicQueueIsFull immediately without blocking,
+	// allowing callers to implement back-pressure and avoid unbounded memory growth.
+	ErrOnQueueFull bool
+
+	MultiWriterConfig any
+	RetrySettings     topic.RetrySettings
+
+	directWriteEnabled bool
+
+	connectTimeout time.Duration
+}
+
+func (cfg *WriterReconnectorConfig) validate() error {
+	if cfg.partitioning.Type == rawtopicwriter.PartitioningMessageGroupID &&
+		cfg.producerID != cfg.partitioning.MessageGroupID {
+		return xerrors.WithStackTrace(errProducerIDNotEqualMessageGroupID)
+	}
+
+	return cfg.validateDirectWrite()
+}
+
+func (cfg *WriterReconnectorConfig) validateDirectWrite() error {
+	if !cfg.directWriteEnabled ||
+		cfg.partitioning.Type == rawtopicwriter.PartitioningPartitionID ||
+		cfg.producerID != "" {
+		return nil
+	}
+
+	return xerrors.WithStackTrace(errDirectWriteRequiresPartitionOrProducer)
+}
+
+// probeWriterPartition opens a short-lived proxy StreamWrite session, sends InitRequest,
+// reads InitResponse, and returns the assigned partition ID.
+func (cfg *WriterReconnectorConfig) probeWriterPartition(ctx context.Context) (int64, error) {
+	stream, err := cfg.rawTopicClient.StreamWrite(ctx, cfg.Tracer)
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		_ = stream.CloseSend()
+	}()
+
+	req := rawtopicwriter.InitRequest{
+		Path:             cfg.topic,
+		ProducerID:       cfg.producerID,
+		WriteSessionMeta: cfg.writerMeta,
+		Partitioning:     cfg.partitioning,
+	}
+	if err = stream.Send(&req); err != nil {
+		return 0, err
+	}
+
+	recvMessage, err := stream.Recv()
+	if err != nil {
+		return 0, err
+	}
+
+	result, ok := recvMessage.(*rawtopicwriter.InitResult)
+	if !ok {
+		return 0, xerrors.WithStackTrace(fmt.Errorf(
+			"ydb: direct write: probe init response has unexpected type: %T",
+			recvMessage,
+		))
+	}
+
+	return result.PartitionID, nil
+}
+
+func NewWriterReconnectorConfig(options ...PublicWriterOption) WriterReconnectorConfig {
+	cfg := WriterReconnectorConfig{
+		WritersCommonConfig: WritersCommonConfig{
+			cred:               credentials.NewAnonymousCredentials(),
+			credUpdateInterval: time.Hour,
+			clock:              clockwork.NewRealClock(),
+			compressorCount:    runtime.NumCPU(),
+			Tracer:             &trace.Topic{},
+			maxBytesPerMessage: config.DefaultGRPCMsgSize,
+		},
+		AutoSetSeqNo:       true,
+		AutoSetCreatedTime: true,
+		MaxMessageSize:     50 * 1024 * 1024, //nolint:mnd
+		MaxQueueLen:        1000,             //nolint:mnd
+		RetrySettings: topic.RetrySettings{
+			StartTimeout: topic.DefaultStartTimeout,
+		},
+	}
+	if cfg.compressorCount == 0 {
+		cfg.compressorCount = 1
+	}
+
+	for _, f := range options {
+		f(&cfg)
+	}
+
+	if cfg.LogContext == nil {
+		cfg.LogContext = context.Background()
+	}
+
+	if cfg.connectTimeout == 0 {
+		cfg.connectTimeout = cfg.Common.OperationTimeout()
+	}
+
+	if cfg.connectTimeout == 0 {
+		cfg.connectTimeout = value.InfiniteDuration
+	}
+
+	if cfg.producerID == "" {
+		WithProducerID(uuid.NewString())(&cfg)
+	}
+
+	if cfg.Connect == nil {
+		var connector ConnectFunc = func(ctx context.Context, tracer *trace.Topic) (
+			RawTopicWriterStream,
+			error,
+		) {
+			return cfg.rawTopicClient.StreamWrite(xcontext.MergeContexts(ctx, cfg.LogContext), tracer)
+		}
+
+		cfg.Connect = connector
+	}
+
+	return cfg
+}
+
+type WriterReconnector struct {
+	cfg                            WriterReconnectorConfig
+	queue                          messageQueue
+	background                     background.Worker
+	retrySettings                  topic.RetrySettings
+	writerInstanceID               string
+	semaphore                      *xsync.SoftWeightedSemaphore
+	firstInitResponseProcessedChan empty.Chan
+	lastSeqNo                      int64
+	encodersMap                    *topicwritercommon.MultiEncoder
+	initDoneCh                     empty.Chan
+	initInfo                       InitialInfo
+	m                              xsync.RWMutex
+	sessionID                      string
+	firstConnectionHandled         atomic.Bool
+	initDone                       bool
+}
+
+func NewWriterReconnector(
+	cfg WriterReconnectorConfig,
+) (*WriterReconnector, error) {
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+
+	res := newWriterReconnectorStopped(cfg)
+	res.start()
+
+	return res, nil
+}
+
+func newWriterReconnectorStopped(
+	cfg WriterReconnectorConfig, //nolint:gocritic
+) *WriterReconnector {
+	writerInstanceID, _ := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
+	res := &WriterReconnector{
+		cfg:                            cfg,
+		semaphore:                      xsync.NewSoftWeightedSemaphore(int64(cfg.MaxQueueLen)),
+		queue:                          newMessageQueue(),
+		lastSeqNo:                      -1,
+		firstInitResponseProcessedChan: make(empty.Chan),
+		encodersMap:                    topicwritercommon.NewMultiEncoder(),
+		writerInstanceID:               writerInstanceID.String(),
+		retrySettings:                  cfg.RetrySettings,
+	}
+
+	res.queue.OnAckReceived = res.onAckReceived
+	res.queue.AckCallback = res.cfg.OnAckReceivedCallback
+
+	for codec, creator := range cfg.AdditionalEncoders {
+		res.encodersMap.AddEncoder(codec, creator)
+	}
+
+	res.sessionID = "not-connected-" + writerInstanceID.String()
+
+	res.initDoneCh = make(empty.Chan)
+
+	return res
+}
+
+func (w *WriterReconnector) fillFields(messages []messageWithDataContent, preserveAssignedFields bool) error {
+	for i := range messages {
+		msg := &messages[i]
+
+		// SetSeqNo
+		if w.cfg.AutoSetSeqNo {
+			if msg.SeqNo != 0 {
+				if !preserveAssignedFields {
+					return xerrors.WithStackTrace(ErrNonZeroSeqNo)
+				}
+			} else {
+				w.lastSeqNo++
+				msg.SeqNo = w.lastSeqNo
+			}
+		}
+	}
+
+	if w.cfg.AutoSetCreatedTime {
+		if err := topicwritercommon.FillCreatedAt(messages, w.cfg.Now(), preserveAssignedFields); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (w *WriterReconnector) start() {
+	name := fmt.Sprintf("writer %q", w.cfg.topic)
+	w.background.Start(name+", connectionLoop", w.connectionLoop)
+}
+
+func (w *WriterReconnector) Write(ctx context.Context, messages []PublicMessage) (resErr error) {
+	if err := w.validateWriteMessages(messages); err != nil {
+		return err
+	}
+
+	return w.writePrepared(ctx, len(messages), func() ([]topicwritercommon.MessageWithDataContent, error) {
+		return w.createMessagesWithContent(messages)
+	}, false)
+}
+
+func (w *WriterReconnector) WriteInternal(
+	ctx context.Context,
+	messages []topicwritercommon.MessageWithDataContent,
+) (resErr error) {
+	return w.writePrepared(ctx, len(messages), func() ([]topicwritercommon.MessageWithDataContent, error) {
+		return messages, nil
+	}, true)
+}
+
+func (w *WriterReconnector) validateWriteMessages(messages []PublicMessage) error {
+	for i := range messages {
+		if !w.cfg.MultiMode && (messages[i].Key != "" || messages[i].PartitionID != 0) {
+			return xerrors.WithStackTrace(errWritingByKeyNotSupported)
+		}
+	}
+
+	return nil
+}
+
+// acquireQueueSpaceForWrite reserves capacity in the internal message queue for weight messages.
+// On success the caller must release the same weight with w.semaphore.Release (typically in defer).
+func (w *WriterReconnector) acquireQueueSpaceForWrite(ctx context.Context, weight int64) error {
+	if w.cfg.ErrOnQueueFull {
+		// Non-blocking path: fail fast with ErrPublicQueueIsFull when the queue has no room.
+		// This lets callers avoid unbounded memory growth and implement their own back-pressure.
+		if !w.semaphore.TryAcquire(weight) {
+			return xerrors.WithStackTrace(ErrPublicQueueIsFull)
+		}
+
+		return nil
+	}
+
+	if err := w.semaphore.Acquire(ctx, weight); err != nil {
+		return xerrors.WithStackTrace(
+			fmt.Errorf("ydb: timeout waiting for queue space to become available: %w", err),
+		)
+	}
+
+	return nil
+}
+
+func (w *WriterReconnector) writePrepared(
+	ctx context.Context,
+	messageCount int,
+	prepareMessages func() ([]topicwritercommon.MessageWithDataContent, error),
+	preserveAssignedFields bool,
+) (resErr error) {
+	if err := w.background.CloseReason(); err != nil {
+		return xerrors.WithStackTrace(fmt.Errorf("%w: %w", ErrPublicWriterClosed, err))
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if messageCount == 0 {
+		return nil
+	}
+
+	semaphoreWeight := int64(messageCount)
+	if err := w.acquireQueueSpaceForWrite(ctx, semaphoreWeight); err != nil {
+		return err
+	}
+	defer func() {
+		w.semaphore.Release(semaphoreWeight)
+	}()
+
+	if err := w.waitFirstInitResponse(ctx); err != nil {
+		return err
+	}
+
+	messages, err := prepareMessages()
+	if err != nil {
+		return err
+	}
+
+	return w.writeCommon(ctx, messages, &semaphoreWeight, preserveAssignedFields)
+}
+
+func (w *WriterReconnector) writeCommon(
+	ctx context.Context,
+	messages []topicwritercommon.MessageWithDataContent,
+	semaphoreWeight *int64,
+	preserveAssignedFields bool,
+) (resErr error) {
+	if err := w.checkMessages(messages); err != nil {
+		return err
+	}
+
+	waiter, err := w.addMessageToInternalQueueWithLock(messages, semaphoreWeight, preserveAssignedFields)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if resErr != nil {
+			resErr = xerrors.Join(resErr, ErrPublicMessagesPutToInternalQueueBeforeError)
+		}
+	}()
+
+	if !w.cfg.WaitServerAck {
+		return nil
+	}
+
+	return w.queue.Wait(ctx, waiter)
+}
+
+func (w *WriterReconnector) addMessageToInternalQueueWithLock(
+	messagesSlice []messageWithDataContent,
+	semaphoreWeight *int64,
+	preserveAssignedFields bool,
+) (MessageQueueAckWaiter, error) {
+	var (
+		waiter MessageQueueAckWaiter
+		err    error
+	)
+	w.m.WithLock(func() {
+		// need set numbers and add to queue atomically
+		err = w.fillFields(messagesSlice, preserveAssignedFields)
+		if err != nil {
+			return
+		}
+
+		if w.cfg.WaitServerAck {
+			waiter, err = w.queue.AddMessagesWithWaiter(messagesSlice)
+		} else {
+			err = w.queue.AddMessages(messagesSlice)
+		}
+		if err == nil {
+			// move semaphore weight to queue
+			*semaphoreWeight = 0
+		}
+	})
+
+	return waiter, err
+}
+
+func (w *WriterReconnector) checkMessages(messages []messageWithDataContent) error {
+	for i := range messages {
+		size := messages[i].BufUncompressedSize
+		if size > w.cfg.MaxMessageSize {
+			return xerrors.WithStackTrace(fmt.Errorf("message size bytes %v: %w", size, errLargeMessage))
+		}
+	}
+
+	return nil
+}
+
+func (w *WriterReconnector) createMessagesWithContent(messages []PublicMessage) ([]messageWithDataContent, error) {
+	res := make([]messageWithDataContent, 0, len(messages))
+	for i := range messages {
+		mess := newMessageDataWithContent(messages[i], w.encodersMap)
+		res = append(res, mess)
+	}
+
+	var sessionID string
+	w.m.WithRLock(func() {
+		sessionID = w.sessionID
+	})
+	logCtx := w.cfg.LogContext
+	onCompressDone := gtrace.TopicOnWriterCompressMessages(
+		w.cfg.Tracer,
+		&logCtx,
+		w.writerInstanceID,
+		sessionID,
+		w.cfg.forceCodec.ToInt32(),
+		messages[0].SeqNo,
+		len(messages),
+		trace.TopicWriterCompressMessagesReasonCompressDataOnWriteReadData,
+	)
+
+	targetCodec := w.cfg.forceCodec
+	if targetCodec == rawtopiccommon.CodecUNSPECIFIED {
+		targetCodec = rawtopiccommon.CodecRaw
+	}
+	err := topicwritercommon.CacheMessages(res, targetCodec, w.cfg.compressorCount)
+
+	traceErr := err
+	var uncompressedSize, compressedSize int
+	if traceErr == nil && w.cfg.Tracer.OnWriterCompressMessages != nil {
+		compressedSize, traceErr = topicwritercommon.CompressedContentSize(res, targetCodec)
+		if traceErr == nil {
+			uncompressedSize = topicwritercommon.UncompressedContentSize(res)
+		}
+	}
+	onCompressDone(traceErr, uncompressedSize, compressedSize)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (w *WriterReconnector) Flush(ctx context.Context) error {
+	return w.queue.WaitLastWritten(ctx)
+}
+
+func (w *WriterReconnector) Close(ctx context.Context) error {
+	reason := xerrors.WithStackTrace(errStopWriterReconnector)
+	w.queue.StopAddNewMessages(reason)
+
+	flushErr := w.Flush(ctx)
+	closeErr := w.close(ctx, reason)
+
+	if flushErr != nil {
+		return flushErr
+	}
+
+	return closeErr
+}
+
+func (w *WriterReconnector) close(ctx context.Context, reason error) (resErr error) {
+	defer func() {
+		logCtx := w.cfg.LogContext
+		gtrace.TopicOnWriterClose(w.cfg.Tracer, &logCtx, w.writerInstanceID, reason)
+	}()
+
+	// stop background work and single stream writer
+	bgErr := w.background.Close(ctx, reason)
+	if resErr == nil && bgErr != nil {
+		resErr = bgErr
+	}
+
+	closeErr := w.queue.Close(reason)
+	if resErr == nil && closeErr != nil {
+		resErr = closeErr
+	}
+
+	return resErr
+}
+
+func (w *WriterReconnector) connectionLoop(ctx context.Context) {
+	attempt := 0
+	createStreamContext := func() (context.Context, context.CancelFunc) {
+		// need suppress parent context cancelation for flush buffer while close writer
+		return xcontext.WithCancel(xcontext.ValueOnly(ctx))
+	}
+
+	//nolint:ineffassign,staticcheck,wastedassign
+	streamCtx, streamCtxCancel := createStreamContext()
+
+	defer streamCtxCancel()
+
+	var reconnectReason error
+	var prevAttemptTime time.Time
+	var startOfRetries time.Time
+
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+
+		streamCtxCancel()
+		streamCtx, streamCtxCancel = createStreamContext()
+
+		now := time.Now()
+		if startOfRetries.IsZero() || topic.CheckResetReconnectionCounters(prevAttemptTime, now, w.cfg.connectTimeout) {
+			attempt = 0
+			startOfRetries = w.cfg.clock.Now()
+		} else {
+			attempt++
+		}
+		prevAttemptTime = now
+
+		if reconnectReason != nil {
+			if w.handleReconnectRetry(ctx, reconnectReason, attempt, startOfRetries) {
+				return
+			}
+		}
+
+		logCtx := w.cfg.LogContext
+		onWriterStarted := gtrace.TopicOnWriterReconnect(
+			w.cfg.Tracer,
+			&logCtx,
+			w.writerInstanceID,
+			w.cfg.topic,
+			w.cfg.producerID,
+			attempt,
+		)
+
+		writer, err := w.startWriteStream(streamCtx)
+		w.onWriterChange(writer)
+		onStreamError := onWriterStarted(err)
+		if err == nil {
+			reconnectReason = writer.WaitClose(ctx)
+			startOfRetries = time.Now()
+		} else {
+			reconnectReason = err
+		}
+		onStreamError(reconnectReason)
+	}
+}
+
+func (w *WriterReconnector) handleReconnectRetry(
+	ctx context.Context,
+	reconnectReason error,
+	attempt int,
+	startOfRetries time.Time,
+) bool {
+	retryDuration := w.cfg.clock.Since(startOfRetries)
+	if backoff, stopRetryReason := topic.RetryDecision(
+		reconnectReason,
+		w.retrySettings,
+		retryDuration,
+	); stopRetryReason == nil {
+		delay := backoff.Delay(attempt)
+		delayTimer := w.cfg.clock.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			delayTimer.Stop()
+
+			return true
+		case <-delayTimer.Chan():
+			delayTimer.Stop() // no really need, stop for common style only
+			// pass
+		}
+	} else {
+		_ = w.close(ctx, fmt.Errorf("%w, was retried (%v)", stopRetryReason, retryDuration))
+
+		return true
+	}
+
+	return false
+}
+
+// lookupPartitionLocation looks up which node currently hosts the given partition.
+func (w *WriterReconnector) lookupPartitionLocation(
+	ctx context.Context,
+	partitionID int64,
+) (rawtopic.PartitionLocation, error) {
+	res, err := w.cfg.rawTopicClient.DescribeTopic(ctx, rawtopic.DescribeTopicRequest{
+		Path:            w.cfg.topic,
+		IncludeLocation: true,
+	})
+	if err != nil {
+		return rawtopic.PartitionLocation{}, xerrors.WithStackTrace(
+			fmt.Errorf("ydb: direct write: describe topic failed: %w", err),
+		)
+	}
+
+	location, ok := res.LocationOf(partitionID)
+	if !ok {
+		return rawtopic.PartitionLocation{}, xerrors.WithStackTrace(fmt.Errorf(
+			"%w: topic=%q partition_id=%d",
+			errDirectWritePartitionNotFound, w.cfg.topic, partitionID,
+		))
+	}
+
+	return location, nil
+}
+
+func (w *WriterReconnector) resolveDirectWritePartition(ctx context.Context) (int64, error) {
+	if partitionID, ok := w.cfg.PartitionID(); ok &&
+		w.cfg.partitioning.Type == rawtopicwriter.PartitioningPartitionID {
+		return partitionID, nil
+	}
+
+	return w.cfg.probeWriterPartition(xcontext.MergeContexts(ctx, w.cfg.LogContext))
+}
+
+func (w *WriterReconnector) startWriteStream(ctx context.Context) (writer *SingleStreamWriter, err error) {
+	// connectCtx with timeout applies only to the connection phase,
+	// allowing the main stream context to remain active after exiting this method
+	connectCtx, stopConnectCtx := xcontext.WithStoppableTimeoutCause(ctx, w.cfg.connectTimeout, errConnTimeout)
+	defer func() {
+		// If the context was cancelled during connection (the stream was cancelled),
+		// we should return a timeout error
+		if !stopConnectCtx() && err == nil {
+			err = context.Cause(connectCtx)
+		}
+	}()
+
+	singleStreamConfig := w.cfg.WritersCommonConfig
+	if w.cfg.directWriteEnabled {
+		partitionID, err := w.resolveDirectWritePartition(connectCtx)
+		if err != nil {
+			return nil, err
+		}
+
+		location, err := w.lookupPartitionLocation(connectCtx, partitionID)
+		if err != nil {
+			return nil, err
+		}
+
+		connectCtx = endpoint.WithNodeID(
+			connectCtx,
+			location.NodeIDUint32(),
+			endpoint.WithFallback(false),
+		)
+
+		singleStreamConfig.partitioning = rawtopicwriter.NewPartitioningPartitionWithGeneration(
+			partitionID,
+			location.Generation,
+		)
+	}
+
+	stream, err := w.connectWithTimeout(connectCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	w.queue.ResetSentProgress()
+
+	var ep trace.EndpointInfo
+	if stream != nil {
+		ep = stream.Endpoint() // endpoint.Endpoint implements trace.EndpointInfo
+	}
+
+	streamCfg := newSingleStreamWriterConfig(
+		singleStreamConfig,
+		stream,
+		&w.queue,
+		w.encodersMap,
+		w.needReceiveLastSeqNo(),
+		w.writerInstanceID,
+		ep,
+	)
+
+	return NewSingleStreamWriter(connectCtx, streamCfg)
+}
+
+func (w *WriterReconnector) needReceiveLastSeqNo() bool {
+	res := !w.firstConnectionHandled.Load()
+
+	return res
+}
+
+func (w *WriterReconnector) connectWithTimeout(ctx context.Context) (stream RawTopicWriterStream, err error) {
+	defer func() {
+		p := recover()
+		if p != nil {
+			stream = nil
+			err = xerrors.WithStackTrace(xerrors.Wrap(fmt.Errorf("ydb: panic while connect to topic writer: %+v", p)))
+		}
+	}()
+
+	return w.cfg.Connect(ctx, w.cfg.Tracer)
+}
+
+func (w *WriterReconnector) onAckReceived(count int) {
+	w.semaphore.Release(int64(count))
+}
+
+func (w *WriterReconnector) onWriterChange(writerStream *SingleStreamWriter) {
+	isFirstInit := false
+	w.m.WithLock(func() {
+		if writerStream == nil {
+			w.sessionID = ""
+
+			return
+		}
+		w.sessionID = writerStream.SessionID
+
+		if !w.firstConnectionHandled.CompareAndSwap(false, true) {
+			return
+		}
+		defer close(w.firstInitResponseProcessedChan)
+		isFirstInit = true
+
+		if writerStream.LastSeqNumRequested {
+			w.lastSeqNo = writerStream.ReceivedLastSeqNum
+		}
+	})
+
+	if isFirstInit {
+		w.m.WithLock(func() {
+			w.initDone = true
+			w.initInfo = InitialInfo{LastSeqNum: w.lastSeqNo}
+			close(w.initDoneCh)
+		})
+		w.onWriterInitCallbackHandler(writerStream)
+	}
+}
+
+func (w *WriterReconnector) waitInit(ctx context.Context) (info InitialInfo, err error) {
+	if ctx.Err() != nil {
+		return InitialInfo{}, ctx.Err()
+	}
+
+	select {
+	case <-ctx.Done():
+		return InitialInfo{}, ctx.Err()
+	case <-w.background.Done():
+		return InitialInfo{}, w.background.CloseReason()
+	case <-w.initDoneCh:
+		return w.initInfo, nil
+	}
+}
+
+func (w *WriterReconnector) WaitInit(ctx context.Context) error {
+	_, err := w.waitInit(ctx)
+
+	return err
+}
+
+func (w *WriterReconnector) WaitInitInfo(ctx context.Context) (info InitialInfo, err error) {
+	return w.waitInit(ctx)
+}
+
+func (w *WriterReconnector) onWriterInitCallbackHandler(writerStream *SingleStreamWriter) {
+	if w.cfg.OnWriterInitResponseCallback != nil {
+		info := PublicWithOnWriterConnectedInfo{
+			LastSeqNo:        w.lastSeqNo,
+			SessionID:        w.sessionID,
+			PartitionID:      writerStream.PartitionID,
+			CodecsFromServer: createPublicCodecsFromRaw(writerStream.CodecsFromServer),
+		}
+
+		if err := w.cfg.OnWriterInitResponseCallback(info); err != nil {
+			_ = w.close(context.Background(), fmt.Errorf("OnWriterInitResponseCallback return error: %w", err))
+		}
+	}
+}
+
+func (w *WriterReconnector) waitFirstInitResponse(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	if w.firstConnectionHandled.Load() {
+		return nil
+	}
+
+	select {
+	case <-w.background.Done():
+		return w.background.CloseReason()
+	case <-w.firstInitResponseProcessedChan:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (w *WriterReconnector) GetSessionID() (sessionID string) {
+	w.m.WithLock(func() {
+		sessionID = w.sessionID
+	})
+
+	return sessionID
+}
+
+func allMessagesHasSameBufCodec(messages []messageWithDataContent) bool {
+	if len(messages) <= 1 {
+		return true
+	}
+
+	codec := messages[0].BufCodec
+	for i := range messages {
+		if messages[i].BufCodec != codec {
+			return false
+		}
+	}
+
+	return true
+}
+
+func splitMessagesByBufCodec(messages []messageWithDataContent) (res [][]messageWithDataContent) {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	currentGroupStart := 0
+	currentCodec := messages[0].BufCodec
+	for i := range messages {
+		if messages[i].BufCodec != currentCodec {
+			res = append(res, messages[currentGroupStart:i:i])
+			currentGroupStart = i
+			currentCodec = messages[i].BufCodec
+		}
+	}
+	res = append(res, messages[currentGroupStart:len(messages):len(messages)])
+
+	return res
+}
+
+func createWriteRequest(messages []messageWithDataContent, targetCodec rawtopiccommon.Codec) (
+	res *rawtopicwriter.WriteRequest,
+	err error,
+) {
+	for i := 1; i < len(messages); i++ {
+		if messages[i-1].Tx != messages[i].Tx {
+			return nil, xerrors.WithStackTrace(errDiffetentTransactions)
+		}
+	}
+
+	res = &rawtopicwriter.WriteRequest{}
+
+	if len(messages) > 0 && messages[0].Tx != nil {
+		res.Tx.ID = messages[0].Tx.ID()
+		res.Tx.Session = messages[0].Tx.SessionID()
+	}
+
+	res.Codec = targetCodec
+	res.Messages = make([]rawtopicwriter.MessageData, len(messages))
+	for i := range messages {
+		res.Messages[i], err = createRawMessageData(res.Codec, &messages[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return res, nil
+}
+
+func createRawMessageData(
+	codec rawtopiccommon.Codec,
+	mess *messageWithDataContent,
+) (res rawtopicwriter.MessageData, err error) {
+	res.CreatedAt = mess.CreatedAt
+	res.SeqNo = mess.SeqNo
+
+	switch {
+	case mess.FuturePartitioning.HasPartitionID:
+		res.Partitioning.Type = rawtopicwriter.PartitioningPartitionID
+		res.Partitioning.PartitionID = mess.FuturePartitioning.PartitionID
+	case mess.FuturePartitioning.MessageGroupID != "":
+		res.Partitioning.Type = rawtopicwriter.PartitioningMessageGroupID
+		res.Partitioning.MessageGroupID = mess.FuturePartitioning.MessageGroupID
+	default:
+		// pass
+	}
+
+	res.UncompressedSize = int64(mess.BufUncompressedSize)
+	res.Data, err = mess.GetEncodedBytes(codec)
+
+	if len(mess.Metadata) > 0 {
+		res.MetadataItems = make([]rawtopiccommon.MetadataItem, 0, len(mess.Metadata))
+		for key, val := range mess.Metadata {
+			res.MetadataItems = append(res.MetadataItems, rawtopiccommon.MetadataItem{
+				Key:   key,
+				Value: val,
+			})
+		}
+	}
+
+	return res, err
+}
+
+func calculateAllowedCodecs(forceCodec rawtopiccommon.Codec, multiEncoder *topicwritercommon.MultiEncoder,
+	serverCodecs rawtopiccommon.SupportedCodecs,
+) rawtopiccommon.SupportedCodecs {
+	if forceCodec != rawtopiccommon.CodecUNSPECIFIED {
+		if serverCodecs.AllowedByCodecsList(forceCodec) && multiEncoder.IsSupported(forceCodec) {
+			return rawtopiccommon.SupportedCodecs{forceCodec}
+		}
+
+		return nil
+	}
+
+	if len(serverCodecs) == 0 {
+		// fixed list for autoselect codec if empty server list for prevent unexpectedly add messages with new codec
+		// with sdk update
+		serverCodecs = rawtopiccommon.SupportedCodecs{rawtopiccommon.CodecRaw, rawtopiccommon.CodecGzip}
+	}
+
+	res := make(rawtopiccommon.SupportedCodecs, 0, len(serverCodecs))
+	for _, codec := range serverCodecs {
+		if multiEncoder.IsSupported(codec) {
+			res = append(res, codec)
+		}
+	}
+	if len(res) == 0 {
+		res = nil
+	}
+
+	return res
+}
+
+type ConnectFunc func(ctx context.Context, tracer *trace.Topic) (RawTopicWriterStream, error)
+
+func createPublicCodecsFromRaw(codecs rawtopiccommon.SupportedCodecs) []topictypes.Codec {
+	res := make([]topictypes.Codec, len(codecs))
+	for i, v := range codecs {
+		res[i] = topictypes.Codec(v)
+	}
+
+	return res
+}

@@ -1,0 +1,210 @@
+package topicwriterinternal
+
+import (
+	"maps"
+	"time"
+
+	"github.com/jonboulle/clockwork"
+
+	"github.com/ydb-platform/ydb-go-sdk/v3/credentials"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/config"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/grpcwrapper/rawtopic"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/grpcwrapper/rawtopic/rawtopiccommon"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/grpcwrapper/rawtopic/rawtopicwriter"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/topic/gtrace"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/topic/topicwritercommon"
+	"github.com/ydb-platform/ydb-go-sdk/v3/trace"
+)
+
+type PublicWriterOption func(cfg *WriterReconnectorConfig)
+
+func WithAddEncoder(
+	codec rawtopiccommon.Codec,
+	encoderFunc topicwritercommon.PublicCreateEncoderFunc,
+) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		if cfg.AdditionalEncoders == nil {
+			cfg.AdditionalEncoders = map[rawtopiccommon.Codec]topicwritercommon.PublicCreateEncoderFunc{}
+		}
+		cfg.AdditionalEncoders[codec] = encoderFunc
+	}
+}
+
+func WithAutoSetSeqNo(val bool) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.AutoSetSeqNo = val
+	}
+}
+
+func WithAutoCodec() PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.forceCodec = rawtopiccommon.CodecUNSPECIFIED
+	}
+}
+
+func WithCompressorCount(num int) PublicWriterOption {
+	if num <= 0 {
+		panic("ydb: compressor count must be > 0")
+	}
+
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.compressorCount = num
+	}
+}
+
+func WithMaxGrpcMessageBytes(num int) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.maxBytesPerMessage = num
+	}
+}
+
+func WithTokenUpdateInterval(interval time.Duration) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.credUpdateInterval = interval
+	}
+}
+
+func WithOnAckReceivedCallback(handler func(seqNo int64)) func(cfg *WriterReconnectorConfig) {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.OnAckReceivedCallback = handler
+	}
+}
+
+// WithCommonConfig
+//
+// Experimental: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#experimental
+func WithCommonConfig(common config.Common) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.Common = common
+	}
+}
+
+// WithCredentials for internal usage only
+// no proxy to public interface
+func WithCredentials(cred credentials.Credentials) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		if cred == nil {
+			cred = credentials.NewAnonymousCredentials()
+		}
+		cfg.cred = cred
+	}
+}
+
+// WithRawClient for internal usage only
+// no proxy to public interface
+func WithRawClient(rawClient *rawtopic.Client) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.rawTopicClient = rawClient
+	}
+}
+
+func WithCodec(codec rawtopiccommon.Codec) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.forceCodec = codec
+	}
+}
+
+func WithConnectFunc(connect ConnectFunc) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.Connect = connect
+	}
+}
+
+func WithConnectTimeout(timeout time.Duration) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.connectTimeout = timeout
+	}
+}
+
+func WithAutosetCreatedTime(enable bool) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.AutoSetCreatedTime = enable
+	}
+}
+
+func WithMaxQueueLen(num int) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.MaxQueueLen = num
+	}
+}
+
+// WithErrOnQueueFull controls WriterReconnector.Write when the internal message queue
+// is full. When enable is false (default), the call blocks until space is available
+// or ctx is cancelled. When enable is true, the call returns ErrPublicQueueIsFull
+// immediately without blocking.
+func WithErrOnQueueFull(enable bool) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.ErrOnQueueFull = enable
+	}
+}
+
+func WithPartitioning(partitioning PublicFuturePartitioning) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.partitioning = partitioning.ToRaw()
+	}
+}
+
+// WithDirectWrite enables direct connection to the node hosting the target
+// partition. The partition may be pinned by the caller via WithPartitioning(
+// NewPartitioningWithPartitionID(...)) — in which case the first connect goes
+// direct — or discovered via a synchronous proxy probe before connect.
+// See the public option topicoptions.WithWriterDirectWrite for the full
+// behavior contract.
+func WithDirectWrite(enable bool) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.directWriteEnabled = enable
+	}
+}
+
+func WithProducerID(producerID string) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.producerID = producerID
+		oldPartitioningType := cfg.partitioning.Type
+		if oldPartitioningType == rawtopicwriter.PartitioningUndefined ||
+			oldPartitioningType == rawtopicwriter.PartitioningMessageGroupID {
+			WithPartitioning(NewPartitioningWithMessageGroupID(producerID))(cfg)
+		}
+	}
+}
+
+func WithSessionMeta(meta map[string]string) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		if len(meta) == 0 {
+			cfg.writerMeta = nil
+		} else {
+			cfg.writerMeta = make(map[string]string, len(meta))
+			maps.Copy(cfg.writerMeta, meta)
+		}
+	}
+}
+
+func WithStartTimeout(timeout time.Duration) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.RetrySettings.StartTimeout = timeout
+	}
+}
+
+func WithWaitAckOnWrite(val bool) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.WaitServerAck = val
+	}
+}
+
+func WithTrace(tracer *trace.Topic) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.Tracer = gtrace.Compose(cfg.Tracer, tracer)
+	}
+}
+
+func WithTopic(topic string) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.topic = topic
+	}
+}
+
+// WithClock is private option for tests
+func WithClock(clock clockwork.Clock) PublicWriterOption {
+	return func(cfg *WriterReconnectorConfig) {
+		cfg.clock = clock
+	}
+}

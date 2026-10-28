@@ -1,0 +1,139 @@
+// Package metrics exposes low-cardinality Prometheus series on a private registry.
+package metrics
+
+import (
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"chatisp/internal/platform/version"
+)
+
+// Metrics records HTTP traffic without per-user or per-message labels.
+type Metrics struct {
+	registry *prometheus.Registry
+	requests *prometheus.CounterVec
+	duration *prometheus.HistogramVec
+}
+
+// New registers process, runtime and HTTP series on an isolated registry.
+func New() *Metrics {
+	registry := prometheus.NewRegistry()
+	metrics := &Metrics{
+		registry: registry,
+		requests: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "chatisp_http_requests_total",
+			Help: "Total de requisições HTTP por método, rota e status.",
+		}, []string{"method", "route", "status"}),
+		duration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "chatisp_http_request_duration_seconds",
+			Help:    "Duração das requisições HTTP por método e rota.",
+			Buckets: prometheus.DefBuckets,
+		}, []string{"method", "route"}),
+	}
+	info := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name:        "chatisp_build_info",
+		Help:        "Informação de build. O valor é sempre 1.",
+		ConstLabels: prometheus.Labels{"version": version.Version},
+	})
+	info.Set(1)
+	registry.MustRegister(
+		metrics.requests,
+		metrics.duration,
+		info,
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+	)
+	return metrics
+}
+
+// Handler serves GET /metrics from the isolated registry.
+func (m *Metrics) Handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{}))
+	return mux
+}
+
+// Observe records one HTTP request. Route values that are not templates are collapsed.
+func (m *Metrics) Observe(method, route string, status int, elapsed time.Duration) {
+	if m == nil {
+		return
+	}
+	method = sanitizeMethod(method)
+	route = sanitizeRoute(route)
+	code := sanitizeStatus(status)
+	m.requests.WithLabelValues(method, route, code).Inc()
+	m.duration.WithLabelValues(method, route).Observe(elapsed.Seconds())
+}
+
+// Gather returns the current series for tests and scrapes.
+func (m *Metrics) Gather() ([]byte, error) {
+	handler := promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{})
+	recorder := &bodyRecorder{header: make(http.Header)}
+	handler.ServeHTTP(recorder, mustRequest())
+	return recorder.body, recorder.err
+}
+
+type bodyRecorder struct {
+	header http.Header
+	body   []byte
+	status int
+	err    error
+}
+
+func (b *bodyRecorder) Header() http.Header { return b.header }
+
+func (b *bodyRecorder) Write(p []byte) (int, error) {
+	b.body = append(b.body, p...)
+	return len(p), nil
+}
+
+func (b *bodyRecorder) WriteHeader(status int) { b.status = status }
+
+func mustRequest() *http.Request {
+	request, err := http.NewRequest(http.MethodGet, "http://metrics.local/metrics", nil)
+	if err != nil {
+		panic(err)
+	}
+	return request
+}
+
+func sanitizeMethod(method string) string {
+	switch method {
+	case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodHead, http.MethodOptions:
+		return method
+	default:
+		return "other"
+	}
+}
+
+func sanitizeRoute(route string) string {
+	if route == "" {
+		return "unmatched"
+	}
+	if len(route) > 80 {
+		return "unmatched"
+	}
+	for _, r := range route {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '/' || r == '_' || r == '-' || r == '{' || r == '}' || r == '.':
+		default:
+			return "unmatched"
+		}
+	}
+	return route
+}
+
+func sanitizeStatus(status int) string {
+	if status < 100 || status > 599 {
+		return "0"
+	}
+	return strconv.Itoa(status)
+}
