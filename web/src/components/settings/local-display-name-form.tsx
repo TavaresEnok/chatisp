@@ -65,7 +65,7 @@ export function LocalDisplayNameForm() {
             </p>
           ) : null}
         </div>
-        <Button type="submit" className="w-fit">
+        <Button type="submit" className="h-11 w-fit px-3">
           Guardar nesta aba
         </Button>
         {saved ? (

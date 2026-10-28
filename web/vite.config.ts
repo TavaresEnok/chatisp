@@ -13,9 +13,18 @@ export default defineConfig({
       "@": path.resolve(rootDir, "src"),
     },
   },
+  cacheDir: path.resolve(rootDir, "node_modules/.vite"),
+  server: {
+    proxy: {
+      "/healthz": "http://127.0.0.1:8080",
+      "/readyz": "http://127.0.0.1:8080",
+    },
+  },
   test: {
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
     css: false,
+    fileParallelism: false,
+    maxWorkers: 1,
   },
 });
