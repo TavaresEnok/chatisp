@@ -1,0 +1,8 @@
+{
+  "name": "chatisp-pg-binaries",
+  "private": true,
+  "description": "Binários PostgreSQL 18.4 linux-x64 usados somente pelos testes. O postinstall do pacote não roda no verificador (--ignore-scripts); o helper Go recria os symlinks.",
+  "devDependencies": {
+    "@embedded-postgres/linux-x64": "18.4.0-beta.17"
+  }
+}

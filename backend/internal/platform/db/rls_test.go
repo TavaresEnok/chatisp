@@ -11,13 +11,14 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"chatisp/internal/platform/db"
+	"chatisp/internal/platform/testdb"
 )
 
 func TestServerIsPostgreSQL18(t *testing.T) {
 	if testEnv.ServerVersionNum/10000 != 18 {
 		t.Fatalf("server_version %s (%d)", testEnv.ServerVersion, testEnv.ServerVersionNum)
 	}
-	if testEnv.Embedded && (testEnv.BundleVersion != "18.6.0" || testEnv.ServerVersionNum != 180006) {
+	if testEnv.Embedded && (testEnv.BundleVersion != testdb.BundleVersion || testEnv.ServerVersionNum != testdb.EmbeddedServerVersionNum) {
 		t.Fatalf("embutido %s server_version %s (%d)", testEnv.BundleVersion, testEnv.ServerVersion, testEnv.ServerVersionNum)
 	}
 }

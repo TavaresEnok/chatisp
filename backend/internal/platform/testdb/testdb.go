@@ -1,46 +1,51 @@
 // Package testdb starts PostgreSQL for tests.
 // The application process must not import this package.
+//
+// Binaries come from the npm package installed in backend/tools/pg.
+// The verifier runs npm ci --ignore-scripts, so the postinstall that would
+// recreate library symlinks does not run. This package recreates them.
 package testdb
 
 import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
-	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
 	"github.com/jackc/pgx/v5"
 )
 
 const (
-	// BundleVersion is the explicit PostgreSQL 18.6 packaging pin.
-	// The library default tracks a later packaging revision and is rejected.
-	BundleVersion = "18.6.0"
+	// BundleVersion is the PostgreSQL release shipped by the npm package.
+	// The server reports it as 18.4; server_version_num is 180004.
+	BundleVersion = "18.4.0"
+
+	// NPMPackage is the exact devDependency that vendors the linux-x64 binaries.
+	NPMPackage = "@embedded-postgres/linux-x64"
+	// NPMPackageVersion is the exact version. It must stay free of range syntax.
+	NPMPackageVersion = "18.4.0-beta.17"
+
+	// EmbeddedServerVersionNum is server_version_num for PostgreSQL 18.4.
+	EmbeddedServerVersionNum = 180004
 
 	// EnvDatabaseURL selects an external server and disables the embedded one.
 	EnvDatabaseURL = "CHATISP_TEST_DATABASE_URL"
 
-	cacheDirName = "chatisp-embedded-pg"
-
-	// zonkyRepository is the Maven Central root used by embedded-postgres v1.
-	// Artifact paths are io/zonky/test/postgres/embedded-postgres-binaries-*.
-	// The theseus-rs bundles pinned by embedded-postgres v2 are not used.
-	zonkyRepository = "https://repo1.maven.org/maven2"
-
-	postgres18Major = 18
-	postgres186Num  = 180006
+	postgres18Major   = 18
+	maxUnixSocketPath = 107
+	socketFileName    = ".s.PGSQL.5432"
+	npmCiHint         = "npm ci --prefix backend/tools/pg --no-audit --no-fund"
+	sharedBuffers     = "16MB"
 )
 
 // Env is a PostgreSQL 18 server usable by tests.
@@ -56,8 +61,8 @@ type Env struct {
 }
 
 // Start boots PostgreSQL 18. A defined CHATISP_TEST_DATABASE_URL is used as-is.
-// Otherwise PostgreSQL 18.6.0 is embedded on a free port. Failures are errors,
-// never a silent skip.
+// Otherwise PostgreSQL 18.4 from the npm package is started on a Unix socket.
+// Failures are errors, never a silent skip.
 func Start(ctx context.Context) (*Env, error) {
 	if raw, ok := os.LookupEnv(EnvDatabaseURL); ok && strings.TrimSpace(raw) != "" {
 		return startExternal(ctx, strings.TrimSpace(raw))
@@ -65,7 +70,7 @@ func Start(ctx context.Context) (*Env, error) {
 	return startEmbedded(ctx)
 }
 
-// Close stops an embedded server and removes its temporary data directory.
+// Close stops an embedded server and removes its data directory.
 func (e *Env) Close() {
 	if e == nil || e.stop == nil {
 		return
@@ -94,156 +99,263 @@ func startExternal(ctx context.Context, raw string) (*Env, error) {
 }
 
 func startEmbedded(ctx context.Context) (*Env, error) {
-	if BundleVersion == string(embeddedpostgres.V18) {
-		return nil, errors.New("versão embutida recusada: o default da biblioteca não é 18.6.0")
-	}
-	if BundleVersion != "18.6.0" {
-		return nil, errors.New("versão embutida recusada")
-	}
-
-	password, err := randomPassword()
-	if err != nil {
-		return nil, errors.New("falha ao preparar o PostgreSQL embutido")
-	}
-	cacheDir, err := cachePath()
+	pkg, err := packageDir()
 	if err != nil {
 		return nil, err
 	}
-	unlock, err := lockCache(cacheDir)
+	if err := hydrateSymlinks(pkg); err != nil {
+		return nil, err
+	}
+	initdbBin, postgresBin, err := executableBins(pkg)
 	if err != nil {
 		return nil, err
 	}
-	defer unlock()
-	// /tmp on this host is a small noexec mount. Keep the data directory beside
-	// the cached binaries so initdb can map shared libraries.
-	workParent := filepath.Join(cacheDir, "work")
-	if err := os.MkdirAll(workParent, 0o755); err != nil {
-		return nil, errors.New("falha ao criar diretório temporário do PostgreSQL")
+	parent, err := dataParent()
+	if err != nil {
+		return nil, err
 	}
-	workDir, err := os.MkdirTemp(workParent, "pg-")
+	real, err := os.MkdirTemp(parent, "pg-")
 	if err != nil {
 		return nil, errors.New("falha ao criar diretório temporário do PostgreSQL")
 	}
-	port, err := freePort()
+	logPath := real + ".log"
+	runDir, removeLink, err := chooseRunDir(real)
 	if err != nil {
-		_ = os.RemoveAll(workDir)
+		_ = os.RemoveAll(real)
 		return nil, err
 	}
-
-	cfg := embeddedpostgres.DefaultConfig().
-		Version(embeddedpostgres.PostgresVersion(BundleVersion)).
-		Port(port).
-		Database("chatisp").
-		Username("postgres").
-		Password(password).
-		Locale("C").
-		Encoding("UTF8").
-		StartTimeout(3 * time.Minute).
-		CachePath(cacheDir).
-		RuntimePath(workDir).
-		DataPath(filepath.Join(workDir, "data")).
-		BinaryRepositoryURL(zonkyRepository).
-		Logger(io.Discard)
-	pg := embeddedpostgres.NewDatabase(cfg)
-	cleanup := func() {
-		_ = pg.Stop()
-		_ = os.RemoveAll(workDir)
-	}
-	if err := pg.Start(); err != nil {
-		cleanup()
-		detail := redact(err.Error(), password)
-		if detail == "" {
-			detail = "sem log do processo"
+	cleanupFiles := func() {
+		if removeLink != nil {
+			removeLink()
 		}
-		return nil, fmt.Errorf("falha ao iniciar PostgreSQL 18.6.0 embutido: %s", detail)
+		_ = os.RemoveAll(real)
+		_ = os.Remove(logPath)
 	}
-	if err := ctx.Err(); err != nil {
-		cleanup()
-		return nil, errors.New("falha ao iniciar PostgreSQL 18.6.0 embutido: tempo esgotado")
-	}
-	info, statErr := os.Stat(filepath.Join(cacheDir, zonkyCacheName()))
-	if statErr != nil || info.IsDir() || info.Size() < 1_000_000 {
-		cleanup()
-		return nil, errors.New("PostgreSQL embutido não usou o artefato zonky")
-	}
-
-	adminURL := adminDSN("postgres", password, "chatisp", port)
-	if !validPostgresURL(adminURL) {
-		cleanup()
-		return nil, errors.New("PostgreSQL embutido não publicou uma porta livre")
-	}
-	version, num, err := readServerVersion(ctx, adminURL)
-	if err != nil {
-		cleanup()
+	if err := runInitDB(ctx, initdbBin, runDir); err != nil {
+		cleanupFiles()
 		return nil, err
 	}
-	if strings.HasPrefix(version, "18.6.1") || num != postgres186Num {
-		cleanup()
-		return nil, fmt.Errorf("PostgreSQL embutido subiu %s (%d); o teste exige 18.6.0", version, num)
+	proc, err := startPostgres(postgresBin, runDir, logPath)
+	if err != nil {
+		cleanupFiles()
+		return nil, err
+	}
+	stop := func() {
+		proc.stop()
+		cleanupFiles()
+	}
+	dsn := adminDSN(runDir)
+	if err := waitReady(ctx, proc, dsn); err != nil {
+		detail := clip(readTail(logPath))
+		stop()
+		if detail != "" {
+			return nil, fmt.Errorf("falha ao iniciar PostgreSQL 18.4 embutido: %s", detail)
+		}
+		return nil, err
+	}
+	version, num, err := readServerVersion(ctx, dsn)
+	if err != nil || num != EmbeddedServerVersionNum {
+		stop()
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("PostgreSQL embutido subiu %s (%d); o teste exige %s", version, num, BundleVersion)
 	}
 	return &Env{
-		AdminURL:         adminURL,
+		AdminURL:         dsn,
 		Embedded:         true,
 		ServerVersion:    version,
 		ServerVersionNum: num,
 		BundleVersion:    BundleVersion,
-		stop:             cleanup,
+		stop:             stop,
 	}, nil
 }
 
-func cachePath() (string, error) {
-	if dir, err := usableUserCache(); err == nil {
+func runInitDB(ctx context.Context, bin, dataDir string) error {
+	cmd := exec.CommandContext(ctx, bin, "-D", dataDir, "-U", "postgres", "-A", "trust", "-E", "UTF8", "--no-sync")
+	cmd.Env = processEnv()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		if ctx.Err() != nil {
+			return errors.New("falha ao inicializar PostgreSQL 18.4: tempo esgotado")
+		}
+		detail := clip(string(out))
+		if detail == "" {
+			detail = "sem saída do initdb"
+		}
+		return fmt.Errorf("falha ao inicializar PostgreSQL 18.4: %s", detail)
+	}
+	return nil
+}
+
+type pgProc struct {
+	cmd    *exec.Cmd
+	log    *os.File
+	exited chan struct{}
+}
+
+func startPostgres(bin, dataDir, logPath string) (*pgProc, error) {
+	logFile, err := os.Create(logPath)
+	if err != nil {
+		return nil, errors.New("falha ao preparar o log do PostgreSQL de teste")
+	}
+	cmd := exec.Command(bin,
+		"-D", dataDir,
+		"-c", "listen_addresses=",
+		"-c", "unix_socket_directories="+dataDir,
+		"-c", "shared_buffers="+sharedBuffers,
+		"-c", "dynamic_shared_memory_type=mmap",
+		"-c", "fsync=off",
+	)
+	cmd.Env = processEnv()
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		_ = logFile.Close()
+		return nil, errors.New("falha ao iniciar PostgreSQL 18.4 embutido")
+	}
+	proc := &pgProc{cmd: cmd, log: logFile, exited: make(chan struct{})}
+	go func() {
+		_ = cmd.Wait()
+		_ = logFile.Close()
+		close(proc.exited)
+	}()
+	return proc, nil
+}
+
+func (p *pgProc) stop() {
+	if p == nil || p.cmd == nil || p.cmd.Process == nil {
+		return
+	}
+	_ = p.cmd.Process.Signal(syscall.SIGTERM)
+	select {
+	case <-p.exited:
+		return
+	case <-time.After(15 * time.Second):
+		_ = p.cmd.Process.Kill()
+		<-p.exited
+	}
+}
+
+func waitReady(ctx context.Context, proc *pgProc, dsn string) error {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		dialCtx, cancel := context.WithTimeout(ctx, time.Second)
+		conn, err := pgx.Connect(dialCtx, dsn)
+		cancel()
+		if err == nil {
+			_ = conn.Close(ctx)
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return errors.New("falha ao iniciar PostgreSQL 18.4 embutido: tempo esgotado")
+		case <-proc.exited:
+			return errors.New("falha ao iniciar PostgreSQL 18.4 embutido: o processo encerrou")
+		case <-ticker.C:
+		}
+	}
+}
+
+func adminDSN(dataDir string) string {
+	u := url.URL{
+		Scheme: "postgresql",
+		User:   url.User("postgres"),
+		Host:   "127.0.0.1",
+		Path:   "/postgres",
+	}
+	q := url.Values{}
+	q.Set("host", dataDir)
+	q.Set("sslmode", "disable")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// chooseRunDir keeps the socket inside the data directory.
+// A path longer than the Unix socket limit is exposed through a short symlink
+// in the temp directory. The data files stay in the workspace: /tmp is a small tmpfs.
+func chooseRunDir(real string) (string, func(), error) {
+	if len(filepath.Join(real, socketFileName)) <= maxUnixSocketPath {
+		return real, func() {}, nil
+	}
+	name, err := randomHex(8)
+	if err != nil {
+		return "", nil, errors.New("falha ao preparar o diretório do PostgreSQL de teste")
+	}
+	link := filepath.Join(os.TempDir(), "cisp"+name)
+	if err := os.Symlink(real, link); err != nil {
+		return "", nil, errors.New("falha ao preparar o diretório do PostgreSQL de teste")
+	}
+	if len(filepath.Join(link, socketFileName)) > maxUnixSocketPath {
+		_ = os.Remove(link)
+		return "", nil, errors.New("caminho do socket Unix do PostgreSQL de teste excede o limite")
+	}
+	return link, func() { _ = os.Remove(link) }, nil
+}
+
+func dataParent() (string, error) {
+	module, err := moduleRoot()
+	if err != nil {
+		return "", err
+	}
+	candidates := []string{
+		filepath.Join(filepath.Dir(module), ".tmp"),
+		filepath.Join(module, ".tmp"),
+	}
+	for _, dir := range candidates {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			continue
+		}
+		probe := filepath.Join(dir, ".write-probe")
+		if err := os.WriteFile(probe, []byte("ok"), 0o600); err != nil {
+			continue
+		}
+		_ = os.Remove(probe)
 		return dir, nil
 	}
-	// The default user cache is often on a read-only root (for example
-	// /home/<user>/.cache). Keep resolving the directory through
-	// os.UserCacheDir by pointing XDG_CACHE_HOME at a writable, executable
-	// directory next to the module.
-	home, err := moduleCacheHome()
+	return "", errors.New("falha ao criar diretório temporário do PostgreSQL")
+}
+
+func packageDir() (string, error) {
+	module, err := moduleRoot()
 	if err != nil {
-		return "", errors.New("não foi possível criar o cache do PostgreSQL embutido")
+		return "", missingBinaries()
 	}
-	if err := os.MkdirAll(home, 0o755); err != nil {
-		return "", errors.New("não foi possível criar o cache do PostgreSQL embutido")
-	}
-	if !filepath.IsAbs(home) {
-		return "", errors.New("não foi possível criar o cache do PostgreSQL embutido")
-	}
-	if err := os.Setenv("XDG_CACHE_HOME", home); err != nil {
-		return "", errors.New("não foi possível criar o cache do PostgreSQL embutido")
-	}
-	dir, err := usableUserCache()
-	if err != nil {
-		return "", errors.New("não foi possível criar o cache do PostgreSQL embutido")
+	dir := filepath.Join(module, "tools", "pg", "node_modules", "@embedded-postgres", "linux-x64")
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return "", missingBinaries()
 	}
 	return dir, nil
 }
 
-func usableUserCache() (string, error) {
-	base, err := os.UserCacheDir()
-	if err != nil || strings.TrimSpace(base) == "" || !filepath.IsAbs(base) {
-		return "", errors.New("cache de usuário indisponível para o PostgreSQL embutido")
+func executableBins(pkg string) (string, string, error) {
+	initdb := filepath.Join(pkg, "native", "bin", "initdb")
+	postgres := filepath.Join(pkg, "native", "bin", "postgres")
+	for _, bin := range []string{initdb, postgres} {
+		info, err := os.Stat(bin)
+		if err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+			return "", "", missingBinaries()
+		}
 	}
-	dir := filepath.Join(base, cacheDirName)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	if !directoryIsExecutable(dir) {
-		return "", errors.New("cache do PostgreSQL embutido sem permissão de execução")
-	}
-	return dir, nil
+	return initdb, postgres, nil
 }
 
-func moduleCacheHome() (string, error) {
-	wd, err := os.Getwd()
+func missingBinaries() error {
+	return errors.New("binários do PostgreSQL de teste ausentes. Rode: " + npmCiHint)
+}
+
+func moduleRoot() (string, error) {
+	dir, err := os.Getwd()
 	if err != nil {
-		return "", err
+		return "", errors.New("módulo Go não encontrado")
 	}
-	dir := wd
 	for {
 		info, statErr := os.Stat(filepath.Join(dir, "go.mod"))
 		if statErr == nil && !info.IsDir() {
-			return filepath.Join(dir, ".cache"), nil
+			return dir, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -253,16 +365,122 @@ func moduleCacheHome() (string, error) {
 	}
 }
 
-func directoryIsExecutable(dir string) bool {
-	probe := filepath.Join(dir, ".exec-probe")
-	if err := os.WriteFile(probe, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		return false
+type linkSpec struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+}
+
+func hydrateSymlinks(pkgRoot string) error {
+	manifest := filepath.Join(pkgRoot, "native", "pg-symlinks.json")
+	raw, err := os.ReadFile(manifest)
+	if err != nil {
+		return missingBinaries()
 	}
-	defer os.Remove(probe)
-	cmd := exec.Command(probe)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	return cmd.Run() == nil
+	var specs []linkSpec
+	if err := json.Unmarshal(raw, &specs); err != nil || len(specs) == 0 {
+		return errors.New("manifesto de symlinks do PostgreSQL de teste inválido")
+	}
+	unlock, err := lockFile(filepath.Join(pkgRoot, "native", ".hydrate.lock"))
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	for _, spec := range specs {
+		if err := ensureLink(pkgRoot, spec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureLink(pkgRoot string, spec linkSpec) error {
+	source, err := inside(pkgRoot, spec.Source)
+	if err != nil {
+		return err
+	}
+	target, err := inside(pkgRoot, spec.Target)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(source)
+	if err != nil || info.IsDir() {
+		return missingBinaries()
+	}
+	rel, err := filepath.Rel(filepath.Dir(target), source)
+	if err != nil || rel == "" || rel == "." || filepath.IsAbs(rel) || escapes(rel) {
+		return errors.New("symlink do PostgreSQL de teste recusado")
+	}
+	if existing, readErr := os.Readlink(target); readErr == nil && existing == rel {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return errors.New("falha ao preparar os binários do PostgreSQL de teste")
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".symlink-*")
+	if err != nil {
+		return errors.New("falha ao preparar os binários do PostgreSQL de teste")
+	}
+	tmpName := tmp.Name()
+	_ = tmp.Close()
+	_ = os.Remove(tmpName)
+	if err := os.Symlink(rel, tmpName); err != nil {
+		return errors.New("falha ao preparar os binários do PostgreSQL de teste")
+	}
+	if err := os.Rename(tmpName, target); err != nil {
+		_ = os.Remove(tmpName)
+		if existing, readErr := os.Readlink(target); readErr == nil && existing == rel {
+			return nil
+		}
+		return errors.New("falha ao preparar os binários do PostgreSQL de teste")
+	}
+	return nil
+}
+
+func inside(root, rel string) (string, error) {
+	if rel == "" || filepath.IsAbs(rel) || escapes(rel) {
+		return "", errors.New("symlink do PostgreSQL de teste recusado")
+	}
+	clean := filepath.Clean(rel)
+	if escapes(clean) {
+		return "", errors.New("symlink do PostgreSQL de teste recusado")
+	}
+	full := filepath.Join(root, clean)
+	back, err := filepath.Rel(root, full)
+	if err != nil || escapes(back) {
+		return "", errors.New("symlink do PostgreSQL de teste recusado")
+	}
+	return full, nil
+}
+
+func escapes(rel string) bool {
+	return rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func lockFile(path string) (func(), error) {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, errors.New("falha ao preparar os binários do PostgreSQL de teste")
+	}
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		_ = file.Close()
+		return nil, errors.New("falha ao preparar os binários do PostgreSQL de teste")
+	}
+	return func() {
+		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+		_ = file.Close()
+	}, nil
+}
+
+func processEnv() []string {
+	base := os.Environ()
+	out := make([]string, 0, len(base)+3)
+	for _, item := range base {
+		if strings.HasPrefix(item, "LC_ALL=") || strings.HasPrefix(item, "LANG=") || strings.HasPrefix(item, "LC_") {
+			continue
+		}
+		out = append(out, item)
+	}
+	return append(out, "LC_ALL=C", "LANG=C", "TZ=UTC")
 }
 
 func readServerVersion(ctx context.Context, adminURL string) (string, int, error) {
@@ -298,12 +516,28 @@ func validPostgresURL(raw string) bool {
 	return parsed.Host != ""
 }
 
-func randomPassword() (string, error) {
-	buf := make([]byte, 24)
+func randomHex(n int) (string, error) {
+	buf := make([]byte, n)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(buf), nil
+}
+
+func readTail(path string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+func clip(text string) string {
+	text = redact(text, "")
+	if len(text) > 2000 {
+		text = text[len(text)-2000:]
+	}
+	return strings.TrimSpace(text)
 }
 
 func redact(text, secret string) string {
@@ -336,61 +570,4 @@ func redact(text, secret string) string {
 		out = out[len(out)-2000:]
 	}
 	return strings.TrimSpace(out)
-}
-
-func zonkyCacheName() string {
-	arch := runtime.GOARCH
-	if runtime.GOOS == "linux" {
-		if arch == "arm64" {
-			arch += "v8"
-		} else if arch == "arm" {
-			arch += "32v7"
-		}
-		if _, err := os.Stat("/etc/alpine-release"); err == nil {
-			arch += "-alpine"
-		}
-	}
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		arch = "arm64v8"
-	}
-	return fmt.Sprintf("embedded-postgres-binaries-%s-%s-%s.txz", runtime.GOOS, arch, BundleVersion)
-}
-
-func adminDSN(user, password, database string, port uint32) string {
-	u := url.URL{
-		Scheme:   "postgresql",
-		User:     url.UserPassword(user, password),
-		Host:     net.JoinHostPort("127.0.0.1", strconv.Itoa(int(port))),
-		Path:     "/" + database,
-		RawQuery: "sslmode=disable",
-	}
-	return u.String()
-}
-
-func freePort() (uint32, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, errors.New("falha ao escolher porta livre para o PostgreSQL embutido")
-	}
-	defer ln.Close()
-	addr, ok := ln.Addr().(*net.TCPAddr)
-	if !ok || addr.Port <= 0 {
-		return 0, errors.New("falha ao escolher porta livre para o PostgreSQL embutido")
-	}
-	return uint32(addr.Port), nil
-}
-
-func lockCache(cacheDir string) (func(), error) {
-	file, err := os.OpenFile(filepath.Join(cacheDir, ".zonky.lock"), os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		return nil, errors.New("falha ao preparar o cache do PostgreSQL embutido")
-	}
-	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
-		_ = file.Close()
-		return nil, errors.New("falha ao preparar o cache do PostgreSQL embutido")
-	}
-	return func() {
-		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
-		_ = file.Close()
-	}, nil
 }
