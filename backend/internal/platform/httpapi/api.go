@@ -1,0 +1,278 @@
+package httpapi
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"runtime/debug"
+	"strings"
+	"time"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humachi"
+	"github.com/go-chi/chi/v5"
+
+	"chatisp/internal/platform/logging"
+	"chatisp/internal/platform/metrics"
+	"chatisp/internal/platform/version"
+)
+
+// ReadyFunc reports whether the process can accept traffic.
+// A non-nil error is not shown to the client.
+type ReadyFunc func(context.Context) error
+
+// Dependencies wires the HTTP API. Nil metrics are created internally.
+type Dependencies struct {
+	Ready   ReadyFunc
+	Metrics *metrics.Metrics
+	Logger  *slog.Logger
+}
+
+// API is the public HTTP handler and its generated OpenAPI document.
+type API struct {
+	Handler http.Handler
+	Huma    huma.API
+	Metrics *metrics.Metrics
+}
+
+type healthBody struct {
+	Status string `json:"status" enum:"ok" doc:"ok quando o processo está vivo." example:"ok"`
+}
+
+type healthOutput struct {
+	Body healthBody
+}
+
+type readyBody struct {
+	Status string `json:"status" enum:"ready" doc:"ready quando o processo pode receber tráfego." example:"ready"`
+}
+
+type readyOutput struct {
+	Body readyBody
+}
+
+// New builds the chi router, Huma operations and Prometheus middleware.
+func New(deps Dependencies) *API {
+	if deps.Logger == nil {
+		deps.Logger = logging.New("info", io.Discard)
+	}
+	if deps.Metrics == nil {
+		deps.Metrics = metrics.New()
+	}
+	if deps.Ready == nil {
+		deps.Ready = func(context.Context) error { return nil }
+	}
+
+	router := chi.NewRouter()
+	router.Use(metricsMiddleware(deps.Metrics))
+	router.Use(recoverMiddleware(deps.Logger))
+
+	config := huma.DefaultConfig("Chat ISP", version.Version)
+	// Keep the document limited to the operations below. The default hooks add
+	// schema links and a docs page that this skeleton does not expose.
+	config.CreateHooks = nil
+	config.DocsPath = ""
+	config.SchemasPath = ""
+	config.OpenAPI.Info.Description = "API HTTP do Chat ISP. Erros usam RFC 9457 (application/problem+json) e não incluem stack trace nem segredos."
+	config.OpenAPI.Servers = []*huma.Server{{
+		URL:         "/",
+		Description: "Instância atual",
+	}}
+	config.OnAddOperation = append(config.OnAddOperation, localizeProblemResponses)
+
+	api := humachi.New(router, config)
+	huma.Register(api, huma.Operation{
+		OperationID:   "get-healthz",
+		Method:        http.MethodGet,
+		Path:          "/healthz",
+		Summary:       "Verifica se o processo está vivo",
+		Description:   "Não consulta dependências. Use /readyz para saber se o processo pode receber tráfego.",
+		Tags:          []string{"operacao"},
+		DefaultStatus: http.StatusOK,
+		Errors:        []int{http.StatusInternalServerError},
+	}, func(context.Context, *struct{}) (*healthOutput, error) {
+		return &healthOutput{Body: healthBody{Status: "ok"}}, nil
+	})
+	huma.Register(api, huma.Operation{
+		OperationID:   "get-readyz",
+		Method:        http.MethodGet,
+		Path:          "/readyz",
+		Summary:       "Verifica se o processo pode receber tráfego",
+		Description:   "Responde 503 enquanto o processo está encerrando ou ainda não ficou pronto.",
+		Tags:          []string{"operacao"},
+		DefaultStatus: http.StatusOK,
+		Errors:        []int{http.StatusServiceUnavailable},
+	}, func(ctx context.Context, _ *struct{}) (*readyOutput, error) {
+		if err := deps.Ready(ctx); err != nil {
+			return nil, huma.Error503ServiceUnavailable("serviço indisponível")
+		}
+		return &readyOutput{Body: readyBody{Status: "ready"}}, nil
+	})
+
+	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		Write(w, http.StatusNotFound, "o caminho solicitado não existe")
+	})
+	// Chi drops the allowed-method list when MethodNotAllowed replaces the
+	// default handler. RFC 9110 requires Allow on 405, so set it first.
+	router.MethodNotAllowed(methodNotAllowed(router))
+
+	return &API{Handler: router, Huma: api, Metrics: deps.Metrics}
+}
+
+// OpenAPIJSON returns the canonical, indented OpenAPI document.
+func OpenAPIJSON() ([]byte, error) {
+	api := New(Dependencies{})
+	raw, err := json.Marshal(api.Huma.OpenAPI())
+	if err != nil {
+		return nil, err
+	}
+	var indented bytes.Buffer
+	if err := json.Indent(&indented, raw, "", "  "); err != nil {
+		return nil, err
+	}
+	indented.WriteByte('\n')
+	return indented.Bytes(), nil
+}
+
+// knownMethods is the stable Allow order. Chi's own list follows map iteration.
+var knownMethods = []string{
+	http.MethodGet,
+	http.MethodHead,
+	http.MethodPost,
+	http.MethodPut,
+	http.MethodPatch,
+	http.MethodDelete,
+	http.MethodOptions,
+	http.MethodConnect,
+	http.MethodTrace,
+	"QUERY",
+}
+
+func methodNotAllowed(routes chi.Routes) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if allow := allowedMethods(routes, requestPath(r)); allow != "" {
+			w.Header().Set("Allow", allow)
+		}
+		Write(w, http.StatusMethodNotAllowed, "método não permitido para este caminho")
+	}
+}
+
+func allowedMethods(routes chi.Routes, path string) string {
+	allowed := make([]string, 0, 2)
+	for _, method := range knownMethods {
+		if routes.Match(chi.NewRouteContext(), method, path) {
+			allowed = append(allowed, method)
+		}
+	}
+	return strings.Join(allowed, ", ")
+}
+
+func requestPath(r *http.Request) string {
+	if r.URL != nil && r.URL.RawPath != "" {
+		return r.URL.RawPath
+	}
+	if r.URL != nil && r.URL.Path != "" {
+		return r.URL.Path
+	}
+	return "/"
+}
+
+func localizeProblemResponses(_ *huma.OpenAPI, op *huma.Operation) {
+	if op == nil || op.Responses == nil {
+		return
+	}
+	for code, response := range op.Responses {
+		if response == nil {
+			continue
+		}
+		switch code {
+		case "200":
+			response.Description = "Sucesso"
+		case "400":
+			response.Description = "Requisição inválida"
+		case "404":
+			response.Description = "Recurso não encontrado"
+		case "422":
+			response.Description = "Dados inválidos"
+		case "500":
+			response.Description = "Erro interno"
+		case "503":
+			response.Description = "Serviço indisponível"
+		case "default":
+			response.Description = "Erro"
+		}
+	}
+}
+
+func metricsMiddleware(m *metrics.Metrics) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+			started := time.Now()
+			next.ServeHTTP(recorder, r)
+			if m != nil {
+				m.Observe(r.Method, routePattern(r), recorder.status, time.Since(started))
+			}
+		})
+	}
+}
+
+func routePattern(r *http.Request) string {
+	route := chi.RouteContext(r.Context())
+	if route == nil {
+		return "unmatched"
+	}
+	pattern := route.RoutePattern()
+	if pattern == "" {
+		// Chi leaves the pattern empty for unknown paths. Never fall back to
+		// the raw URL: it would make a high-cardinality Prometheus label.
+		return "unmatched"
+	}
+	return pattern
+}
+
+func recoverMiddleware(log *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				recovered := recover()
+				if recovered == nil || recovered == http.ErrAbortHandler {
+					return
+				}
+				log.Error("panic recuperado", "component", "http")
+				if log.Enabled(r.Context(), slog.LevelDebug) {
+					log.Debug("stack de panic omitido da resposta", "component", "http", "bytes", len(debug.Stack()))
+				}
+				Write(w, http.StatusInternalServerError, "ocorreu um erro interno")
+			}()
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+	wrote  bool
+}
+
+func (s *statusRecorder) WriteHeader(status int) {
+	if !s.wrote {
+		s.status = status
+		s.wrote = true
+	}
+	s.ResponseWriter.WriteHeader(status)
+}
+
+func (s *statusRecorder) Write(p []byte) (int, error) {
+	if !s.wrote {
+		s.status = http.StatusOK
+		s.wrote = true
+	}
+	return s.ResponseWriter.Write(p)
+}
+
+func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }

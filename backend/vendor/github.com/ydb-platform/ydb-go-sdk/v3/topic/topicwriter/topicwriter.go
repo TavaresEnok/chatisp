@@ -1,0 +1,163 @@
+package topicwriter
+
+import (
+	"context"
+	"errors"
+
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/topic/topicmultiwriter"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/topic/topicwriterinternal"
+)
+
+type (
+	Message = topicwriterinternal.PublicMessage
+)
+
+var (
+	// ErrQueueLimitExceed is what Writer.Write returns when the internal message
+	// queue is full, if the writer was created with
+	// WithWriterErrOnQueueFull from the topicoptions package
+	// with enable set to true. Otherwise the call blocks on a full queue until
+	// space is available. Must be checked with errors.Is.
+	ErrQueueLimitExceed = topicwriterinternal.ErrPublicQueueIsFull
+
+	// ErrWriterClosed is returned by Writer.Write when the writer has been closed
+	// due to a terminal error or an explicit Close call.
+	// Use errors.Is to detect this condition and recreate the writer if needed.
+	//
+	// Example:
+	//
+	//	if errors.Is(err, topicwriter.ErrWriterClosed) {
+	//	    writer, err = db.Topic().StartWriter(topicPath)
+	//	}
+	ErrWriterClosed = topicwriterinternal.ErrPublicWriterClosed
+
+	ErrMessagesPutToInternalQueueBeforeError = topicwriterinternal.ErrPublicMessagesPutToInternalQueueBeforeError
+	ErrUnimplemented                         = errors.New("unimplemented")
+	ErrInvalidConfiguration                  = topicmultiwriter.ErrInvalidConfiguration
+)
+
+// Writer represent write session to topic
+// It handles connection problems, reconnect to server when need and resend buffered messages
+type Writer struct {
+	inner innerWriter
+}
+
+// PublicInitialInfo is an information about writer after initialize
+type PublicInitialInfo struct {
+	LastSeqNum int64
+}
+
+// NewWriter create new writer from internal type. Used internally only.
+func NewWriter(writer *topicwriterinternal.WriterReconnector) *Writer {
+	return &Writer{
+		inner: writer,
+	}
+}
+
+func NewWriterWrapper(inner innerWriter) *Writer {
+	return &Writer{
+		inner: inner,
+	}
+}
+
+// Write send messages to topic
+// return after save messages into buffer in async mode (default) and after ack from server in sync mode.
+// see topicoptions.WithSyncWrite
+//
+// The method will wait first initial connection even for async mode, that mean first write may be slower.
+// especially when connection has problems.
+//
+// By default, when the internal queue is full, the call blocks until queue space
+// becomes available or ctx is cancelled. If the writer was created with
+// WithWriterErrOnQueueFull from the topicoptions package
+// and enable is true, the error is ErrQueueLimitExceed instead of blocking; use
+// errors.Is to test. This helps limit memory use
+// when the application produces messages faster than the writer can flush.
+//
+// If err != nil you can check errors.Is with ErrMessagesPutToInternalQueueBeforeError
+// to see if the messages were put in the buffer before the error. If so, they can still
+// be delivered to the server.
+func (w *Writer) Write(ctx context.Context, messages ...Message) error {
+	return w.inner.Write(ctx, messages)
+}
+
+// WaitInit waits until the reader is initialized
+// or an error occurs, return PublicInitialInfo and err
+func (w *Writer) WaitInit(ctx context.Context) (err error) {
+	return w.inner.WaitInit(ctx)
+}
+
+// WaitInitInfo waits until the reader is initialized
+// or an error occurs, return PublicInitialInfo and err
+func (w *Writer) WaitInitInfo(ctx context.Context) (info PublicInitialInfo, err error) {
+	privateInfo, err := w.inner.WaitInitInfo(ctx)
+	if err != nil {
+		return PublicInitialInfo{}, err
+	}
+	publicInfo := PublicInitialInfo{LastSeqNum: privateInfo.LastSeqNum}
+
+	return publicInfo, nil
+}
+
+// Close will flush rested messages from buffer and close the writer.
+// You can't write new messages after call Close
+func (w *Writer) Close(ctx context.Context) error {
+	return w.inner.Close(ctx)
+}
+
+// Flush waits till all in-flight messages are acknowledged.
+func (w *Writer) Flush(ctx context.Context) error {
+	return w.inner.Flush(ctx)
+}
+
+// TxWriter used for send messages to the transaction
+//
+// Experimental: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#experimental
+type TxWriter struct {
+	inner innerTxWriter
+}
+
+func NewTxWriterInternal(w *topicwriterinternal.WriterWithTransaction) *TxWriter {
+	return &TxWriter{inner: w}
+}
+
+func NewTxWriterWrapper(inner innerTxWriter) *TxWriter {
+	return &TxWriter{inner: inner}
+}
+
+// Write messages to the transaction
+//
+// It has not retries. If fails - needs to retry full transaction, as with any other
+// error with table.
+//
+// Experimental: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#experimental
+func (w *TxWriter) Write(ctx context.Context, messages ...Message) error {
+	return w.inner.Write(ctx, messages)
+}
+
+// WaitInit waits until the reader is initialized
+// or an error occurs, return PublicInitialInfo and err
+//
+// Experimental: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#experimental
+func (w *TxWriter) WaitInit(ctx context.Context) (err error) {
+	return w.inner.WaitInit(ctx)
+}
+
+// WaitInitInfo waits until the reader is initialized
+// or an error occurs, return PublicInitialInfo and err
+//
+// Experimental: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#experimental
+func (w *TxWriter) WaitInitInfo(ctx context.Context) (info PublicInitialInfo, err error) {
+	_, ok := w.inner.(*topicmultiwriter.MultiWriterWithTransaction)
+	if ok {
+		return PublicInitialInfo{}, ErrUnimplemented
+	}
+
+	privateInfo, err := w.inner.WaitInitInfo(ctx)
+	if err != nil {
+		return PublicInitialInfo{}, err
+	}
+	publicInfo := PublicInitialInfo{LastSeqNum: privateInfo.LastSeqNum}
+
+	return publicInfo, nil
+}

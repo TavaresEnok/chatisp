@@ -1,0 +1,2034 @@
+package explain
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/sqlc-dev/doubleclick/ast"
+)
+
+// escapeFunctionAlias escapes backslashes and single quotes in function alias names.
+// This is needed because the lexer processes escape sequences in backtick identifiers.
+func escapeFunctionAlias(alias string) string {
+	result := strings.ReplaceAll(alias, "\\", "\\\\")
+	return strings.ReplaceAll(result, "'", "\\'")
+}
+
+// normalizeIntervalUnit converts interval units to title-cased singular form
+// e.g., "years" -> "Year", "MONTH" -> "Month", "days" -> "Day"
+// Also handles SQL standard abbreviations: QQ -> Quarter, YY -> Year, MM -> Month, etc.
+// And SQL_TSI_* prefixes: SQL_TSI_MONTH -> Month, SQL_TSI_YEAR -> Year, etc.
+func normalizeIntervalUnit(unit string) string {
+	if len(unit) == 0 {
+		return ""
+	}
+	u := strings.ToLower(unit)
+
+	// Handle SQL_TSI_* prefixes (SQL ODBC standard)
+	if strings.HasPrefix(u, "sql_tsi_") {
+		u = u[8:] // Remove "sql_tsi_" prefix
+	}
+
+	// Handle SQL standard abbreviations and ClickHouse short notations
+	abbrevs := map[string]string{
+		"yy": "year",
+		"qq": "quarter",
+		"mm": "month",
+		"wk": "week",
+		"ww": "week",
+		"dd": "day",
+		"hh": "hour",
+		"mi": "minute",
+		"ss": "second",
+		// ClickHouse short notations
+		"w":  "week",
+		"d":  "day",
+		"h":  "hour",
+		"m":  "minute",
+		"s":  "second",
+		"ms": "millisecond",
+		"us": "microsecond",
+		"ns": "nanosecond",
+	}
+	if expanded, ok := abbrevs[u]; ok {
+		u = expanded
+	}
+
+	// Remove trailing 's' for plural forms
+	if strings.HasSuffix(u, "s") && len(u) > 1 {
+		u = u[:len(u)-1]
+	}
+	// Title-case
+	return strings.ToUpper(u[:1]) + u[1:]
+}
+
+// normalizeIntervalUnitToLiteral converts interval units to lowercase string form for dateDiff
+// e.g., "YEAR" -> "year", "QQ" -> "quarter", "SQL_TSI_MONTH" -> "month"
+func normalizeIntervalUnitToLiteral(unit string) string {
+	if len(unit) == 0 {
+		return ""
+	}
+	u := strings.ToLower(unit)
+
+	// Handle SQL_TSI_* prefixes (SQL ODBC standard)
+	if strings.HasPrefix(u, "sql_tsi_") {
+		u = u[8:] // Remove "sql_tsi_" prefix
+	}
+
+	// Handle SQL standard abbreviations and ClickHouse short notations
+	abbrevs := map[string]string{
+		"yy": "year",
+		"qq": "quarter",
+		"mm": "month",
+		"wk": "week",
+		"ww": "week",
+		"dd": "day",
+		"hh": "hour",
+		"mi": "minute",
+		"ss": "second",
+		// ClickHouse short notations
+		"w":  "week",
+		"d":  "day",
+		"h":  "hour",
+		"m":  "minute",
+		"s":  "second",
+		"ms": "millisecond",
+		"us": "microsecond",
+		"ns": "nanosecond",
+	}
+	if expanded, ok := abbrevs[u]; ok {
+		return expanded
+	}
+
+	// Remove trailing 's' for plural forms
+	if strings.HasSuffix(u, "s") && len(u) > 1 {
+		u = u[:len(u)-1]
+	}
+	return u
+}
+
+func explainFunctionCall(sb *strings.Builder, n *ast.FunctionCall, indent string, depth int) {
+	explainFunctionCallWithAlias(sb, n, n.Alias, indent, depth)
+}
+
+func explainFunctionCallWithAlias(sb *strings.Builder, n *ast.FunctionCall, alias string, indent string, depth int) {
+	// Handle special function transformations that ClickHouse does internally
+	if handled := handleSpecialFunction(sb, n, alias, indent, depth); handled {
+		return
+	}
+
+	children := 1 // arguments ExpressionList
+	if n.Parameters != nil {
+		children++ // parameters ExpressionList (even if empty, like medianGK()(x))
+	}
+	// Only count WindowDefinition as a child for inline window specs that have content
+	// Empty OVER () doesn't produce a WindowDefinition in ClickHouse EXPLAIN AST
+	// Named refs like "OVER w" are shown in the SELECT's WINDOW clause instead
+	hasNonEmptyWindowSpec := n.Over != nil && n.Over.Name == "" && windowSpecHasContent(n.Over)
+	if hasNonEmptyWindowSpec {
+		children++ // WindowDefinition for OVER clause
+	}
+	// Normalize function name
+	fnName := NormalizeFunctionName(n.Name)
+	// Append "Distinct" if the function has DISTINCT modifier
+	if n.Distinct {
+		fnName = fnName + "Distinct"
+	}
+	// Append "If" if the function has a FILTER clause
+	if n.Filter != nil {
+		fnName = fnName + "If"
+	}
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction %s (alias %s) (children %d)\n", indent, fnName, escapeFunctionAlias(alias), children)
+	} else {
+		fmt.Fprintf(sb, "%sFunction %s (children %d)\n", indent, fnName, children)
+	}
+	// Arguments (Settings are included as part of argument count)
+	// FILTER condition is appended to arguments for -If suffix functions
+	// count(name) FILTER (WHERE cond) -> countIf(name, cond) - 2 args
+	// count(*) FILTER (WHERE cond) -> countIf(cond) - 1 arg (asterisk dropped)
+	var argCount int
+	filterArgs := n.Arguments
+	if n.Filter != nil {
+		// Filter condition is appended as an extra argument
+		// But first, remove any Asterisk arguments (count(*) case)
+		var nonAsteriskArgs []ast.Expression
+		for _, arg := range n.Arguments {
+			if _, isAsterisk := arg.(*ast.Asterisk); !isAsterisk {
+				nonAsteriskArgs = append(nonAsteriskArgs, arg)
+			}
+		}
+		filterArgs = nonAsteriskArgs
+		argCount = len(filterArgs) + 1 // +1 for filter condition
+	} else {
+		argCount = len(n.Arguments)
+	}
+	if len(n.Settings) > 0 {
+		argCount++ // Set is counted as one argument
+	}
+	fmt.Fprintf(sb, "%s ExpressionList", indent)
+	if argCount > 0 {
+		fmt.Fprintf(sb, " (children %d)", argCount)
+	}
+	fmt.Fprintln(sb)
+	// Output arguments (filterArgs excludes Asterisk when FILTER is present)
+	argsToOutput := filterArgs
+	if n.Filter == nil {
+		argsToOutput = n.Arguments
+	}
+	for _, arg := range argsToOutput {
+		// For view() table function, unwrap Subquery wrapper
+		// Also reset the subquery context since view() SELECT is not in a Subquery node
+		if strings.ToLower(n.Name) == "view" {
+			if sq, ok := arg.(*ast.Subquery); ok {
+				prevContext := inSubqueryContext
+				inSubqueryContext = false
+				Node(sb, sq.Query, depth+2)
+				inSubqueryContext = prevContext
+				continue
+			}
+		}
+		Node(sb, arg, depth+2)
+	}
+	// Append filter condition at the end
+	if n.Filter != nil {
+		Node(sb, n.Filter, depth+2)
+	}
+	// Settings appear as Set node inside ExpressionList
+	if len(n.Settings) > 0 {
+		fmt.Fprintf(sb, "%s  Set\n", indent)
+	}
+	// Parameters (for parametric functions)
+	// Output even when empty (e.g., medianGK()(x) has empty parameters)
+	if n.Parameters != nil {
+		fmt.Fprintf(sb, "%s ExpressionList", indent)
+		if len(n.Parameters) > 0 {
+			fmt.Fprintf(sb, " (children %d)", len(n.Parameters))
+		}
+		fmt.Fprintln(sb)
+		for _, p := range n.Parameters {
+			Node(sb, p, depth+2)
+		}
+	}
+	// Window definition (for window functions with inline OVER clause)
+	// WindowDefinition is a sibling to ExpressionList, so use the same indent
+	// Only output for non-empty inline specs, not named references like "OVER w"
+	if hasNonEmptyWindowSpec {
+		explainWindowSpec(sb, n.Over, indent+" ", depth+1)
+	}
+}
+
+// windowSpecHasContent returns true if the window spec has any content.
+// ClickHouse EXPLAIN AST never includes WindowDefinition nodes for window
+// functions, even when OVER clause has PARTITION BY, ORDER BY, or frame specs.
+func windowSpecHasContent(w *ast.WindowSpec) bool {
+	return false
+}
+
+// handleSpecialFunction handles special function transformations that ClickHouse does internally.
+// Returns true if the function was handled, false otherwise.
+func handleSpecialFunction(sb *strings.Builder, n *ast.FunctionCall, alias string, indent string, depth int) bool {
+	fnName := strings.ToUpper(n.Name)
+
+	// Handle kql() function - transforms KQL (Kusto Query Language) to SQL
+	if fnName == "KQL" {
+		return handleKQLFunction(sb, n, alias, indent, depth)
+	}
+
+	// Handle quantified comparison operators (ANY/ALL with comparison operators)
+	if handled := handleQuantifiedComparison(sb, n, alias, indent, depth); handled {
+		return true
+	}
+
+	// POSITION('ll' IN 'Hello') -> position('Hello', 'll')
+	if fnName == "POSITION" && len(n.Arguments) == 1 {
+		if inExpr, ok := n.Arguments[0].(*ast.InExpr); ok {
+			// Transform: POSITION(needle IN haystack) -> position(haystack, needle)
+			explainPositionWithIn(sb, inExpr.Expr, inExpr.List[0], alias, indent, depth)
+			return true
+		}
+	}
+
+	// DATE_ADD/DATEADD/TIMESTAMP_ADD/TIMESTAMPADD
+	if fnName == "DATE_ADD" || fnName == "DATEADD" || fnName == "TIMESTAMP_ADD" || fnName == "TIMESTAMPADD" {
+		return handleDateAddSub(sb, n, alias, indent, depth, "plus")
+	}
+
+	// DATE_SUB/DATESUB/TIMESTAMP_SUB/TIMESTAMPSUB
+	if fnName == "DATE_SUB" || fnName == "DATESUB" || fnName == "TIMESTAMP_SUB" || fnName == "TIMESTAMPSUB" {
+		return handleDateAddSub(sb, n, alias, indent, depth, "minus")
+	}
+
+	// DATE_DIFF/DATEDIFF
+	if fnName == "DATE_DIFF" || fnName == "DATEDIFF" {
+		return handleDateDiff(sb, n, alias, indent, depth)
+	}
+
+	// TRIM functions with empty string as trim characters - simplify to just the string
+	// Only for SQL standard syntax: trim(LEADING '' FROM 'foo') -> just 'foo'
+	// Direct function calls like trimLeft('foo', '') are NOT simplified
+	if n.SQLStandard && (fnName == "TRIM" || fnName == "LTRIM" || fnName == "RTRIM" ||
+		fnName == "TRIMLEFT" || fnName == "TRIMRIGHT" || fnName == "TRIMBOTH") {
+		if len(n.Arguments) == 2 {
+			if lit, ok := n.Arguments[1].(*ast.Literal); ok {
+				if lit.Type == ast.LiteralString && lit.Value == "" {
+					// Trim with empty string is a no-op, just output the original string
+					Node(sb, n.Arguments[0], depth)
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// handleQuantifiedComparison handles ANY/ALL with comparison operators
+// Returns true if the function was handled, false otherwise.
+func handleQuantifiedComparison(sb *strings.Builder, n *ast.FunctionCall, alias string, indent string, depth int) bool {
+	fnName := strings.ToLower(n.Name)
+
+	// Check if this is a quantified comparison function
+	var modifier, op string
+	if strings.HasPrefix(fnName, "any") {
+		modifier = "any"
+		op = fnName[3:]
+	} else if strings.HasPrefix(fnName, "all") {
+		modifier = "all"
+		op = fnName[3:]
+	} else {
+		return false
+	}
+
+	// Must have exactly 2 arguments: left expr and subquery
+	if len(n.Arguments) != 2 {
+		return false
+	}
+
+	subquery, ok := n.Arguments[1].(*ast.Subquery)
+	if !ok {
+		return false
+	}
+
+	// Handle based on the operator and modifier
+	switch op {
+	case "equals":
+		if modifier == "any" {
+			// x == ANY (subquery) -> in(x, subquery)
+			return false // Let NormalizeFunctionName handle this
+		}
+		// x == ALL (subquery) -> complex with singleValueOrNull
+		outputQuantifiedWithAggregate(sb, n.Arguments[0], subquery, "in", "singleValueOrNull", alias, indent, depth)
+		return true
+
+	case "notequals":
+		if modifier == "all" {
+			// x != ALL (subquery) -> notIn(x, subquery)
+			return false // Let NormalizeFunctionName handle this
+		}
+		// x != ANY (subquery) -> complex notIn with singleValueOrNull
+		outputQuantifiedWithAggregate(sb, n.Arguments[0], subquery, "notIn", "singleValueOrNull", alias, indent, depth)
+		return true
+
+	case "less":
+		if modifier == "any" {
+			// x < ANY (subquery) -> x < max(subquery)
+			outputQuantifiedWithAggregate(sb, n.Arguments[0], subquery, "less", "max", alias, indent, depth)
+		} else {
+			// x < ALL (subquery) -> x < min(subquery)
+			outputQuantifiedWithAggregate(sb, n.Arguments[0], subquery, "less", "min", alias, indent, depth)
+		}
+		return true
+
+	case "lessorequals":
+		if modifier == "any" {
+			// x <= ANY (subquery) -> x <= max(subquery)
+			outputQuantifiedWithAggregate(sb, n.Arguments[0], subquery, "lessOrEquals", "max", alias, indent, depth)
+		} else {
+			// x <= ALL (subquery) -> x <= min(subquery)
+			outputQuantifiedWithAggregate(sb, n.Arguments[0], subquery, "lessOrEquals", "min", alias, indent, depth)
+		}
+		return true
+
+	case "greater":
+		if modifier == "any" {
+			// x > ANY (subquery) -> x > min(subquery)
+			outputQuantifiedWithAggregate(sb, n.Arguments[0], subquery, "greater", "min", alias, indent, depth)
+		} else {
+			// x > ALL (subquery) -> x > max(subquery)
+			outputQuantifiedWithAggregate(sb, n.Arguments[0], subquery, "greater", "max", alias, indent, depth)
+		}
+		return true
+
+	case "greaterorequals":
+		if modifier == "any" {
+			// x >= ANY (subquery) -> x >= min(subquery)
+			outputQuantifiedWithAggregate(sb, n.Arguments[0], subquery, "greaterOrEquals", "min", alias, indent, depth)
+		} else {
+			// x >= ALL (subquery) -> x >= max(subquery)
+			outputQuantifiedWithAggregate(sb, n.Arguments[0], subquery, "greaterOrEquals", "max", alias, indent, depth)
+		}
+		return true
+	}
+
+	return false
+}
+
+// outputQuantifiedWithAggregate outputs the ClickHouse AST format for quantified comparisons
+// with an aggregate function wrapped around the subquery
+func outputQuantifiedWithAggregate(sb *strings.Builder, left ast.Expression, subquery *ast.Subquery, compFunc, aggFunc string, alias string, indent string, depth int) {
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction %s (alias %s) (children %d)\n", indent, compFunc, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction %s (children %d)\n", indent, compFunc, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+	Node(sb, left, depth+2)
+
+	// Output the subquery wrapped with aggregate function
+	// Structure: Subquery -> SelectWithUnionQuery -> ExpressionList -> SelectQuery with 4 children
+	fmt.Fprintf(sb, "%s  Subquery (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s   SelectWithUnionQuery (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s    ExpressionList (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s     SelectQuery (children %d)\n", indent, 4)
+
+	// First ExpressionList with aggregate function
+	fmt.Fprintf(sb, "%s      ExpressionList (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s       Function %s (children %d)\n", indent, aggFunc, 1)
+	fmt.Fprintf(sb, "%s        ExpressionList (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s         Asterisk\n", indent)
+
+	// First TablesInSelectQuery - wrap the original subquery
+	fmt.Fprintf(sb, "%s      TablesInSelectQuery (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s       TablesInSelectQueryElement (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s        TableExpression (children %d)\n", indent, 1)
+	Node(sb, subquery, depth+9)
+
+	// Second ExpressionList with aggregate function (repeated)
+	fmt.Fprintf(sb, "%s      ExpressionList (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s       Function %s (children %d)\n", indent, aggFunc, 1)
+	fmt.Fprintf(sb, "%s        ExpressionList (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s         Asterisk\n", indent)
+
+	// Second TablesInSelectQuery (repeated)
+	fmt.Fprintf(sb, "%s      TablesInSelectQuery (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s       TablesInSelectQueryElement (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s        TableExpression (children %d)\n", indent, 1)
+	Node(sb, subquery, depth+9)
+}
+
+// explainPositionWithIn outputs POSITION(needle IN haystack) as position(haystack, needle)
+func explainPositionWithIn(sb *strings.Builder, needle, haystack ast.Expression, alias string, indent string, depth int) {
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction position (alias %s) (children %d)\n", indent, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction position (children %d)\n", indent, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+	// Arguments are swapped: haystack first, then needle
+	Node(sb, haystack, depth+2)
+	Node(sb, needle, depth+2)
+}
+
+// handleDateAddSub handles DATE_ADD/DATE_SUB and variants
+// opFunc is "plus" for ADD or "minus" for SUB
+func handleDateAddSub(sb *strings.Builder, n *ast.FunctionCall, alias string, indent string, depth int, opFunc string) bool {
+	if len(n.Arguments) == 3 {
+		// DATE_ADD(unit, n, date) -> plus/minus(date, toIntervalUnit(n))
+		unitArg := n.Arguments[0]
+		valueArg := n.Arguments[1]
+		dateArg := n.Arguments[2]
+
+		// Extract unit from identifier
+		unitName := ""
+		if ident, ok := unitArg.(*ast.Identifier); ok {
+			unitName = ident.Name()
+		}
+
+		if unitName != "" {
+			explainDateAddSubResult(sb, opFunc, dateArg, valueArg, unitName, alias, indent, depth)
+			return true
+		}
+	} else if len(n.Arguments) == 2 {
+		// DATE_ADD(interval, date) -> plus(interval, date)
+		// DATE_SUB(date, interval) -> minus(date, interval)
+		intervalArg := n.Arguments[0]
+		dateArg := n.Arguments[1]
+
+		// Check which argument is the interval
+		if _, ok := intervalArg.(*ast.IntervalExpr); ok {
+			// Interval first: plus(interval, date)
+			explainDateAddSubWithInterval(sb, opFunc, intervalArg, dateArg, alias, indent, depth)
+			return true
+		}
+		// Check if first arg is already a toInterval function (from parser)
+		if fc, ok := intervalArg.(*ast.FunctionCall); ok && strings.HasPrefix(strings.ToLower(fc.Name), "tointerval") {
+			// Interval first: plus(interval, date)
+			explainDateAddSubWithInterval(sb, opFunc, intervalArg, dateArg, alias, indent, depth)
+			return true
+		}
+
+		// DATE_SUB(date, interval) -> minus(date, interval)
+		if _, ok := dateArg.(*ast.IntervalExpr); ok {
+			explainDateAddSubWithInterval(sb, opFunc, intervalArg, dateArg, alias, indent, depth)
+			return true
+		}
+		if fc, ok := dateArg.(*ast.FunctionCall); ok && strings.HasPrefix(strings.ToLower(fc.Name), "tointerval") {
+			explainDateAddSubWithInterval(sb, opFunc, intervalArg, dateArg, alias, indent, depth)
+			return true
+		}
+	}
+
+	return false
+}
+
+// explainDateAddSubResult outputs the transformed DATE_ADD/SUB with unit syntax
+func explainDateAddSubResult(sb *strings.Builder, opFunc string, dateArg, valueArg ast.Expression, unit string, alias string, indent string, depth int) {
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction %s (alias %s) (children %d)\n", indent, opFunc, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction %s (children %d)\n", indent, opFunc, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+
+	// First arg: date
+	Node(sb, dateArg, depth+2)
+
+	// Second arg: toIntervalUnit(value)
+	unitNorm := normalizeIntervalUnit(unit)
+	fmt.Fprintf(sb, "%s  Function toInterval%s (children %d)\n", indent, unitNorm, 1)
+	fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 1)
+	Node(sb, valueArg, depth+4)
+}
+
+// explainDateAddSubWithInterval outputs the transformed DATE_ADD/SUB with INTERVAL syntax
+func explainDateAddSubWithInterval(sb *strings.Builder, opFunc string, arg1, arg2 ast.Expression, alias string, indent string, depth int) {
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction %s (alias %s) (children %d)\n", indent, opFunc, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction %s (children %d)\n", indent, opFunc, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+	Node(sb, arg1, depth+2)
+	Node(sb, arg2, depth+2)
+}
+
+// handleDateDiff handles DATE_DIFF/DATEDIFF
+// DATE_DIFF(unit, date1, date2[, timezone]) -> dateDiff('unit', date1, date2[, timezone])
+func handleDateDiff(sb *strings.Builder, n *ast.FunctionCall, alias string, indent string, depth int) bool {
+	if len(n.Arguments) < 3 || len(n.Arguments) > 4 {
+		return false
+	}
+
+	unitArg := n.Arguments[0]
+	date1Arg := n.Arguments[1]
+	date2Arg := n.Arguments[2]
+
+	// Extract unit from identifier
+	unitName := ""
+	if ident, ok := unitArg.(*ast.Identifier); ok {
+		unitName = ident.Name()
+	}
+
+	if unitName == "" {
+		return false
+	}
+
+	argCount := 3
+	if len(n.Arguments) == 4 {
+		argCount = 4
+	}
+
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction dateDiff (alias %s) (children %d)\n", indent, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction dateDiff (children %d)\n", indent, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, argCount)
+
+	// First arg: unit as lowercase string literal (with SQL abbreviations expanded)
+	fmt.Fprintf(sb, "%s  Literal \\'%s\\'\n", indent, normalizeIntervalUnitToLiteral(unitName))
+
+	// Second and third args: dates
+	Node(sb, date1Arg, depth+2)
+	Node(sb, date2Arg, depth+2)
+
+	// Fourth arg: optional timezone
+	if len(n.Arguments) == 4 {
+		Node(sb, n.Arguments[3], depth+2)
+	}
+
+	return true
+}
+
+func explainLambda(sb *strings.Builder, n *ast.Lambda, indent string, depth int) {
+	explainLambdaWithAlias(sb, n, "", indent, depth)
+}
+
+func explainLambdaWithAlias(sb *strings.Builder, n *ast.Lambda, alias string, indent string, depth int) {
+	// Lambda is represented as Function lambda with tuple of params and body
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction lambda (alias %s) (children %d)\n", indent, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction lambda (children %d)\n", indent, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+	// Parameters as tuple
+	fmt.Fprintf(sb, "%s  Function tuple (children %d)\n", indent, 1)
+	// When there are no parameters, ClickHouse omits the (children N) part
+	if len(n.Parameters) > 0 {
+		fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, len(n.Parameters))
+		for _, p := range n.Parameters {
+			fmt.Fprintf(sb, "%s    Identifier %s\n", indent, p)
+		}
+	} else {
+		fmt.Fprintf(sb, "%s   ExpressionList\n", indent)
+	}
+	// Body
+	Node(sb, n.Body, depth+2)
+}
+
+func explainCastExpr(sb *strings.Builder, n *ast.CastExpr, indent string, depth int) {
+	explainCastExprWithAlias(sb, n, n.Alias, indent, depth)
+}
+
+func explainCastExprWithAlias(sb *strings.Builder, n *ast.CastExpr, alias string, indent string, depth int) {
+	// For :: operator syntax with arrays/tuples, determine formatting based on content
+	useArrayFormat := false
+	if n.OperatorSyntax {
+		if lit, ok := n.Expr.(*ast.Literal); ok {
+			if lit.Type == ast.LiteralArray || lit.Type == ast.LiteralTuple {
+				// Determine format based on both content and target type
+				useArrayFormat = shouldUseArrayFormat(lit, n.Type)
+			}
+		}
+	}
+	// Alias is always shown for :: cast syntax with arrays/tuples
+	hideAlias := false
+
+	// CAST is represented as Function CAST with expr and type as arguments
+	if alias != "" && !hideAlias {
+		fmt.Fprintf(sb, "%sFunction CAST (alias %s) (children %d)\n", indent, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction CAST (children %d)\n", indent, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+	// For :: operator syntax with simple literals, format as string literal
+	// For function syntax or complex expressions, use normal AST node
+	if n.OperatorSyntax {
+		if lit, ok := n.Expr.(*ast.Literal); ok {
+			// For arrays/tuples of simple primitives, use FormatLiteral (Array_[...] format)
+			// For strings and other types, use string format
+			if lit.Type == ast.LiteralArray || lit.Type == ast.LiteralTuple {
+				if useArrayFormat {
+					fmt.Fprintf(sb, "%s  Literal %s\n", indent, FormatLiteral(lit))
+				} else if containsCastExpressions(lit) || !containsOnlyLiterals(lit) {
+					// Array contains CastExpr or non-literal elements - output as Function array with children
+					Node(sb, n.Expr, depth+2)
+				} else {
+					// Simple literals (including negative numbers) - format as string
+					exprStr := formatExprAsString(lit)
+					fmt.Fprintf(sb, "%s  Literal \\'%s\\'\n", indent, exprStr)
+				}
+			} else if lit.Type == ast.LiteralNull {
+				// NULL stays as Literal NULL, not formatted as a string
+				fmt.Fprintf(sb, "%s  Literal NULL\n", indent)
+			} else if lit.Type == ast.LiteralBoolean {
+				// Booleans use Bool_1/Bool_0 format
+				if lit.Value.(bool) {
+					fmt.Fprintf(sb, "%s  Literal Bool_1\n", indent)
+				} else {
+					fmt.Fprintf(sb, "%s  Literal Bool_0\n", indent)
+				}
+			} else {
+				// Simple literal - format as string (escape special chars for string literals)
+				exprStr := formatExprAsString(lit)
+				if lit.Type == ast.LiteralString {
+					exprStr = escapeStringLiteral(exprStr)
+				}
+				fmt.Fprintf(sb, "%s  Literal \\'%s\\'\n", indent, exprStr)
+			}
+		} else if negatedLit := extractNegatedLiteral(n.Expr); negatedLit != "" {
+			// Handle negated literal like -0::Int16 -> CAST('-0', 'Int16')
+			fmt.Fprintf(sb, "%s  Literal \\'%s\\'\n", indent, negatedLit)
+		} else {
+			// Complex expression - use normal AST node
+			Node(sb, n.Expr, depth+2)
+		}
+	} else {
+		Node(sb, n.Expr, depth+2)
+	}
+	// Type is formatted as a literal string, or as a node if it's a dynamic type expression
+	if n.TypeExpr != nil {
+		Node(sb, n.TypeExpr, depth+2)
+	} else {
+		typeStr := FormatDataType(n.Type)
+		// Only escape if the DataType doesn't have parameters - this means the entire
+		// type was parsed from a string literal and may contain unescaped quotes.
+		// If it has parameters, FormatDataType already handles escaping.
+		if n.Type == nil || len(n.Type.Parameters) == 0 {
+			typeStr = escapeStringLiteral(typeStr)
+		}
+		fmt.Fprintf(sb, "%s  Literal \\'%s\\'\n", indent, typeStr)
+	}
+}
+
+// shouldUseArrayFormat determines whether to use Array_[...] format or string format
+// for array/tuple literals in :: cast expressions.
+// ClickHouse uses different formats depending on element types:
+// - Boolean arrays: Array_[Bool_0, Bool_1] format
+// - Numeric arrays: '[1, 2, 3]' string format
+func shouldUseArrayFormat(lit *ast.Literal, targetType *ast.DataType) bool {
+	// First check if the literal contains only primitive literals (not expressions)
+	if !containsOnlyLiterals(lit) {
+		return false
+	}
+
+	// Check if array contains boolean elements - these use Array_ format
+	if containsBooleanElements(lit) {
+		return true
+	}
+
+	// Check if array contains NULL elements - these use Array_ format
+	if containsNullElements(lit) {
+		return true
+	}
+
+	// For arrays of strings, always use string format in :: casts
+	// This applies to all target types including Array(String)
+	if lit.Type == ast.LiteralArray && hasStringElements(lit) {
+		return false
+	}
+
+	// For numeric primitives, use string format in :: casts
+	return false
+}
+
+// containsNullElements checks if a literal array/tuple contains NULL elements
+func containsNullElements(lit *ast.Literal) bool {
+	var exprs []ast.Expression
+	switch lit.Type {
+	case ast.LiteralArray, ast.LiteralTuple:
+		var ok bool
+		exprs, ok = lit.Value.([]ast.Expression)
+		if !ok {
+			return false
+		}
+	default:
+		return false
+	}
+
+	for _, e := range exprs {
+		innerLit, ok := e.(*ast.Literal)
+		if !ok {
+			continue
+		}
+		if innerLit.Type == ast.LiteralNull {
+			return true
+		}
+		// Check nested arrays/tuples
+		if innerLit.Type == ast.LiteralArray || innerLit.Type == ast.LiteralTuple {
+			if containsNullElements(innerLit) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// containsBooleanElements checks if a literal array/tuple contains boolean elements
+func containsBooleanElements(lit *ast.Literal) bool {
+	var exprs []ast.Expression
+	switch lit.Type {
+	case ast.LiteralArray, ast.LiteralTuple:
+		var ok bool
+		exprs, ok = lit.Value.([]ast.Expression)
+		if !ok {
+			return false
+		}
+	default:
+		return false
+	}
+
+	for _, e := range exprs {
+		innerLit, ok := e.(*ast.Literal)
+		if !ok {
+			continue
+		}
+		if innerLit.Type == ast.LiteralBoolean {
+			return true
+		}
+		// Check nested arrays/tuples
+		if innerLit.Type == ast.LiteralArray || innerLit.Type == ast.LiteralTuple {
+			if containsBooleanElements(innerLit) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// containsCastExpressions checks if a literal array/tuple contains CastExpr elements at any level
+func containsCastExpressions(lit *ast.Literal) bool {
+	var exprs []ast.Expression
+	switch lit.Type {
+	case ast.LiteralArray, ast.LiteralTuple:
+		var ok bool
+		exprs, ok = lit.Value.([]ast.Expression)
+		if !ok {
+			return false
+		}
+	default:
+		return false
+	}
+
+	for _, e := range exprs {
+		// Check if this element is a CastExpr
+		if _, ok := e.(*ast.CastExpr); ok {
+			return true
+		}
+		// Check nested arrays/tuples
+		if innerLit, ok := e.(*ast.Literal); ok {
+			if innerLit.Type == ast.LiteralArray || innerLit.Type == ast.LiteralTuple {
+				if containsCastExpressions(innerLit) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// containsOnlyLiterals checks if a literal array/tuple contains only literal values (no expressions)
+// This includes negated literals (UnaryExpr with Op="-" and Literal operand)
+func containsOnlyLiterals(lit *ast.Literal) bool {
+	var exprs []ast.Expression
+	switch lit.Type {
+	case ast.LiteralArray, ast.LiteralTuple:
+		var ok bool
+		exprs, ok = lit.Value.([]ast.Expression)
+		if !ok {
+			return false
+		}
+	default:
+		return true
+	}
+
+	for _, e := range exprs {
+		// Check if it's a direct literal
+		if innerLit, ok := e.(*ast.Literal); ok {
+			// Nested arrays/tuples need recursive check
+			if innerLit.Type == ast.LiteralArray || innerLit.Type == ast.LiteralTuple {
+				if !containsOnlyLiterals(innerLit) {
+					return false
+				}
+			}
+			continue
+		}
+		// Check if it's a negated literal (e.g., -1)
+		if unary, ok := e.(*ast.UnaryExpr); ok && unary.Op == "-" {
+			if _, isLit := unary.Operand.(*ast.Literal); isLit {
+				continue
+			}
+		}
+		// Not a literal or negated literal
+		return false
+	}
+	return true
+}
+
+// hasStringElements checks if an array literal contains any string elements
+func hasStringElements(lit *ast.Literal) bool {
+	if lit.Type != ast.LiteralArray {
+		return false
+	}
+	exprs, ok := lit.Value.([]ast.Expression)
+	if !ok {
+		return false
+	}
+	for _, e := range exprs {
+		if innerLit, ok := e.(*ast.Literal); ok {
+			if innerLit.Type == ast.LiteralString {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// containsOnlyPrimitives checks if a literal array/tuple contains only primitive literals
+// Deprecated: Use shouldUseArrayFormat instead for :: cast expressions
+func containsOnlyPrimitives(lit *ast.Literal) bool {
+	var exprs []ast.Expression
+	switch lit.Type {
+	case ast.LiteralArray, ast.LiteralTuple:
+		var ok bool
+		exprs, ok = lit.Value.([]ast.Expression)
+		if !ok {
+			return false
+		}
+	default:
+		return true
+	}
+
+	for _, e := range exprs {
+		innerLit, ok := e.(*ast.Literal)
+		if !ok {
+			return false
+		}
+		// Nested arrays/tuples need recursive check
+		if innerLit.Type == ast.LiteralArray || innerLit.Type == ast.LiteralTuple {
+			if !containsOnlyPrimitives(innerLit) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// isNumericExpr checks if an expression is a numeric value (literal or unary minus of numeric)
+func isNumericExpr(expr ast.Expression) bool {
+	if lit, ok := expr.(*ast.Literal); ok {
+		return lit.Type == ast.LiteralInteger || lit.Type == ast.LiteralFloat
+	}
+	if unary, ok := expr.(*ast.UnaryExpr); ok && unary.Op == "-" {
+		if lit, ok := unary.Operand.(*ast.Literal); ok {
+			return lit.Type == ast.LiteralInteger || lit.Type == ast.LiteralFloat
+		}
+	}
+	return false
+}
+
+// containsOnlyPrimitiveLiterals checks if a tuple literal contains only primitive literals (recursively)
+func containsOnlyPrimitiveLiterals(lit *ast.Literal) bool {
+	if lit.Type != ast.LiteralTuple {
+		// Non-tuple literals are primitive
+		return true
+	}
+	exprs, ok := lit.Value.([]ast.Expression)
+	if !ok {
+		return false
+	}
+	for _, e := range exprs {
+		innerLit, ok := e.(*ast.Literal)
+		if !ok {
+			// Non-literal expression in tuple
+			return false
+		}
+		// Recursively check nested tuples
+		if innerLit.Type == ast.LiteralTuple {
+			if !containsOnlyPrimitiveLiterals(innerLit) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// containsOnlyPrimitiveLiteralsWithUnary is like containsOnlyPrimitiveLiterals but also handles
+// unary negation of numeric literals (e.g., -0., -123)
+func containsOnlyPrimitiveLiteralsWithUnary(lit *ast.Literal) bool {
+	if lit.Type != ast.LiteralTuple {
+		// Non-tuple literals are primitive
+		return true
+	}
+	exprs, ok := lit.Value.([]ast.Expression)
+	if !ok {
+		return false
+	}
+	for _, e := range exprs {
+		// Direct literal
+		if innerLit, ok := e.(*ast.Literal); ok {
+			// Recursively check nested tuples
+			if innerLit.Type == ast.LiteralTuple {
+				if !containsOnlyPrimitiveLiteralsWithUnary(innerLit) {
+					return false
+				}
+			}
+			// Arrays inside tuples make it complex
+			if innerLit.Type == ast.LiteralArray {
+				return false
+			}
+			continue
+		}
+		// Unary negation of numeric literal is also primitive
+		if unary, ok := e.(*ast.UnaryExpr); ok && unary.Op == "-" {
+			if innerLit, ok := unary.Operand.(*ast.Literal); ok {
+				if innerLit.Type == ast.LiteralInteger || innerLit.Type == ast.LiteralFloat {
+					continue
+				}
+			}
+		}
+		// Non-literal expression in tuple
+		return false
+	}
+	return true
+}
+
+// exprToLiteral converts a numeric expression to a literal (handles unary minus)
+func exprToLiteral(expr ast.Expression) *ast.Literal {
+	if lit, ok := expr.(*ast.Literal); ok {
+		return lit
+	}
+	if unary, ok := expr.(*ast.UnaryExpr); ok && unary.Op == "-" {
+		if lit, ok := unary.Operand.(*ast.Literal); ok {
+			// Create a new literal with negated value
+			switch val := lit.Value.(type) {
+			case int64:
+				return &ast.Literal{Type: ast.LiteralInteger, Value: -val}
+			case uint64:
+				// Convert to int64 and negate
+				return &ast.Literal{Type: ast.LiteralInteger, Value: -int64(val)}
+			case float64:
+				return &ast.Literal{Type: ast.LiteralFloat, Value: -val}
+			}
+		}
+	}
+	return nil
+}
+
+// extractNegatedLiteral checks if expr is a negated literal (like -0, -12)
+// and returns its string representation (like "-0", "-12") for :: cast expressions.
+// Returns empty string if not a negated literal.
+func extractNegatedLiteral(expr ast.Expression) string {
+	unary, ok := expr.(*ast.UnaryExpr)
+	if !ok || unary.Op != "-" {
+		return ""
+	}
+	lit, ok := unary.Operand.(*ast.Literal)
+	if !ok {
+		return ""
+	}
+	switch lit.Type {
+	case ast.LiteralInteger:
+		return "-" + formatExprAsString(lit)
+	case ast.LiteralFloat:
+		return "-" + formatExprAsString(lit)
+	}
+	return ""
+}
+
+func explainInExpr(sb *strings.Builder, n *ast.InExpr, indent string, depth int) {
+	// IN is represented as Function in
+	fnName := "in"
+	if n.Not {
+		fnName = "notIn"
+	}
+	if n.Global {
+		fnName = "global" + strings.Title(fnName)
+	}
+	fmt.Fprintf(sb, "%sFunction %s (children %d)\n", indent, fnName, 1)
+
+	// Determine if the IN list should be combined into a single tuple literal
+	// This happens when we have multiple literals of compatible types:
+	// - All numeric literals/expressions (integers/floats, including unary minus) + NULLs
+	// - All string literals + NULLs
+	// - All boolean literals + NULLs
+	// - All tuple literals that contain only primitive literals (recursively)
+	// - All primitive literals of mixed types (when left side is a tuple)
+	canBeTupleLiteral := false
+	if n.Query == nil && len(n.List) > 1 {
+		allNumericOrNull := true
+		allStringsOrNull := true
+		allBooleansOrNull := true
+		allTuples := true
+		allTuplesArePrimitive := true
+		allPrimitiveLiterals := true // New: check if all are primitive literals (any type)
+		allNull := true              // Track if all items are NULL
+		hasNonNull := false          // Need at least one non-null value
+		for _, item := range n.List {
+			if lit, ok := item.(*ast.Literal); ok {
+				if lit.Type == ast.LiteralNull {
+					// NULL is compatible with all literal type lists
+					continue
+				}
+				allNull = false
+				hasNonNull = true
+				if lit.Type != ast.LiteralInteger && lit.Type != ast.LiteralFloat {
+					allNumericOrNull = false
+				}
+				if lit.Type != ast.LiteralString {
+					allStringsOrNull = false
+				}
+				if lit.Type != ast.LiteralBoolean {
+					allBooleansOrNull = false
+				}
+				if lit.Type != ast.LiteralTuple {
+					allTuples = false
+				} else {
+					// Check if this tuple contains only primitive literals (including unary negation)
+					if !containsOnlyPrimitiveLiteralsWithUnary(lit) {
+						allTuplesArePrimitive = false
+						allPrimitiveLiterals = false // Non-primitive tuple breaks the mixed literal check too
+					}
+				}
+				// Arrays break the primitive literals check
+				if lit.Type == ast.LiteralArray {
+					allPrimitiveLiterals = false
+				}
+			} else if isNumericExpr(item) {
+				// Unary minus of numeric is still numeric
+				allNull = false
+				hasNonNull = true
+				allStringsOrNull = false
+				allBooleansOrNull = false
+				allTuples = false
+				// Numeric expression counts as primitive
+			} else {
+				allNull = false
+				allNumericOrNull = false
+				allStringsOrNull = false
+				allBooleansOrNull = false
+				allTuples = false
+				allPrimitiveLiterals = false
+				break
+			}
+		}
+		// Allow combining mixed primitive literals into a tuple when comparing tuples
+		// This handles cases like: (1,'') IN (-1,'') where the right side should be a single tuple literal
+		// Also allow all-NULL lists to be formatted as tuple literals
+		canBeTupleLiteral = allNull || (hasNonNull && (allNumericOrNull || allStringsOrNull || allBooleansOrNull || (allTuples && allTuplesArePrimitive) || allPrimitiveLiterals))
+	}
+
+	// Count arguments: expr + list items or subquery
+	argCount := 1
+	if n.Query != nil {
+		argCount++
+	} else if canBeTupleLiteral {
+		// Multiple literals will be combined into a single tuple
+		argCount++
+	} else {
+		// Check if we have a single tuple literal that should be wrapped in Function tuple
+		if len(n.List) == 1 {
+			if lit, ok := n.List[0].(*ast.Literal); ok && lit.Type == ast.LiteralTuple {
+				// Single tuple literal gets wrapped in Function tuple, so count as 1
+				argCount++
+			} else if n.TrailingComma {
+				// Single element with trailing comma (e.g., (2,)) gets wrapped in Function tuple
+				argCount++
+			} else {
+				argCount += len(n.List)
+			}
+		} else {
+			// Non-string items get wrapped in a single Function tuple
+			argCount++
+		}
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, argCount)
+	Node(sb, n.Expr, depth+2)
+
+	if n.Query != nil {
+		// Subqueries in IN should be wrapped in Subquery node
+		fmt.Fprintf(sb, "%s  Subquery (children %d)\n", indent, 1)
+		Node(sb, n.Query, depth+3)
+	} else if canBeTupleLiteral {
+		// Combine multiple literals into a single Tuple literal
+		tupleLit := &ast.Literal{
+			Type:  ast.LiteralTuple,
+			Value: n.List,
+		}
+		fmt.Fprintf(sb, "%s  Literal %s\n", indent, FormatLiteral(tupleLit))
+	} else if len(n.List) == 1 {
+		// Single element in the list
+		// If it's a tuple literal, wrap it in Function tuple
+		// Otherwise, output the element directly
+		if lit, ok := n.List[0].(*ast.Literal); ok && lit.Type == ast.LiteralTuple {
+			// Wrap tuple literal in Function tuple
+			// Check if all elements are parenthesized primitives - if so, expand them
+			// Otherwise, keep the tuple as a Literal
+			elems, ok := lit.Value.([]ast.Expression)
+			if !ok {
+				// Fallback if Value isn't []ast.Expression
+				fmt.Fprintf(sb, "%s  Function tuple (children %d)\n", indent, 1)
+				fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 1)
+				Node(sb, n.List[0], depth+4)
+			} else {
+				// Check if all elements are parenthesized primitives
+				allParenthesizedPrimitives := true
+				for _, elem := range elems {
+					if primLit, isPrim := elem.(*ast.Literal); isPrim {
+						if !primLit.Parenthesized || primLit.Type == ast.LiteralTuple || primLit.Type == ast.LiteralArray {
+							allParenthesizedPrimitives = false
+							break
+						}
+					} else {
+						allParenthesizedPrimitives = false
+						break
+					}
+				}
+
+				fmt.Fprintf(sb, "%s  Function tuple (children %d)\n", indent, 1)
+				if allParenthesizedPrimitives {
+					// Expand the elements
+					// For empty tuples, don't include children count
+					if len(elems) == 0 {
+						fmt.Fprintf(sb, "%s   ExpressionList\n", indent)
+					} else {
+						fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, len(elems))
+					}
+					for _, elem := range elems {
+						Node(sb, elem, depth+4)
+					}
+				} else {
+					// Keep as a single Literal Tuple
+					fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 1)
+					Node(sb, n.List[0], depth+4)
+				}
+			}
+		} else if n.TrailingComma {
+			// Single element with trailing comma (e.g., (2,)) - wrap in Function tuple
+			fmt.Fprintf(sb, "%s  Function tuple (children %d)\n", indent, 1)
+			fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 1)
+			Node(sb, n.List[0], depth+4)
+		} else {
+			// Single non-tuple element - output directly
+			Node(sb, n.List[0], depth+2)
+		}
+	} else {
+		// Check if all items are tuple literals (some may have expressions)
+		allTuples := true
+		for _, item := range n.List {
+			if lit, ok := item.(*ast.Literal); !ok || lit.Type != ast.LiteralTuple {
+				allTuples = false
+				break
+			}
+		}
+		if allTuples {
+			// Wrap all tuples in Function tuple
+			fmt.Fprintf(sb, "%s  Function tuple (children %d)\n", indent, 1)
+			fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, len(n.List))
+			for _, item := range n.List {
+				explainTupleInInList(sb, item.(*ast.Literal), indent+"   ", depth+4)
+			}
+		} else {
+			// Wrap non-literal/non-tuple list items in Function tuple
+			fmt.Fprintf(sb, "%s  Function tuple (children %d)\n", indent, 1)
+			fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, len(n.List))
+			for _, item := range n.List {
+				Node(sb, item, depth+4)
+			}
+		}
+	}
+}
+
+// explainTupleInInList renders a tuple in an IN list - either as Literal or Function tuple
+func explainTupleInInList(sb *strings.Builder, lit *ast.Literal, indent string, depth int) {
+	if containsOnlyPrimitiveLiteralsWithUnary(lit) {
+		// All primitives (including unary negation) - render as Literal Tuple_
+		fmt.Fprintf(sb, "%s Literal %s\n", indent, FormatLiteral(lit))
+	} else {
+		// Contains expressions - render as Function tuple
+		exprs, ok := lit.Value.([]ast.Expression)
+		if !ok {
+			fmt.Fprintf(sb, "%s Literal %s\n", indent, FormatLiteral(lit))
+			return
+		}
+		fmt.Fprintf(sb, "%s Function tuple (children %d)\n", indent, 1)
+		fmt.Fprintf(sb, "%s  ExpressionList (children %d)\n", indent, len(exprs))
+		for _, e := range exprs {
+			Node(sb, e, depth+2)
+		}
+	}
+}
+
+func explainInExprWithAlias(sb *strings.Builder, n *ast.InExpr, alias string, indent string, depth int) {
+	// IN is represented as Function in with alias
+	fnName := "in"
+	if n.Not {
+		fnName = "notIn"
+	}
+	if n.Global {
+		fnName = "global" + strings.Title(fnName)
+	}
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction %s (alias %s) (children %d)\n", indent, fnName, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction %s (children %d)\n", indent, fnName, 1)
+	}
+
+	// Determine if the IN list should be combined into a single tuple literal
+	// Only combine strings into tuple for small lists (up to 10 items)
+	const maxStringTupleSizeWithAlias = 10
+	canBeTupleLiteral := false
+	if n.Query == nil && len(n.List) > 1 {
+		allNumericOrNull := true
+		allStringsOrNull := true
+		allBooleansOrNull := true
+		allTuples := true
+		allTuplesArePrimitive := true
+		allPrimitiveLiterals := true // Any mix of primitive literals (numbers, strings, booleans, null, primitive tuples)
+		allNull := true              // Track if all items are NULL
+		hasNonNull := false          // Need at least one non-null value
+		for _, item := range n.List {
+			if lit, ok := item.(*ast.Literal); ok {
+				if lit.Type == ast.LiteralNull {
+					// NULL is compatible with all literal type lists
+					continue
+				}
+				allNull = false
+				hasNonNull = true
+				if lit.Type != ast.LiteralInteger && lit.Type != ast.LiteralFloat {
+					allNumericOrNull = false
+				}
+				if lit.Type != ast.LiteralString {
+					allStringsOrNull = false
+				}
+				if lit.Type != ast.LiteralBoolean {
+					allBooleansOrNull = false
+				}
+				if lit.Type != ast.LiteralTuple {
+					allTuples = false
+				} else {
+					if !containsOnlyPrimitiveLiterals(lit) {
+						allTuplesArePrimitive = false
+						allPrimitiveLiterals = false
+					}
+				}
+			} else if isNumericExpr(item) {
+				allNull = false
+				hasNonNull = true
+				allStringsOrNull = false
+				allBooleansOrNull = false
+				allTuples = false
+			} else {
+				allNull = false
+				allNumericOrNull = false
+				allStringsOrNull = false
+				allBooleansOrNull = false
+				allTuples = false
+				allPrimitiveLiterals = false
+				break
+			}
+		}
+		canBeTupleLiteral = allNull || (hasNonNull && (allNumericOrNull || (allStringsOrNull && len(n.List) <= maxStringTupleSizeWithAlias) || allBooleansOrNull || (allTuples && allTuplesArePrimitive) || allPrimitiveLiterals))
+	}
+
+	// Count arguments
+	argCount := 1
+	if n.Query != nil {
+		argCount++
+	} else if canBeTupleLiteral {
+		argCount++
+	} else {
+		if len(n.List) == 1 {
+			if lit, ok := n.List[0].(*ast.Literal); ok && lit.Type == ast.LiteralTuple {
+				argCount++
+			} else if n.TrailingComma {
+				// Single element with trailing comma (e.g., (2,)) gets wrapped in Function tuple
+				argCount++
+			} else {
+				argCount += len(n.List)
+			}
+		} else {
+			// Check if all items are string literals (large list case - no wrapper)
+			allStringLiterals := true
+			for _, item := range n.List {
+				if lit, ok := item.(*ast.Literal); !ok || lit.Type != ast.LiteralString {
+					allStringLiterals = false
+					break
+				}
+			}
+			if allStringLiterals {
+				// Large string list - separate children
+				argCount += len(n.List)
+			} else {
+				// Non-string items get wrapped in a single Function tuple
+				argCount++
+			}
+		}
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, argCount)
+	Node(sb, n.Expr, depth+2)
+
+	if n.Query != nil {
+		fmt.Fprintf(sb, "%s  Subquery (children %d)\n", indent, 1)
+		Node(sb, n.Query, depth+3)
+	} else if canBeTupleLiteral {
+		tupleLit := &ast.Literal{
+			Type:  ast.LiteralTuple,
+			Value: n.List,
+		}
+		fmt.Fprintf(sb, "%s  Literal %s\n", indent, FormatLiteral(tupleLit))
+	} else if len(n.List) == 1 {
+		if lit, ok := n.List[0].(*ast.Literal); ok && lit.Type == ast.LiteralTuple {
+			// Use explainTupleInInList to properly handle primitive-only tuples as Literal Tuple_
+			explainTupleInInList(sb, lit, indent+" ", depth+2)
+		} else if n.TrailingComma {
+			// Single element with trailing comma (e.g., (2,)) - wrap in Function tuple
+			fmt.Fprintf(sb, "%s  Function tuple (children %d)\n", indent, 1)
+			fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 1)
+			Node(sb, n.List[0], depth+4)
+		} else {
+			Node(sb, n.List[0], depth+2)
+		}
+	} else {
+		// Check if all items are tuple literals (some may have expressions)
+		allTuples := true
+		for _, item := range n.List {
+			if lit, ok := item.(*ast.Literal); !ok || lit.Type != ast.LiteralTuple {
+				allTuples = false
+				break
+			}
+		}
+		if allTuples {
+			// Wrap all tuples in Function tuple
+			fmt.Fprintf(sb, "%s  Function tuple (children %d)\n", indent, 1)
+			fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, len(n.List))
+			for _, item := range n.List {
+				explainTupleInInList(sb, item.(*ast.Literal), indent+"   ", depth+4)
+			}
+		} else {
+			// Wrap non-literal/non-tuple list items in Function tuple
+			fmt.Fprintf(sb, "%s  Function tuple (children %d)\n", indent, 1)
+			fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, len(n.List))
+			for _, item := range n.List {
+				Node(sb, item, depth+4)
+			}
+		}
+	}
+}
+
+func explainTernaryExpr(sb *strings.Builder, n *ast.TernaryExpr, indent string, depth int) {
+	// Ternary is represented as Function if with 3 arguments
+	fmt.Fprintf(sb, "%sFunction if (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 3)
+	Node(sb, n.Condition, depth+2)
+	Node(sb, n.Then, depth+2)
+	Node(sb, n.Else, depth+2)
+}
+
+func explainArrayAccess(sb *strings.Builder, n *ast.ArrayAccess, indent string, depth int) {
+	// Array access is represented as Function arrayElement
+	fmt.Fprintf(sb, "%sFunction arrayElement (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+	Node(sb, n.Array, depth+2)
+	Node(sb, n.Index, depth+2)
+}
+
+func explainArrayAccessWithAlias(sb *strings.Builder, n *ast.ArrayAccess, alias string, indent string, depth int) {
+	// Array access is represented as Function arrayElement
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction arrayElement (alias %s) (children %d)\n", indent, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction arrayElement (children %d)\n", indent, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+	Node(sb, n.Array, depth+2)
+	Node(sb, n.Index, depth+2)
+}
+
+func explainTupleAccess(sb *strings.Builder, n *ast.TupleAccess, indent string, depth int) {
+	// Tuple access is represented as Function tupleElement
+	fmt.Fprintf(sb, "%sFunction tupleElement (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+	Node(sb, n.Tuple, depth+2)
+	Node(sb, n.Index, depth+2)
+}
+
+func explainTupleAccessWithAlias(sb *strings.Builder, n *ast.TupleAccess, alias string, indent string, depth int) {
+	// Tuple access is represented as Function tupleElement
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction tupleElement (alias %s) (children %d)\n", indent, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction tupleElement (children %d)\n", indent, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+	Node(sb, n.Tuple, depth+2)
+	Node(sb, n.Index, depth+2)
+}
+
+func explainLikeExpr(sb *strings.Builder, n *ast.LikeExpr, indent string, depth int) {
+	// LIKE is represented as Function like
+	fnName := "like"
+	if n.CaseInsensitive {
+		fnName = "ilike"
+	}
+	if n.Not {
+		fnName = "not" + strings.Title(fnName)
+	}
+	if n.Alias != "" {
+		fmt.Fprintf(sb, "%sFunction %s (alias %s) (children %d)\n", indent, fnName, n.Alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction %s (children %d)\n", indent, fnName, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+	Node(sb, n.Expr, depth+2)
+	Node(sb, n.Pattern, depth+2)
+}
+
+func explainLikeExprWithAlias(sb *strings.Builder, n *ast.LikeExpr, alias string, indent string, depth int) {
+	// LIKE is represented as Function like
+	fnName := "like"
+	if n.CaseInsensitive {
+		fnName = "ilike"
+	}
+	if n.Not {
+		fnName = "not" + strings.Title(fnName)
+	}
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction %s (alias %s) (children %d)\n", indent, fnName, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction %s (children %d)\n", indent, fnName, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+	Node(sb, n.Expr, depth+2)
+	Node(sb, n.Pattern, depth+2)
+}
+
+func explainBetweenExpr(sb *strings.Builder, n *ast.BetweenExpr, indent string, depth int) {
+	if n.Not {
+		// NOT BETWEEN is transformed to: expr < low OR expr > high
+		// Represented as: Function or with two comparisons: less and greater
+		fmt.Fprintf(sb, "%sFunction or (children %d)\n", indent, 1)
+		fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+		// less(expr, low)
+		fmt.Fprintf(sb, "%s  Function less (children %d)\n", indent, 1)
+		fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 2)
+		Node(sb, n.Expr, depth+4)
+		Node(sb, n.Low, depth+4)
+		// greater(expr, high)
+		fmt.Fprintf(sb, "%s  Function greater (children %d)\n", indent, 1)
+		fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 2)
+		Node(sb, n.Expr, depth+4)
+		Node(sb, n.High, depth+4)
+	} else {
+		// BETWEEN is represented as Function and with two comparisons
+		// expr >= low AND expr <= high
+		fmt.Fprintf(sb, "%sFunction and (children %d)\n", indent, 1)
+		fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+		// greaterOrEquals(expr, low)
+		fmt.Fprintf(sb, "%s  Function greaterOrEquals (children %d)\n", indent, 1)
+		fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 2)
+		Node(sb, n.Expr, depth+4)
+		Node(sb, n.Low, depth+4)
+		// lessOrEquals(expr, high)
+		fmt.Fprintf(sb, "%s  Function lessOrEquals (children %d)\n", indent, 1)
+		fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 2)
+		Node(sb, n.Expr, depth+4)
+		Node(sb, n.High, depth+4)
+	}
+}
+
+func explainBetweenExprWithAlias(sb *strings.Builder, n *ast.BetweenExpr, alias string, indent string, depth int) {
+	if n.Not {
+		// NOT BETWEEN is transformed to: expr < low OR expr > high
+		// Represented as: Function or with two comparisons: less and greater
+		if alias != "" {
+			fmt.Fprintf(sb, "%sFunction or (alias %s) (children %d)\n", indent, alias, 1)
+		} else {
+			fmt.Fprintf(sb, "%sFunction or (children %d)\n", indent, 1)
+		}
+		fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+		// less(expr, low)
+		fmt.Fprintf(sb, "%s  Function less (children %d)\n", indent, 1)
+		fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 2)
+		Node(sb, n.Expr, depth+4)
+		Node(sb, n.Low, depth+4)
+		// greater(expr, high)
+		fmt.Fprintf(sb, "%s  Function greater (children %d)\n", indent, 1)
+		fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 2)
+		Node(sb, n.Expr, depth+4)
+		Node(sb, n.High, depth+4)
+	} else {
+		// BETWEEN is represented as Function and with two comparisons
+		// expr >= low AND expr <= high
+		if alias != "" {
+			fmt.Fprintf(sb, "%sFunction and (alias %s) (children %d)\n", indent, alias, 1)
+		} else {
+			fmt.Fprintf(sb, "%sFunction and (children %d)\n", indent, 1)
+		}
+		fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+		// greaterOrEquals(expr, low)
+		fmt.Fprintf(sb, "%s  Function greaterOrEquals (children %d)\n", indent, 1)
+		fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 2)
+		Node(sb, n.Expr, depth+4)
+		Node(sb, n.Low, depth+4)
+		// lessOrEquals(expr, high)
+		fmt.Fprintf(sb, "%s  Function lessOrEquals (children %d)\n", indent, 1)
+		fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 2)
+		Node(sb, n.Expr, depth+4)
+		Node(sb, n.High, depth+4)
+	}
+}
+
+func explainIsNullExpr(sb *strings.Builder, n *ast.IsNullExpr, indent string, depth int) {
+	explainIsNullExprWithAlias(sb, n, "", indent, depth)
+}
+
+func explainIsNullExprWithAlias(sb *strings.Builder, n *ast.IsNullExpr, alias string, indent string, depth int) {
+	// IS NULL is represented as Function isNull
+	fnName := "isNull"
+	if n.Not {
+		fnName = "isNotNull"
+	}
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction %s (alias %s) (children %d)\n", indent, fnName, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction %s (children %d)\n", indent, fnName, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 1)
+	Node(sb, n.Expr, depth+2)
+}
+
+func explainCaseExpr(sb *strings.Builder, n *ast.CaseExpr, indent string, depth int) {
+	explainCaseExprWithAlias(sb, n, n.Alias, indent, depth)
+}
+
+func explainCaseExprWithAlias(sb *strings.Builder, n *ast.CaseExpr, alias string, indent string, depth int) {
+	// CASE is represented as Function multiIf or caseWithExpression
+	if n.Operand != nil {
+		// CASE x WHEN ... form
+		// Always has ELSE (explicit or implicit NULL)
+		argCount := 1 + len(n.Whens)*2 + 1 // operand + (condition, result) pairs + else
+		if alias != "" {
+			fmt.Fprintf(sb, "%sFunction caseWithExpression (alias %s) (children %d)\n", indent, alias, 1)
+		} else {
+			fmt.Fprintf(sb, "%sFunction caseWithExpression (children %d)\n", indent, 1)
+		}
+		fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, argCount)
+		Node(sb, n.Operand, depth+2)
+		for _, w := range n.Whens {
+			Node(sb, w.Condition, depth+2)
+			Node(sb, w.Result, depth+2)
+		}
+		if n.Else != nil {
+			Node(sb, n.Else, depth+2)
+		} else {
+			// Implicit NULL when no ELSE clause
+			fmt.Fprintf(sb, "%s  Literal NULL\n", indent)
+		}
+	} else {
+		// CASE WHEN ... form
+		// CASE without ELSE implicitly has NULL as the else value
+		argCount := len(n.Whens)*2 + 1 // Always add 1 for ELSE (explicit or implicit NULL)
+		if alias != "" {
+			fmt.Fprintf(sb, "%sFunction multiIf (alias %s) (children %d)\n", indent, alias, 1)
+		} else {
+			fmt.Fprintf(sb, "%sFunction multiIf (children %d)\n", indent, 1)
+		}
+		fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, argCount)
+		for _, w := range n.Whens {
+			Node(sb, w.Condition, depth+2)
+			Node(sb, w.Result, depth+2)
+		}
+		if n.Else != nil {
+			Node(sb, n.Else, depth+2)
+		} else {
+			// Implicit NULL when no ELSE clause
+			fmt.Fprintf(sb, "%s  Literal NULL\n", indent)
+		}
+	}
+}
+
+func explainIntervalExpr(sb *strings.Builder, n *ast.IntervalExpr, alias string, indent string, depth int) {
+	// INTERVAL is represented as Function toInterval<Unit>
+	// Unit needs to be title-cased and singular (e.g., YEAR -> Year, YEARS -> Year)
+	unit := n.Unit
+	value := n.Value
+
+	// Handle string literals like INTERVAL '2 years' or INTERVAL '-1 SECOND 2 MINUTE -3 MONTH 1 YEAR'
+	if unit == "" {
+		if lit, ok := n.Value.(*ast.Literal); ok && lit.Type == ast.LiteralString {
+			if strVal, ok := lit.Value.(string); ok {
+				parts := parseMultiIntervalString(strVal)
+				if len(parts) > 1 {
+					// Multi-part interval - output as tuple
+					if alias != "" {
+						fmt.Fprintf(sb, "%sFunction tuple (alias %s) (children %d)\n", indent, alias, 1)
+					} else {
+						fmt.Fprintf(sb, "%sFunction tuple (children %d)\n", indent, 1)
+					}
+					fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, len(parts))
+					for _, part := range parts {
+						unitNorm := normalizeIntervalUnit(part.unit)
+						fnName := "toInterval" + unitNorm
+						fmt.Fprintf(sb, "%s  Function %s (children %d)\n", indent, fnName, 1)
+						fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 1)
+						// Output the literal value with proper type
+						explainIntervalLiteralValue(sb, part.value, indent+"    ", depth+4)
+					}
+					return
+				} else if len(parts) == 1 {
+					unit = parts[0].unit
+					value = &ast.Literal{
+						Type:  ast.LiteralInteger,
+						Value: parts[0].value,
+					}
+				}
+			}
+		}
+	}
+
+	unitNorm := normalizeIntervalUnit(unit)
+	fnName := "toInterval" + unitNorm
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction %s (alias %s) (children %d)\n", indent, fnName, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction %s (children %d)\n", indent, fnName, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 1)
+	Node(sb, value, depth+2)
+}
+
+// explainIntervalLiteralValue outputs a literal value for an interval part
+// Negative values use Int64, positive values use UInt64
+func explainIntervalLiteralValue(sb *strings.Builder, value string, indent string, depth int) {
+	if strings.HasPrefix(value, "-") {
+		fmt.Fprintf(sb, "%sLiteral Int64_%s\n", indent, value)
+	} else {
+		fmt.Fprintf(sb, "%sLiteral UInt64_%s\n", indent, value)
+	}
+}
+
+// intervalPart represents a single part of a multi-part interval string
+type intervalPart struct {
+	value string
+	unit  string
+}
+
+// parseIntervalString parses a string like "2 years" into value and unit
+func parseIntervalString(s string) (value string, unit string) {
+	parts := parseMultiIntervalString(s)
+	if len(parts) >= 1 {
+		return parts[0].value, parts[0].unit
+	}
+	return s, ""
+}
+
+// parseMultiIntervalString parses a string like "-1 SECOND 2 MINUTE -3 MONTH 1 YEAR"
+// into multiple interval parts
+func parseMultiIntervalString(s string) []intervalPart {
+	// Trim surrounding quotes if present
+	s = strings.Trim(s, "'\"")
+	s = strings.TrimSpace(s)
+
+	// Split into tokens
+	tokens := strings.Fields(s)
+	if len(tokens) == 0 {
+		return nil
+	}
+
+	var parts []intervalPart
+	i := 0
+	for i < len(tokens) {
+		// Get value (may be negative, starts with -)
+		value := tokens[i]
+		i++
+
+		// Get unit
+		if i >= len(tokens) {
+			break
+		}
+		unit := tokens[i]
+		i++
+
+		parts = append(parts, intervalPart{value: value, unit: unit})
+	}
+
+	return parts
+}
+
+func explainExistsExpr(sb *strings.Builder, n *ast.ExistsExpr, indent string, depth int) {
+	explainExistsExprWithAlias(sb, n, "", indent, depth)
+}
+
+func explainExistsExprWithAlias(sb *strings.Builder, n *ast.ExistsExpr, alias string, indent string, depth int) {
+	// EXISTS is represented as Function exists
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction exists (alias %s) (children %d)\n", indent, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction exists (children %d)\n", indent, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s  Subquery (children %d)\n", indent, 1)
+	Node(sb, n.Query, depth+3)
+}
+
+func explainExtractExpr(sb *strings.Builder, n *ast.ExtractExpr, indent string, depth int) {
+	explainExtractExprWithAlias(sb, n, n.Alias, indent, depth)
+}
+
+func explainExtractExprWithAlias(sb *strings.Builder, n *ast.ExtractExpr, alias string, indent string, depth int) {
+	// EXTRACT is represented as Function toYear, toMonth, etc.
+	// ClickHouse uses specific function names for date/time extraction
+	fnName := extractFieldToFunction(n.Field)
+	// Only use the external alias parameter (from explicit AS on EXTRACT itself)
+	// NOT the alias from the From expression - that stays on the inner expression
+	if alias != "" {
+		fmt.Fprintf(sb, "%sFunction %s (alias %s) (children %d)\n", indent, fnName, alias, 1)
+	} else {
+		fmt.Fprintf(sb, "%sFunction %s (children %d)\n", indent, fnName, 1)
+	}
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 1)
+	Node(sb, n.From, depth+2)
+}
+
+// extractFieldToFunction maps EXTRACT field names to ClickHouse function names
+func extractFieldToFunction(field string) string {
+	switch strings.ToUpper(field) {
+	case "DAY":
+		return "toDayOfMonth"
+	case "MONTH":
+		return "toMonth"
+	case "YEAR", "YYYY":
+		return "toYear"
+	case "SECOND":
+		return "toSecond"
+	case "MINUTE":
+		return "toMinute"
+	case "HOUR":
+		return "toHour"
+	case "QUARTER":
+		return "toQuarter"
+	case "WEEK":
+		return "toWeek"
+	default:
+		// Fallback to generic "to" + TitleCase(field)
+		return "to" + strings.Title(strings.ToLower(field))
+	}
+}
+
+func explainWindowSpec(sb *strings.Builder, n *ast.WindowSpec, indent string, depth int) {
+	// Window spec is represented as WindowDefinition
+	// For simple cases like OVER (), just output WindowDefinition without children
+	children := 0
+	if n.Name != "" {
+		children++
+	}
+	if len(n.PartitionBy) > 0 {
+		children++
+	}
+	if len(n.OrderBy) > 0 {
+		children++
+	}
+	// Count frame offset as child if present
+	if n.Frame != nil && n.Frame.StartBound != nil && n.Frame.StartBound.Offset != nil {
+		children++
+	}
+	if children > 0 {
+		fmt.Fprintf(sb, "%sWindowDefinition (children %d)\n", indent, children)
+		if n.Name != "" {
+			fmt.Fprintf(sb, "%s Identifier %s\n", indent, n.Name)
+		}
+		if len(n.PartitionBy) > 0 {
+			fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, len(n.PartitionBy))
+			for _, e := range n.PartitionBy {
+				Node(sb, e, depth+2)
+			}
+		}
+		if len(n.OrderBy) > 0 {
+			fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, len(n.OrderBy))
+			for _, o := range n.OrderBy {
+				explainOrderByElement(sb, o, strings.Repeat(" ", depth+2), depth+2)
+			}
+		}
+		// Frame start offset
+		if n.Frame != nil && n.Frame.StartBound != nil && n.Frame.StartBound.Offset != nil {
+			Node(sb, n.Frame.StartBound.Offset, depth+1)
+		}
+	} else {
+		fmt.Fprintf(sb, "%sWindowDefinition\n", indent)
+	}
+}
+
+// handleKQLFunction handles the kql() table function.
+// kql() transforms Kusto Query Language (KQL) into SQL and wraps it in a view() function.
+// Example: kql($$Customers|project FirstName$$) -> view(SELECT FirstName FROM Customers)
+func handleKQLFunction(sb *strings.Builder, n *ast.FunctionCall, alias string, indent string, depth int) bool {
+	if len(n.Arguments) != 1 {
+		return false
+	}
+
+	// Get the KQL string from the argument
+	lit, ok := n.Arguments[0].(*ast.Literal)
+	if !ok || lit.Type != ast.LiteralString {
+		return false
+	}
+
+	kqlStr, ok := lit.Value.(string)
+	if !ok {
+		return false
+	}
+
+	// Parse the KQL string
+	parsed := parseKQL(kqlStr)
+	if parsed == nil {
+		return false
+	}
+
+	// Output as Function view
+	fmt.Fprintf(sb, "%sFunction view (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s  SelectWithUnionQuery (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s   ExpressionList (children %d)\n", indent, 1)
+
+	// Calculate children count for SelectQuery
+	// Always have: TablesInSelectQuery, ExpressionList (columns)
+	// Optionally: WHERE clause (Function equals/etc)
+	selectChildren := 2
+	if parsed.filter != nil {
+		selectChildren = 3
+	}
+
+	fmt.Fprintf(sb, "%s    SelectQuery (children %d)\n", indent, selectChildren)
+
+	// Output TablesInSelectQuery first
+	fmt.Fprintf(sb, "%s     TablesInSelectQuery (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s      TablesInSelectQueryElement (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s       TableExpression (children %d)\n", indent, 1)
+	fmt.Fprintf(sb, "%s        TableIdentifier %s\n", indent, parsed.tableName)
+
+	// Output WHERE clause if present (before columns in the order shown in expected output)
+	if parsed.filter != nil {
+		explainKQLFilter(sb, parsed.filter, indent+"     ", depth+5)
+	}
+
+	// Output columns (ExpressionList)
+	fmt.Fprintf(sb, "%s     ExpressionList (children %d)\n", indent, len(parsed.columns))
+	for _, col := range parsed.columns {
+		fmt.Fprintf(sb, "%s      Identifier %s\n", indent, col)
+	}
+
+	return true
+}
+
+// kqlParsed represents a parsed KQL query
+type kqlParsed struct {
+	tableName string
+	columns   []string
+	filter    *kqlFilter
+}
+
+// kqlFilter represents a KQL filter condition
+type kqlFilter struct {
+	left     string
+	operator string
+	right    string
+}
+
+// parseKQL parses a KQL string into its components
+// Supports: TableName | project col1, col2, ... | filter condition
+func parseKQL(kql string) *kqlParsed {
+	// Split by pipe operator
+	parts := splitKQLPipes(kql)
+	if len(parts) == 0 {
+		return nil
+	}
+
+	result := &kqlParsed{}
+
+	// First part is always the table name
+	result.tableName = strings.TrimSpace(parts[0])
+
+	// Process remaining operators
+	for i := 1; i < len(parts); i++ {
+		part := strings.TrimSpace(parts[i])
+
+		if strings.HasPrefix(strings.ToLower(part), "project ") {
+			// project col1, col2, ...
+			columnsStr := strings.TrimPrefix(part, "project ")
+			columnsStr = strings.TrimPrefix(columnsStr, "PROJECT ")
+			cols := strings.Split(columnsStr, ",")
+			for _, col := range cols {
+				result.columns = append(result.columns, strings.TrimSpace(col))
+			}
+		} else if strings.HasPrefix(strings.ToLower(part), "filter ") {
+			// filter condition
+			conditionStr := strings.TrimPrefix(part, "filter ")
+			conditionStr = strings.TrimPrefix(conditionStr, "FILTER ")
+			result.filter = parseKQLCondition(conditionStr)
+		}
+	}
+
+	return result
+}
+
+// splitKQLPipes splits a KQL string by pipe operators
+func splitKQLPipes(kql string) []string {
+	var parts []string
+	var current strings.Builder
+	inQuote := false
+	quoteChar := byte(0)
+
+	for i := 0; i < len(kql); i++ {
+		c := kql[i]
+
+		if !inQuote && (c == '\'' || c == '"') {
+			inQuote = true
+			quoteChar = c
+			current.WriteByte(c)
+		} else if inQuote && c == quoteChar {
+			inQuote = false
+			current.WriteByte(c)
+		} else if !inQuote && c == '|' {
+			parts = append(parts, current.String())
+			current.Reset()
+		} else {
+			current.WriteByte(c)
+		}
+	}
+
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+
+	return parts
+}
+
+// parseKQLCondition parses a KQL condition like "LastName=='Diaz'"
+func parseKQLCondition(cond string) *kqlFilter {
+	cond = strings.TrimSpace(cond)
+
+	// Try to match comparison operators
+	// KQL uses == for equality
+	operators := []string{"==", "!=", ">=", "<=", ">", "<"}
+	for _, op := range operators {
+		if idx := strings.Index(cond, op); idx > 0 {
+			left := strings.TrimSpace(cond[:idx])
+			right := strings.TrimSpace(cond[idx+len(op):])
+			return &kqlFilter{
+				left:     left,
+				operator: op,
+				right:    right,
+			}
+		}
+	}
+
+	return nil
+}
+
+// explainKQLFilter outputs the EXPLAIN AST for a KQL filter condition
+func explainKQLFilter(sb *strings.Builder, filter *kqlFilter, indent string, depth int) {
+	// Map KQL operators to ClickHouse function names
+	fnName := "equals"
+	switch filter.operator {
+	case "==":
+		fnName = "equals"
+	case "!=":
+		fnName = "notEquals"
+	case ">":
+		fnName = "greater"
+	case "<":
+		fnName = "less"
+	case ">=":
+		fnName = "greaterOrEquals"
+	case "<=":
+		fnName = "lessOrEquals"
+	}
+
+	fmt.Fprintf(sb, "%sFunction %s (children %d)\n", indent, fnName, 1)
+	fmt.Fprintf(sb, "%s ExpressionList (children %d)\n", indent, 2)
+	fmt.Fprintf(sb, "%s  Identifier %s\n", indent, filter.left)
+
+	// Output the right side - could be a string literal or identifier
+	rightVal := filter.right
+	if (strings.HasPrefix(rightVal, "'") && strings.HasSuffix(rightVal, "'")) ||
+		(strings.HasPrefix(rightVal, "\"") && strings.HasSuffix(rightVal, "\"")) {
+		// String literal - remove quotes and escape for output
+		rightVal = rightVal[1 : len(rightVal)-1]
+		fmt.Fprintf(sb, "%s  Literal \\'%s\\'\n", indent, rightVal)
+	} else {
+		// Identifier
+		fmt.Fprintf(sb, "%s  Identifier %s\n", indent, rightVal)
+	}
+}

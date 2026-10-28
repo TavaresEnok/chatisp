@@ -1,0 +1,104 @@
+package trace
+
+import (
+	"context"
+)
+
+type (
+	// Scripting specified trace of scripting client activity.
+	// gtrace:gen
+	// gtrace:out internal/scripting/gtrace
+	// Internals: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#internals
+	Scripting struct {
+		// Internals: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#internals
+		OnExecute func(ScriptingExecuteStartInfo) func(ScriptingExecuteDoneInfo)
+		// Internals: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#internals
+		OnStreamExecute func(
+			ScriptingStreamExecuteStartInfo,
+		) func(
+			ScriptingStreamExecuteIntermediateInfo,
+		) func(
+			ScriptingStreamExecuteDoneInfo,
+		)
+		// Internals: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#internals
+		OnExplain func(ScriptingExplainStartInfo) func(ScriptingExplainDoneInfo)
+		// Internals: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#internals
+		OnClose func(ScriptingCloseStartInfo) func(ScriptingCloseDoneInfo)
+	}
+	// ScriptingQueryParameters contains query parameters metadata for trace hooks.
+	ScriptingQueryParameters interface {
+		String() string
+	}
+	// ScriptingResultErr contains result error metadata for trace hooks.
+	ScriptingResultErr interface {
+		Err() error
+	}
+	// ScriptingResult contains result metadata for trace hooks.
+	ScriptingResult interface {
+		ScriptingResultErr
+		ResultSetCount() int
+	}
+	// Internals: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#internals
+	ScriptingExecuteStartInfo struct {
+		// Context make available context in trace callback function.
+		// Pointer to context provide replacement of context in trace callback function.
+		// Warning: concurrent access to pointer on client side must be excluded.
+		// Safe replacement of context are provided only inside callback function
+		Context    *context.Context
+		Call       Call
+		Query      string
+		Parameters ScriptingQueryParameters
+	}
+	// Internals: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#internals
+	ScriptingExecuteDoneInfo struct {
+		Result ScriptingResult
+		Error  error
+	}
+	// Internals: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#internals
+	ScriptingStreamExecuteStartInfo struct {
+		// Context make available context in trace callback function.
+		// Pointer to context provide replacement of context in trace callback function.
+		// Warning: concurrent access to pointer on client side must be excluded.
+		// Safe replacement of context are provided only inside callback function
+		Context    *context.Context
+		Call       Call
+		Query      string
+		Parameters ScriptingQueryParameters
+	}
+	// Internals: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#internals
+	ScriptingStreamExecuteIntermediateInfo struct {
+		Error error
+	}
+	// Internals: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#internals
+	ScriptingStreamExecuteDoneInfo struct {
+		Error error
+	}
+	// Internals: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#internals
+	ScriptingExplainStartInfo struct {
+		// Context make available context in trace callback function.
+		// Pointer to context provide replacement of context in trace callback function.
+		// Warning: concurrent access to pointer on client side must be excluded.
+		// Safe replacement of context are provided only inside callback function
+		Context *context.Context
+		Call    Call
+		Query   string
+	}
+	// Internals: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#internals
+	ScriptingExplainDoneInfo struct {
+		Plan  string
+		Error error
+	}
+	// Internals: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#internals
+	ScriptingCloseStartInfo struct {
+		// Context make available context in trace callback function.
+		// Pointer to context provide replacement of context in trace callback function.
+		// Warning: concurrent access to pointer on client side must be excluded.
+		// Safe replacement of context are provided only inside callback function
+		Context *context.Context
+		Call    Call
+	}
+	// Internals: https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md#internals
+	ScriptingCloseDoneInfo struct {
+		Error error
+	}
+)

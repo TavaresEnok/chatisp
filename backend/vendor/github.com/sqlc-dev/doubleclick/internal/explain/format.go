@@ -1,0 +1,753 @@
+package explain
+
+import (
+	"fmt"
+	"math"
+	"strconv"
+	"strings"
+
+	"github.com/sqlc-dev/doubleclick/ast"
+)
+
+// FormatFloat formats a float value for EXPLAIN AST output
+func FormatFloat(val float64) string {
+	// Handle special float values - ClickHouse uses lowercase
+	if math.IsInf(val, 1) {
+		return "inf"
+	}
+	if math.IsInf(val, -1) {
+		return "-inf"
+	}
+	if math.IsNaN(val) {
+		return "nan"
+	}
+	// Use scientific notation for very small numbers (< 1e-6) or very large numbers (>= 1e21)
+	// This matches ClickHouse's behavior
+	absVal := math.Abs(val)
+	if (absVal > 0 && absVal < 1e-6) || absVal >= 1e21 {
+		s := strconv.FormatFloat(val, 'e', -1, 64)
+		// Remove leading zeros from exponent (e-07 -> e-7, e+07 -> e+7)
+		s = strings.Replace(s, "e-0", "e-", 1)
+		s = strings.Replace(s, "e+0", "e+", 1)
+		// Remove the + from positive exponents (e+21 -> e21)
+		s = strings.Replace(s, "e+", "e", 1)
+		return s
+	}
+	// Use decimal notation for normal-sized numbers
+	return strconv.FormatFloat(val, 'f', -1, 64)
+}
+
+// EscapeIdentifier escapes single quotes in identifiers for EXPLAIN AST output
+// ClickHouse escapes ' as \' in identifier names
+func EscapeIdentifier(s string) string {
+	return strings.ReplaceAll(s, "'", "\\'")
+}
+
+// escapeStringLiteral escapes special characters in a string for EXPLAIN AST output
+// Uses double-escaping as ClickHouse EXPLAIN AST displays strings
+// Iterates over bytes to preserve raw bytes (including invalid UTF-8)
+func escapeStringLiteral(s string) string {
+	var sb strings.Builder
+	for i := 0; i < len(s); i++ {
+		b := s[i]
+		switch b {
+		case '\\':
+			sb.WriteString("\\\\\\\\") // backslash becomes four backslashes (\\\\)
+		case '\'':
+			sb.WriteString("\\\\\\'") // single quote becomes \\\' (three backslashes + quote)
+		case '\n':
+			sb.WriteString("\\\\n") // newline becomes \\n
+		case '\t':
+			sb.WriteString("\\\\t") // tab becomes \\t
+		case '\r':
+			sb.WriteString("\\\\r") // carriage return becomes \\r
+		case '\x00':
+			sb.WriteString("\\\\0") // null becomes \\0
+		case '\b':
+			sb.WriteString("\\\\b") // backspace becomes \\b
+		case '\f':
+			sb.WriteString("\\\\f") // form feed becomes \\f
+		default:
+			sb.WriteByte(b)
+		}
+	}
+	return sb.String()
+}
+
+// escapeStringForTypeParam escapes special characters for use in type parameters
+// Uses extra escaping because type strings are embedded inside another string literal
+func escapeStringForTypeParam(s string) string {
+	var sb strings.Builder
+	for i := 0; i < len(s); i++ {
+		b := s[i]
+		switch b {
+		case '\\':
+			sb.WriteString("\\\\\\\\\\\\\\\\") // backslash becomes 8 backslashes
+		case '\'':
+			sb.WriteString("\\\\\\\\\\'") // single quote becomes 5 backslashes + quote
+		case '\n':
+			sb.WriteString("\\\\\\\\n") // newline becomes \\\\n
+		case '\t':
+			sb.WriteString("\\\\\\\\t") // tab becomes \\\\t
+		case '\r':
+			sb.WriteString("\\\\\\\\r") // carriage return becomes \\\\r
+		case '\x00':
+			sb.WriteString("\\\\\\\\0") // null becomes \\\\0
+		case '\b':
+			sb.WriteString("\\\\\\\\b") // backspace becomes \\\\b
+		case '\f':
+			sb.WriteString("\\\\\\\\f") // form feed becomes \\\\f
+		default:
+			sb.WriteByte(b)
+		}
+	}
+	return sb.String()
+}
+
+// FormatLiteral formats a literal value for EXPLAIN AST output
+func FormatLiteral(lit *ast.Literal) string {
+	switch lit.Type {
+	case ast.LiteralInteger:
+		// Handle both int64 and uint64 values
+		switch val := lit.Value.(type) {
+		case int64:
+			if val >= 0 {
+				return fmt.Sprintf("UInt64_%d", val)
+			}
+			return fmt.Sprintf("Int64_%d", val)
+		case uint64:
+			return fmt.Sprintf("UInt64_%d", val)
+		default:
+			return fmt.Sprintf("UInt64_%v", lit.Value)
+		}
+	case ast.LiteralFloat:
+		val := lit.Value.(float64)
+		return fmt.Sprintf("Float64_%s", FormatFloat(val))
+	case ast.LiteralString:
+		s := lit.Value.(string)
+		// Escape special characters for display
+		s = escapeStringLiteral(s)
+		return fmt.Sprintf("\\'%s\\'", s)
+	case ast.LiteralBoolean:
+		if lit.Value.(bool) {
+			return "Bool_1"
+		}
+		return "Bool_0"
+	case ast.LiteralNull:
+		return "NULL"
+	case ast.LiteralArray:
+		return formatArrayLiteral(lit.Value)
+	case ast.LiteralTuple:
+		return formatTupleLiteral(lit.Value)
+	default:
+		return fmt.Sprintf("%v", lit.Value)
+	}
+}
+
+// formatNegativeLiteral formats a numeric literal with a negative sign prepended
+func formatNegativeLiteral(lit *ast.Literal) string {
+	switch lit.Type {
+	case ast.LiteralInteger:
+		switch val := lit.Value.(type) {
+		case int64:
+			return fmt.Sprintf("Int64_-%d", val)
+		case uint64:
+			return fmt.Sprintf("Int64_-%d", val)
+		default:
+			return fmt.Sprintf("Int64_-%v", lit.Value)
+		}
+	case ast.LiteralFloat:
+		val := lit.Value.(float64)
+		return fmt.Sprintf("Float64_-%s", FormatFloat(val))
+	default:
+		return fmt.Sprintf("-%v", lit.Value)
+	}
+}
+
+// formatArrayLiteral formats an array literal for EXPLAIN AST output
+func formatArrayLiteral(val interface{}) string {
+	exprs, ok := val.([]ast.Expression)
+	if !ok {
+		return "Array_[]"
+	}
+	var parts []string
+	for _, e := range exprs {
+		if lit, ok := e.(*ast.Literal); ok {
+			parts = append(parts, FormatLiteral(lit))
+		} else if unary, ok := e.(*ast.UnaryExpr); ok && unary.Op == "-" {
+			// Handle negation of numeric literals
+			if lit, ok := unary.Operand.(*ast.Literal); ok {
+				if lit.Type == ast.LiteralInteger {
+					switch val := lit.Value.(type) {
+					case int64:
+						negVal := -val
+						// ClickHouse normalizes -0 to UInt64_0
+						if negVal == 0 {
+							parts = append(parts, "UInt64_0")
+						} else if negVal > 0 {
+							parts = append(parts, fmt.Sprintf("UInt64_%d", negVal))
+						} else {
+							parts = append(parts, fmt.Sprintf("Int64_%d", negVal))
+						}
+					case uint64:
+						// ClickHouse normalizes -0 to UInt64_0
+						if val == 0 {
+							parts = append(parts, "UInt64_0")
+						} else {
+							parts = append(parts, fmt.Sprintf("Int64_-%d", val))
+						}
+					default:
+						parts = append(parts, fmt.Sprintf("Int64_-%v", lit.Value))
+					}
+				} else if lit.Type == ast.LiteralFloat {
+					val := lit.Value.(float64)
+					parts = append(parts, fmt.Sprintf("Float64_%s", FormatFloat(-val)))
+				} else {
+					parts = append(parts, formatExprAsString(e))
+				}
+			} else {
+				parts = append(parts, formatExprAsString(e))
+			}
+		} else if ident, ok := e.(*ast.Identifier); ok {
+			parts = append(parts, ident.Name())
+		} else {
+			parts = append(parts, formatExprAsString(e))
+		}
+	}
+	return fmt.Sprintf("Array_[%s]", strings.Join(parts, ", "))
+}
+
+// formatNumericExpr formats a numeric expression (literal or unary minus of literal)
+func formatNumericExpr(e ast.Expression) (string, bool) {
+	if lit, ok := e.(*ast.Literal); ok {
+		if lit.Type == ast.LiteralInteger || lit.Type == ast.LiteralFloat {
+			return FormatLiteral(lit), true
+		}
+	}
+	if unary, ok := e.(*ast.UnaryExpr); ok && unary.Op == "-" {
+		if lit, ok := unary.Operand.(*ast.Literal); ok {
+			switch val := lit.Value.(type) {
+			case int64:
+				negVal := -val
+				// ClickHouse normalizes -0 to UInt64_0
+				if negVal == 0 {
+					return "UInt64_0", true
+				} else if negVal > 0 {
+					return fmt.Sprintf("UInt64_%d", negVal), true
+				}
+				return fmt.Sprintf("Int64_%d", negVal), true
+			case uint64:
+				// ClickHouse normalizes -0 to UInt64_0
+				if val == 0 {
+					return "UInt64_0", true
+				}
+				return fmt.Sprintf("Int64_%d", -int64(val)), true
+			case float64:
+				return fmt.Sprintf("Float64_%s", FormatFloat(-val)), true
+			}
+		}
+	}
+	return "", false
+}
+
+// formatTupleLiteral formats a tuple literal for EXPLAIN AST output
+func formatTupleLiteral(val interface{}) string {
+	exprs, ok := val.([]ast.Expression)
+	if !ok {
+		return "Tuple_()"
+	}
+	var parts []string
+	for _, e := range exprs {
+		if formatted, ok := formatNumericExpr(e); ok {
+			parts = append(parts, formatted)
+		} else if lit, ok := e.(*ast.Literal); ok {
+			parts = append(parts, FormatLiteral(lit))
+		} else if ident, ok := e.(*ast.Identifier); ok {
+			parts = append(parts, ident.Name())
+		} else {
+			parts = append(parts, formatExprAsString(e))
+		}
+	}
+	return fmt.Sprintf("Tuple_(%s)", strings.Join(parts, ", "))
+}
+
+// formatInListAsTuple formats an IN expression's value list as a tuple literal
+func formatInListAsTuple(list []ast.Expression) string {
+	var parts []string
+	for _, e := range list {
+		if formatted, ok := formatNumericExpr(e); ok {
+			parts = append(parts, formatted)
+		} else if lit, ok := e.(*ast.Literal); ok {
+			parts = append(parts, FormatLiteral(lit))
+		} else if ident, ok := e.(*ast.Identifier); ok {
+			parts = append(parts, ident.Name())
+		} else {
+			parts = append(parts, formatExprAsString(e))
+		}
+	}
+	return fmt.Sprintf("Tuple_(%s)", strings.Join(parts, ", "))
+}
+
+// needsBacktickQuoting checks if an identifier contains characters that require backtick quoting
+func needsBacktickQuoting(name string) bool {
+	if name == "" {
+		return false
+	}
+	// Check each character - backticks needed if name contains non-alphanumeric/underscore chars
+	for _, c := range name {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+			return true
+		}
+	}
+	return false
+}
+
+// FormatDataType formats a DataType for EXPLAIN AST output
+func FormatDataType(dt *ast.DataType) string {
+	if dt == nil {
+		return ""
+	}
+	if len(dt.Parameters) == 0 {
+		return dt.Name
+	}
+	var params []string
+	for _, p := range dt.Parameters {
+		// Unwrap ObjectTypeArgument if present (used for JSON/OBJECT types)
+		if ota, ok := p.(*ast.ObjectTypeArgument); ok {
+			p = ota.Expr
+		}
+		if lit, ok := p.(*ast.Literal); ok {
+			if lit.Type == ast.LiteralString {
+				// String parameters in type need extra escaping: 'val' -> \\\'val\\\'
+				params = append(params, fmt.Sprintf("\\\\\\'%s\\\\\\'", lit.Value))
+			} else {
+				params = append(params, fmt.Sprintf("%v", lit.Value))
+			}
+		} else if nested, ok := p.(*ast.DataType); ok {
+			params = append(params, FormatDataType(nested))
+		} else if ntp, ok := p.(*ast.NameTypePair); ok {
+			// Named tuple field: "name Type"
+			// Wrap name in backticks if it contains special characters
+			name := ntp.Name
+			if needsBacktickQuoting(name) {
+				name = "`" + name + "`"
+			}
+			params = append(params, name+" "+FormatDataType(ntp.Type))
+		} else if binExpr, ok := p.(*ast.BinaryExpr); ok {
+			// Binary expression (e.g., 'hello' = 1 for Enum types)
+			params = append(params, formatBinaryExprForType(binExpr))
+		} else if fn, ok := p.(*ast.FunctionCall); ok {
+			// Function call (e.g., SKIP for JSON types, or function args in AggregateFunction)
+			if fn.Name == "SKIP" && len(fn.Arguments) > 0 {
+				if ident, ok := fn.Arguments[0].(*ast.Identifier); ok {
+					params = append(params, "SKIP "+ident.Name())
+				}
+			} else if fn.Name == "SKIP REGEXP" && len(fn.Arguments) > 0 {
+				if lit, ok := fn.Arguments[0].(*ast.Literal); ok {
+					params = append(params, fmt.Sprintf("SKIP REGEXP \\\\\\'%s\\\\\\'", lit.Value))
+				}
+			} else {
+				// General function call (e.g., sumMapFiltered([1, 2]) in AggregateFunction)
+				params = append(params, formatFunctionCallForType(fn))
+			}
+		} else if ident, ok := p.(*ast.Identifier); ok {
+			// Identifier (e.g., function name in AggregateFunction types)
+			params = append(params, ident.Name())
+		} else if unary, ok := p.(*ast.UnaryExpr); ok {
+			// Unary expression (e.g., -1 for negative numbers)
+			if lit, ok := unary.Operand.(*ast.Literal); ok {
+				params = append(params, fmt.Sprintf("%s%v", unary.Op, lit.Value))
+			} else {
+				params = append(params, fmt.Sprintf("%v", p))
+			}
+		} else {
+			params = append(params, fmt.Sprintf("%v", p))
+		}
+	}
+	return fmt.Sprintf("%s(%s)", dt.Name, strings.Join(params, ", "))
+}
+
+// formatBinaryExprForType formats a binary expression for use in type parameters
+func formatBinaryExprForType(expr *ast.BinaryExpr) string {
+	var left, right string
+
+	// Format left side
+	if lit, ok := expr.Left.(*ast.Literal); ok {
+		if lit.Type == ast.LiteralString {
+			// Use extra escaping for type parameters since they're embedded in another string literal
+			escaped := escapeStringForTypeParam(fmt.Sprintf("%v", lit.Value))
+			left = fmt.Sprintf("\\\\\\'%s\\\\\\'", escaped)
+		} else {
+			left = fmt.Sprintf("%v", lit.Value)
+		}
+	} else if ident, ok := expr.Left.(*ast.Identifier); ok {
+		left = ident.Name()
+	} else {
+		left = fmt.Sprintf("%v", expr.Left)
+	}
+
+	// Format right side
+	if lit, ok := expr.Right.(*ast.Literal); ok {
+		right = fmt.Sprintf("%v", lit.Value)
+	} else if ident, ok := expr.Right.(*ast.Identifier); ok {
+		right = ident.Name()
+	} else if unary, ok := expr.Right.(*ast.UnaryExpr); ok {
+		// Handle unary expressions like -100
+		right = formatUnaryExprForType(unary)
+	} else {
+		right = fmt.Sprintf("%v", expr.Right)
+	}
+
+	return left + " " + expr.Op + " " + right
+}
+
+// formatUnaryExprForType formats a unary expression for use in type parameters (e.g., -100)
+func formatUnaryExprForType(expr *ast.UnaryExpr) string {
+	if lit, ok := expr.Operand.(*ast.Literal); ok {
+		return expr.Op + fmt.Sprintf("%v", lit.Value)
+	}
+	return expr.Op + fmt.Sprintf("%v", expr.Operand)
+}
+
+// formatFunctionCallForType formats a function call for use in type parameters
+// e.g., sumMapFiltered([1, 2]) -> "sumMapFiltered([1, 2])"
+func formatFunctionCallForType(fn *ast.FunctionCall) string {
+	args := make([]string, 0, len(fn.Arguments))
+	for _, arg := range fn.Arguments {
+		args = append(args, formatExprForType(arg))
+	}
+	return fn.Name + "(" + strings.Join(args, ", ") + ")"
+}
+
+// formatExprForType formats an expression for use in type parameters
+func formatExprForType(expr ast.Expression) string {
+	switch e := expr.(type) {
+	case *ast.Literal:
+		if e.Type == ast.LiteralArray {
+			// Format array literal: [1, 2] -> "[1, 2]"
+			if elements, ok := e.Value.([]ast.Expression); ok {
+				parts := make([]string, 0, len(elements))
+				for _, elem := range elements {
+					parts = append(parts, formatExprForType(elem))
+				}
+				return "[" + strings.Join(parts, ", ") + "]"
+			}
+		}
+		return fmt.Sprintf("%v", e.Value)
+	case *ast.Identifier:
+		return e.Name()
+	case *ast.FunctionCall:
+		return formatFunctionCallForType(e)
+	case *ast.DataType:
+		return FormatDataType(e)
+	default:
+		return fmt.Sprintf("%v", expr)
+	}
+}
+
+// NormalizeFunctionName normalizes function names to match ClickHouse's EXPLAIN AST output
+func NormalizeFunctionName(name string) string {
+	// ClickHouse normalizes certain function names in EXPLAIN AST
+	// Most functions preserve their original case from the SQL source.
+	// Only a few are normalized to specific canonical forms.
+	normalized := map[string]string{
+		// TRIM functions are normalized to trimBoth/trimLeft/trimRight
+		"trim":  "trimBoth",
+		"ltrim": "trimLeft",
+		"rtrim": "trimRight",
+		// Position is normalized to lowercase
+		"position": "position",
+		// SUBSTRING is normalized to lowercase (but SUBSTR preserves case)
+		"substring": "substring",
+		// DateDiff variants are normalized to camelCase
+		"date_diff": "dateDiff",
+		"datediff":  "dateDiff",
+		// SQL standard ANY/ALL subquery operators - simple cases
+		"anyequals":    "in",
+		"allnotequals": "notIn",
+	}
+	if n, ok := normalized[strings.ToLower(name)]; ok {
+		return n
+	}
+	return name
+}
+
+// OperatorToFunction maps binary operators to ClickHouse function names
+func OperatorToFunction(op string) string {
+	switch op {
+	case "+":
+		return "plus"
+	case "-":
+		return "minus"
+	case "*":
+		return "multiply"
+	case "/":
+		return "divide"
+	case "DIV":
+		return "intDiv"
+	case "%", "MOD":
+		return "modulo"
+	case "=", "==":
+		return "equals"
+	case "!=", "<>":
+		return "notEquals"
+	case "<":
+		return "less"
+	case ">":
+		return "greater"
+	case "<=":
+		return "lessOrEquals"
+	case ">=":
+		return "greaterOrEquals"
+	case "<=>":
+		return "isNotDistinctFrom"
+	case "AND":
+		return "and"
+	case "OR":
+		return "or"
+	case "||":
+		return "concat"
+	default:
+		return strings.ToLower(op)
+	}
+}
+
+// UnaryOperatorToFunction maps unary operators to ClickHouse function names
+func UnaryOperatorToFunction(op string) string {
+	switch op {
+	case "-":
+		return "negate"
+	case "NOT":
+		return "not"
+	default:
+		return strings.ToLower(op)
+	}
+}
+
+// formatExprAsString formats an expression as a string literal for :: cast syntax
+func formatExprAsString(expr ast.Expression) string {
+	switch e := expr.(type) {
+	case *ast.Literal:
+		// Handle explicitly negative literals (like -0 in -0::Int16)
+		switch e.Type {
+		case ast.LiteralInteger:
+			// For explicitly negative literals, we need to format with the negative sign
+			if e.Negative {
+				switch v := e.Value.(type) {
+				case int64:
+					// If the value is already negative (including INT64_MIN), just print it directly
+					// This avoids overflow when trying to negate INT64_MIN
+					if v < 0 {
+						return fmt.Sprintf("%d", v)
+					}
+					// Value is positive or zero, add the negative sign
+					return fmt.Sprintf("-%d", v)
+				case uint64:
+					return fmt.Sprintf("-%d", v)
+				}
+			}
+			return fmt.Sprintf("%d", e.Value)
+		case ast.LiteralFloat:
+			// Use Source field if available to preserve original representation (e.g., "0.0")
+			if e.Source != "" {
+				return e.Source
+			}
+			if e.Negative {
+				switch v := e.Value.(type) {
+				case float64:
+					// If the value is already negative, just print it directly
+					if v < 0 {
+						return fmt.Sprintf("%v", v)
+					}
+					// Value is positive or zero, add the negative sign
+					return fmt.Sprintf("-%v", v)
+				}
+			}
+			return fmt.Sprintf("%v", e.Value)
+		case ast.LiteralString:
+			return e.Value.(string)
+		case ast.LiteralBoolean:
+			if e.Value.(bool) {
+				return "true"
+			}
+			return "false"
+		case ast.LiteralNull:
+			return "NULL"
+		case ast.LiteralArray:
+			return formatArrayAsStringFromLiteral(e)
+		case ast.LiteralTuple:
+			return formatTupleAsStringFromLiteral(e)
+		default:
+			return fmt.Sprintf("%v", e.Value)
+		}
+	case *ast.Identifier:
+		return e.Name()
+	case *ast.FunctionCall:
+		// Format function call as name(args)
+		var args []string
+		for _, arg := range e.Arguments {
+			args = append(args, formatExprAsString(arg))
+		}
+		return e.Name + "(" + strings.Join(args, ", ") + ")"
+	case *ast.BinaryExpr:
+		// Format binary expression as left op right
+		left := formatExprAsString(e.Left)
+		right := formatExprAsString(e.Right)
+		return left + " " + e.Op + " " + right
+	case *ast.UnaryExpr:
+		// Format unary expression (prefix operators)
+		operand := formatExprAsString(e.Operand)
+		return e.Op + operand
+	case *ast.InExpr:
+		// Format IN expression as expr IN (...)
+		exprStr := formatExprAsString(e.Expr)
+		var listStr string
+		if e.Query != nil {
+			listStr = "(SELECT ...)" // Simplified for nested queries
+		} else if len(e.List) > 0 {
+			var parts []string
+			for _, item := range e.List {
+				parts = append(parts, formatExprAsString(item))
+			}
+			listStr = "(" + strings.Join(parts, ", ") + ")"
+		}
+		keyword := "IN"
+		if e.Not {
+			keyword = "NOT IN"
+		}
+		if e.Global {
+			keyword = "GLOBAL " + keyword
+		}
+		return exprStr + " " + keyword + " " + listStr
+	default:
+		return fmt.Sprintf("%v", expr)
+	}
+}
+
+// formatArrayAsStringFromLiteral formats an array literal as a string for :: cast syntax
+// It preserves original spacing from the source
+func formatArrayAsStringFromLiteral(lit *ast.Literal) string {
+	exprs, ok := lit.Value.([]ast.Expression)
+	if !ok {
+		return "[]"
+	}
+	var parts []string
+	for _, e := range exprs {
+		parts = append(parts, formatElementAsString(e))
+	}
+	separator := ","
+	if lit.SpacedCommas {
+		separator = ", "
+	}
+	// Use outer spaces when source had whitespace after [ (e.g., for multi-line arrays)
+	if lit.SpacedBrackets {
+		return "[ " + strings.Join(parts, separator) + " ]"
+	}
+	return "[" + strings.Join(parts, separator) + "]"
+}
+
+// formatArrayAsString formats an array literal as a string for :: cast syntax
+func formatArrayAsString(val interface{}) string {
+	exprs, ok := val.([]ast.Expression)
+	if !ok {
+		return "[]"
+	}
+	var parts []string
+	for _, e := range exprs {
+		parts = append(parts, formatElementAsString(e))
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+// formatTupleAsStringFromLiteral formats a tuple literal as a string for :: cast syntax
+// respecting the SpacedCommas flag to preserve original formatting
+func formatTupleAsStringFromLiteral(lit *ast.Literal) string {
+	exprs, ok := lit.Value.([]ast.Expression)
+	if !ok {
+		return "()"
+	}
+	var parts []string
+	for _, e := range exprs {
+		parts = append(parts, formatElementAsString(e))
+	}
+	separator := ","
+	if lit.SpacedCommas {
+		separator = ", "
+	}
+	return "(" + strings.Join(parts, separator) + ")"
+}
+
+// formatTupleAsString formats a tuple literal as a string for :: cast syntax
+func formatTupleAsString(val interface{}) string {
+	exprs, ok := val.([]ast.Expression)
+	if !ok {
+		return "()"
+	}
+	var parts []string
+	for _, e := range exprs {
+		parts = append(parts, formatElementAsString(e))
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
+}
+
+// formatElementAsString formats a single element for array/tuple string representation
+func formatElementAsString(expr ast.Expression) string {
+	switch e := expr.(type) {
+	case *ast.Literal:
+		switch e.Type {
+		case ast.LiteralInteger:
+			return fmt.Sprintf("%d", e.Value)
+		case ast.LiteralFloat:
+			// Use Source if available (preserves original text for large numbers)
+			if e.Source != "" {
+				return e.Source
+			}
+			return fmt.Sprintf("%v", e.Value)
+		case ast.LiteralString:
+			s := e.Value.(string)
+			// Check if this is a big integer stored as string (too large for int64/uint64)
+			// These should NOT be quoted when formatted in arrays
+			if e.IsBigInt {
+				return s
+			}
+			// Quote strings with single quotes, triple-escape for nested context
+			// Expected output format is \\\' (three backslashes + quote)
+			// Triple-escape single quotes for nested string literal context
+			s = strings.ReplaceAll(s, "'", "\\\\\\'")
+			return "\\\\\\'" + s + "\\\\\\'"
+		case ast.LiteralBoolean:
+			if e.Value.(bool) {
+				return "true"
+			}
+			return "false"
+		case ast.LiteralNull:
+			return "NULL"
+		case ast.LiteralArray:
+			return formatArrayAsStringFromLiteral(e)
+		case ast.LiteralTuple:
+			return formatTupleAsStringFromLiteral(e)
+		default:
+			return fmt.Sprintf("%v", e.Value)
+		}
+	case *ast.Identifier:
+		return e.Name()
+	case *ast.FunctionCall:
+		// Format function call as name(args)
+		var args []string
+		for _, arg := range e.Arguments {
+			args = append(args, formatElementAsString(arg))
+		}
+		return e.Name + "(" + strings.Join(args, ", ") + ")"
+	case *ast.BinaryExpr:
+		// Format binary expression as left op right
+		left := formatElementAsString(e.Left)
+		right := formatElementAsString(e.Right)
+		return left + " " + e.Op + " " + right
+	case *ast.UnaryExpr:
+		// Format unary expression (prefix operators)
+		operand := formatElementAsString(e.Operand)
+		return e.Op + operand
+	default:
+		return formatExprAsString(expr)
+	}
+}

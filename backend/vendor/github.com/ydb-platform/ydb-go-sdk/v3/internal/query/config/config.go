@@ -1,0 +1,127 @@
+package config
+
+import (
+	"time"
+
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/config"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/pool"
+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/query/arrow"
+	"github.com/ydb-platform/ydb-go-sdk/v3/trace"
+)
+
+const (
+	DefaultSessionDeleteTimeout = 500 * time.Millisecond
+	DefaultSessionCreateTimeout = 500 * time.Millisecond
+	DefaultPoolMaxSize          = pool.DefaultLimit
+)
+
+type Config struct {
+	config.Common
+
+	poolLimit             int
+	poolName              string
+	poolSessionUsageLimit uint64
+	poolSessionUsageTTL   time.Duration
+
+	sessionCreateTimeout   time.Duration
+	sessionDeleteTimeout   time.Duration
+	sessionIddleTimeToLive time.Duration
+	poolWarmUpSize         int
+
+	allowImplicitSessions bool
+
+	lazyTx              bool
+	defaultIdempotent   bool
+	defaultArrowDecoder arrow.Decoder
+
+	trace *trace.Query
+}
+
+func (c *Config) DefaultArrowDecoder() arrow.Decoder {
+	return c.defaultArrowDecoder
+}
+
+func New(opts ...Option) *Config {
+	c := defaults()
+	for _, opt := range opts {
+		if opt != nil {
+			opt(c)
+		}
+	}
+
+	return c
+}
+
+func defaults() *Config {
+	return &Config{
+		poolLimit:            DefaultPoolMaxSize,
+		poolWarmUpSize:       0,
+		sessionCreateTimeout: DefaultSessionCreateTimeout,
+		sessionDeleteTimeout: DefaultSessionDeleteTimeout,
+		trace:                &trace.Query{},
+	}
+}
+
+// Trace defines trace over table client calls
+func (c *Config) Trace() *trace.Query {
+	return c.trace
+}
+
+// PoolLimit is an upper bound of pooled sessions.
+// If PoolLimit is less than or equal to zero then the
+// DefaultPoolMaxSize variable is used as a pool limit.
+func (c *Config) PoolLimit() int {
+	return c.poolLimit
+}
+
+func (c *Config) PoolName() string {
+	return c.poolName
+}
+
+func (c *Config) AllowImplicitSessions() bool {
+	return c.allowImplicitSessions
+}
+
+func (c *Config) PoolSessionUsageLimit() uint64 {
+	return c.poolSessionUsageLimit
+}
+
+func (c *Config) PoolSessionUsageTTL() time.Duration {
+	return c.poolSessionUsageTTL
+}
+
+// SessionCreateTimeout limits maximum time spent on Create session request
+func (c *Config) SessionCreateTimeout() time.Duration {
+	return c.sessionCreateTimeout
+}
+
+// SessionDeleteTimeout limits maximum time spent on Delete request
+//
+// If SessionDeleteTimeout is less than or equal to zero then the DefaultSessionDeleteTimeout is used.
+func (c *Config) SessionDeleteTimeout() time.Duration {
+	return c.sessionDeleteTimeout
+}
+
+// SessionIdleTimeToLive limits maximum time to live of idle session
+// If idleTimeToLive is less than or equal to zero then sessions will not be closed by idle
+func (c *Config) SessionIdleTimeToLive() time.Duration {
+	return c.sessionIddleTimeToLive
+}
+
+func (c *Config) LazyTx() bool {
+	return c.lazyTx
+}
+
+func (c *Config) DefaultIdempotent() bool {
+	return c.defaultIdempotent
+}
+
+// PoolWarmUpSize is the number of sessions to pre-create in the explicit session pool at client initialization.
+// If PoolWarmUpSize is less than or equal to zero, pool warm-up is disabled.
+func (c *Config) PoolWarmUpSize() int {
+	if c.poolWarmUpSize <= 0 {
+		return 0
+	}
+
+	return c.poolWarmUpSize
+}

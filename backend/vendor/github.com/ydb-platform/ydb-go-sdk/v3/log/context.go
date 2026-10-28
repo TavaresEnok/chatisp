@@ -1,0 +1,81 @@
+package log
+
+import (
+	"context"
+	"slices"
+)
+
+type (
+	ctxLevelKey  struct{}
+	ctxNamesKey  struct{}
+	ctxFieldsKey struct{}
+)
+
+func WithLevel(ctx context.Context, lvl Level) context.Context {
+	return context.WithValue(ctx, ctxLevelKey{}, lvl)
+}
+
+func LevelFromContext(ctx context.Context) Level {
+	v, _ := ctx.Value(ctxLevelKey{}).(Level)
+
+	return v
+}
+
+func WithNames(ctx context.Context, names ...string) context.Context {
+	// trim capacity for force allocate new memory while append and prevent data race
+	oldNames := NamesFromContext(ctx)
+	oldNames = slices.Clip(oldNames)
+
+	return context.WithValue(ctx, ctxNamesKey{}, append(oldNames, names...))
+}
+
+func NamesFromContext(ctx context.Context) []string {
+	v, _ := ctx.Value(ctxNamesKey{}).([]string)
+	if v == nil {
+		return []string{}
+	}
+
+	return slices.Clip(v) // prevent re
+}
+
+func WithFields(ctx context.Context, fields ...Field) context.Context {
+	return context.WithValue(ctx, ctxFieldsKey{}, append(
+		FieldsFromContext(ctx),
+		fields...,
+	))
+}
+
+func FieldsFromContext(ctx context.Context) []Field {
+	if fields, has := ctx.Value(ctxFieldsKey{}).([]Field); has && len(fields) > 0 {
+		return fields
+	}
+
+	return nil
+}
+
+func with(ctx context.Context, lvl Level, names ...string) context.Context {
+	return WithLevel(WithNames(ctx, names...), lvl)
+}
+
+func safeContextPtr(ctx *context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	if isNil(*ctx) {
+		return context.Background()
+	}
+
+	return *ctx
+}
+
+func withContext(ctx context.Context, lvl Level, names ...string) context.Context {
+	if isNil(ctx) {
+		return with(context.Background(), lvl, names...)
+	}
+
+	return with(ctx, lvl, names...)
+}
+
+func withFromPtr(ctx *context.Context, lvl Level, names ...string) context.Context {
+	return with(safeContextPtr(ctx), lvl, names...)
+}
