@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	_ "time/tzdata" // zoneinfo embutido: o contêiner de teste pode não ter tzdata do sistema
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
