@@ -15,6 +15,11 @@ type Account = {
   mfa: "none" | "pending" | "active";
   recoveryCode: string;
   superadmin: boolean;
+  userId: string;
+  membershipId: string;
+  sessionId: string;
+  csrf: string;
+  cookie: string;
 };
 
 type Membership = {
@@ -103,6 +108,24 @@ export class PanelDouble {
       mfa: "none",
       recoveryCode: "rec-123456",
       superadmin: false,
+      userId: "11111111-1111-4111-8111-111111111111",
+      membershipId: "33333333-3333-4333-8333-333333333333",
+      sessionId: "44444444-4444-4444-8444-444444444444",
+      csrf: "csrf-publico",
+      cookie: "sessao-opaca",
+    },
+    {
+      email: "bia@provedor.test",
+      password: "senha-certa",
+      role: "agent",
+      mfa: "none",
+      recoveryCode: "rec-654321",
+      superadmin: false,
+      userId: "77777777-7777-4777-8777-777777777777",
+      membershipId: "88888888-8888-4888-8888-888888888888",
+      sessionId: "99999999-9999-4999-8999-999999999999",
+      csrf: "csrf-bia",
+      cookie: "sessao-bia",
     },
   ];
   memberships: Membership[] = [
@@ -342,14 +365,16 @@ export class PanelDouble {
 
   private issue(res: http.ServerResponse, account: Account, enrollment: boolean) {
     this.revoked = false;
+    this.cookie = account.cookie;
+    this.csrf = account.csrf;
     this.issued = {
-      user_id: "11111111-1111-4111-8111-111111111111",
+      user_id: account.userId,
       email: account.email,
       tenant_id: "22222222-2222-4222-8222-222222222222",
-      membership_id: "33333333-3333-4333-8333-333333333333",
+      membership_id: account.membershipId,
       role: account.role,
-      session_id: "44444444-4444-4444-8444-444444444444",
-      csrf_token: this.csrf,
+      session_id: account.sessionId,
+      csrf_token: account.csrf,
       expires_at: expiresAt,
       mfa_enrollment_required: enrollment,
     };

@@ -44,13 +44,19 @@ export const useSessionStore = create<SessionState>()((set) => ({
   },
   applySession: (principal, csrfToken) => {
     setCsrfToken(csrfToken);
-    set((state) => ({
-      principal,
-      csrfToken: csrfToken.length > 0 ? csrfToken : null,
-      endedReason: null,
-      tenantId: principal.tenantId,
-      displayName: state.tenantId === principal.tenantId ? state.displayName : "",
-    }));
+    set((state) => {
+      const samePrincipal =
+        state.principal !== null &&
+        state.principal.tenantId === principal.tenantId &&
+        state.principal.userId === principal.userId;
+      return {
+        principal,
+        csrfToken: csrfToken.length > 0 ? csrfToken : null,
+        endedReason: null,
+        tenantId: principal.tenantId,
+        displayName: samePrincipal ? state.displayName : "",
+      };
+    });
   },
   completeEnrollment: () => {
     set((state) => ({
