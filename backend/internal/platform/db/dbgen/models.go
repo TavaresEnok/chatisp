@@ -44,11 +44,58 @@ type AuthToken struct {
 	CreatedAt    pgtype.Timestamptz
 }
 
+type ChannelConnector struct {
+	ID            uuid.UUID
+	TenantID      uuid.UUID
+	ConnectorType string
+	RemoteOrigin  string
+	Version       string
+	Status        string
+	Enabled       bool
+	CredentialRef *string
+	Channel       string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
+type Contact struct {
+	ID        uuid.UUID
+	TenantID  uuid.UUID
+	Name      string
+	Phone     *string
+	Email     *string
+	Notes     string
+	Blocked   bool
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+type ContactChannelIdentity struct {
+	ID          uuid.UUID
+	TenantID    uuid.UUID
+	ContactID   uuid.UUID
+	ConnectorID uuid.UUID
+	ExternalID  string
+	Evidence    string
+	CreatedAt   pgtype.Timestamptz
+}
+
 type Conversation struct {
 	ID        uuid.UUID
 	TenantID  uuid.UUID
 	Summary   string
 	CreatedAt pgtype.Timestamptz
+}
+
+type Inbox struct {
+	ID              uuid.UUID
+	TenantID        uuid.UUID
+	ConnectorID     uuid.UUID
+	Name            string
+	PresentedNumber *string
+	Hours           json.RawMessage
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }
 
 type Membership struct {
