@@ -120,6 +120,7 @@ func New(deps Dependencies) *API {
 		return &readyOutput{Body: readyBody{Status: "ready"}}, nil
 	})
 	registerPanel(api, deps)
+	registerPlatform(api, deps)
 
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		Write(w, http.StatusNotFound, "o caminho solicitado não existe")

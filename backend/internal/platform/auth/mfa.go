@@ -35,11 +35,14 @@ type Enrollment struct {
 
 // BeginEnrollment seals a new TOTP secret and returns recovery codes a single time.
 func (s *Service) BeginEnrollment(ctx context.Context, actor Principal) (Enrollment, error) {
-	if s.keys == nil {
-		return Enrollment{}, ErrUnavailable
-	}
 	if actor.UserID == uuid.Nil || actor.TenantID == uuid.Nil {
 		return Enrollment{}, ErrUnauthenticated
+	}
+	if !RoleAllows(actor.Role, ActionMFAEnroll) {
+		return Enrollment{}, ErrForbidden
+	}
+	if s.keys == nil {
+		return Enrollment{}, ErrUnavailable
 	}
 	record, err := s.mfaRecord(ctx, actor.UserID)
 	if err != nil {
@@ -96,6 +99,12 @@ func (s *Service) BeginEnrollment(ctx context.Context, actor Principal) (Enrollm
 
 // ConfirmEnrollment checks the first TOTP code and opens the panel for this session.
 func (s *Service) ConfirmEnrollment(ctx context.Context, actor Principal, code string) error {
+	if actor.UserID == uuid.Nil {
+		return ErrUnauthenticated
+	}
+	if !RoleAllows(actor.Role, ActionMFAEnroll) {
+		return ErrForbidden
+	}
 	if s.keys == nil {
 		return ErrUnavailable
 	}
@@ -158,14 +167,14 @@ func (s *Service) ConfirmEnrollment(ctx context.Context, actor Principal, code s
 // ResetMFA clears another user's factor, or the actor's own, and revokes their sessions.
 // The actor must already have a full panel session. The reset is audited.
 func (s *Service) ResetMFA(ctx context.Context, actor Principal, target uuid.UUID) error {
-	if err := s.requirePanel(actor); err != nil {
+	if err := s.requireOperational(ctx, actor); err != nil {
 		return err
+	}
+	if !RoleAllows(actor.Role, ActionMFAReset) && !actor.IsSuperadmin {
+		return ErrForbidden
 	}
 	if s.keys == nil {
 		return ErrUnavailable
-	}
-	if actor.Role != "admin" && !actor.IsSuperadmin {
-		return ErrForbidden
 	}
 	if target == uuid.Nil {
 		return ErrForbidden

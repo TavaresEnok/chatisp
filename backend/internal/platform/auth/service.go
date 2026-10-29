@@ -365,10 +365,10 @@ func (s *Service) Authenticate(ctx context.Context, rawToken, csrf string, requi
 
 // Invite creates a single-use invitation and sends it. The token is not returned.
 func (s *Service) Invite(ctx context.Context, actor Principal, email, role string) (Invite, error) {
-	if err := s.requirePanel(actor); err != nil {
+	if err := s.requireOperational(ctx, actor); err != nil {
 		return Invite{}, err
 	}
-	if actor.Role != "admin" {
+	if !RoleAllows(actor.Role, ActionInvite) {
 		return Invite{}, ErrForbidden
 	}
 	normalized, err := normalizeEmail(email)
@@ -573,10 +573,10 @@ func (s *Service) ConfirmPasswordReset(ctx context.Context, token, password, ip 
 
 // ListSessions returns live sessions of the actor's tenant. Only an admin may call it.
 func (s *Service) ListSessions(ctx context.Context, actor Principal) ([]SessionInfo, error) {
-	if err := s.requirePanel(actor); err != nil {
+	if err := s.requireOperational(ctx, actor); err != nil {
 		return nil, err
 	}
-	if actor.Role != "admin" {
+	if !RoleAllows(actor.Role, ActionSessionList) {
 		return nil, ErrForbidden
 	}
 	var rows []db.ListedSession
@@ -604,7 +604,7 @@ func (s *Service) ListSessions(ctx context.Context, actor Principal) ([]SessionI
 
 // RevokeSession revokes one session of the actor's tenant.
 func (s *Service) RevokeSession(ctx context.Context, actor Principal, sessionID uuid.UUID) error {
-	if err := s.requirePanel(actor); err != nil {
+	if err := s.requireOperational(ctx, actor); err != nil {
 		return err
 	}
 	if sessionID == uuid.Nil {

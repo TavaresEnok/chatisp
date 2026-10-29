@@ -222,6 +222,16 @@ func (s *Service) ensureUser(ctx context.Context, email string) (db.User, error)
 func (s *Service) ensureInvitedMembership(ctx context.Context, tenantID, userID uuid.UUID, role string) (db.Membership, error) {
 	var membership db.Membership
 	err := s.store.WithTenant(ctx, tenantID, func(ctx context.Context) error {
+		if err := s.store.LockTenant(ctx); err != nil {
+			return err
+		}
+		tenant, err := s.store.GetTenant(ctx)
+		if err != nil {
+			return err
+		}
+		if tenant.Status != "active" {
+			return ErrForbidden
+		}
 		found, err := s.store.FindMembershipByUser(ctx, userID)
 		if err == nil {
 			membership = found
@@ -229,6 +239,11 @@ func (s *Service) ensureInvitedMembership(ctx context.Context, tenantID, userID 
 		}
 		if !errors.Is(err, db.ErrNotFound) {
 			return err
+		}
+		if role == "agent" {
+			if err := s.reserveAgentSeat(ctx, tenant); err != nil {
+				return err
+			}
 		}
 		created, err := s.store.CreateMembership(ctx, db.NewMembership{
 			UserID: userID,
@@ -252,6 +267,12 @@ func (s *Service) ensureInvitedMembership(ctx context.Context, tenantID, userID 
 		})
 	}
 	if err != nil {
+		if errors.Is(err, ErrPlanLimit) || errors.Is(err, ErrInvalidLimits) || errors.Is(err, ErrForbidden) || errors.Is(err, db.ErrInvalidLimits) {
+			if errors.Is(err, db.ErrInvalidLimits) {
+				return db.Membership{}, ErrInvalidLimits
+			}
+			return db.Membership{}, err
+		}
 		s.log.Error("falha ao preparar convite", "component", "auth")
 		return db.Membership{}, ErrUnavailable
 	}
