@@ -22,12 +22,31 @@ Na raiz do repositório:
 ./scripts/dev.sh
 ```
 
-O script instala, se ainda não estiverem no disco, os binários de teste do PostgreSQL 18.4 (`npm ci --prefix backend/tools/pg`), sobe esse servidor só em `127.0.0.1:55432`, aplica as migrações, cria os papéis do banco e um atendente local, e então inicia o processo `chatisp` no modo `all` junto com o Vite.
+O script instala, se ainda não estiverem no disco, os binários de teste do PostgreSQL 18.4 (`npm ci --prefix backend/tools/pg`), sobe esse servidor só em loopback, aplica as migrações, cria os papéis do banco e um atendente local, e então inicia o processo `chatisp` no modo `all` junto com o Vite. Se a API não ficar pronta, ou se o script receber um sinal, ele encerra só o PostgreSQL, a API e o Vite que ele mesmo iniciou. Um serviço que já escutava na máquina não é parado nem tem a porta trocada.
 
-- API: `http://127.0.0.1:8080` (`/healthz`, `/api/...`).
-- Painel: `http://127.0.0.1:5173`. O Vite encaminha `/api`, `/healthz` e `/readyz` para a API.
+No padrão, a API fica em `http://127.0.0.1:8080`, as métricas em `127.0.0.1:9090`, o PostgreSQL em `127.0.0.1:55432` e o painel em `http://127.0.0.1:5173`. O Vite encaminha `/api`, `/healthz` e `/readyz` para o endereço da API. A origem do painel acompanha o host e a porta do Vite.
+
+| Variável | Padrão | Uso |
+| --- | --- | --- |
+| `CHATISP_HTTP_ADDR` | `127.0.0.1:8080` | API (`/healthz`, `/api/...`) |
+| `CHATISP_METRICS_ADDR` | `127.0.0.1:9090` | métricas |
+| `CHATISP_DEV_PG_HOST` | `127.0.0.1` | PostgreSQL |
+| `CHATISP_DEV_PG_PORT` | `55432` | PostgreSQL |
+| `CHATISP_DEV_VITE_HOST` | `127.0.0.1` | painel Vite |
+| `CHATISP_DEV_VITE_PORT` | `5173` | painel Vite |
+
+Só entram endereços loopback (`127.0.0.0/8` ou `::1`). `0.0.0.0` e nomes de host são recusados. As quatro portas precisam ser distintas. Se alguma já estiver em uso, o script sai com erro. Neste host a porta 8080 costuma ser do Tomcat; escolha outro endereço local:
+
+```sh
+CHATISP_HTTP_ADDR=127.0.0.1:18080 \
+CHATISP_METRICS_ADDR=127.0.0.1:19090 \
+CHATISP_DEV_PG_PORT=55433 \
+CHATISP_DEV_VITE_PORT=5174 \
+./scripts/dev.sh
+```
+
 - Na primeira subida, o terminal mostra o e-mail `dev.local@example.com` e a senha gerada. Ela não é gravada no repositório. Nas subidas seguintes a senha não muda.
-- O cookie de sessão é `Secure`. O navegador só o guarda em HTTPS. Para entrar pelo navegador com sessão persistida, use o Compose abaixo. A API local continua aceitando o login em HTTP para cliente que não descarte esse cookie.
+- O cookie de sessão é `__Host-session` com a flag `Secure`. O launcher local fala HTTP só para desenvolvimento. Em HTTP o navegador não guarda essa sessão, então o painel aberto nesse endereço não fica autenticado. O script não desliga `Secure` e não cria outro tipo de sessão. Para uma sessão real no navegador, use o Compose com Caddy em `https://localhost:8443`.
 
 Atalhos, quando o make existir:
 
