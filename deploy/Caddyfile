@@ -1,0 +1,27 @@
+{
+	admin off
+	local_certs
+}
+
+:443 {
+	tls internal
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy chatisp-api:8080
+	}
+	handle /healthz {
+		reverse_proxy chatisp-api:8080
+	}
+	handle /readyz {
+		reverse_proxy chatisp-api:8080
+	}
+	handle /metrics {
+		reverse_proxy chatisp-api:9090
+	}
+	handle {
+		root * /srv/panel
+		try_files {path} /index.html
+		file_server
+	}
+}

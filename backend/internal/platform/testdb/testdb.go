@@ -3,7 +3,8 @@
 //
 // Binaries come from the npm package installed in backend/tools/pg.
 // The verifier runs npm ci --ignore-scripts, so the postinstall that would
-// recreate library symlinks does not run. This package recreates them.
+// recreate library symlinks does not run. This package recreates them,
+// sets the execute bit and points LD_LIBRARY_PATH at native/lib.
 package testdb
 
 import (
@@ -106,6 +107,9 @@ func startEmbedded(ctx context.Context) (*Env, error) {
 	if err := hydrateSymlinks(pkg); err != nil {
 		return nil, err
 	}
+	if err := ensureExecutable(pkg); err != nil {
+		return nil, err
+	}
 	initdbBin, postgresBin, err := executableBins(pkg)
 	if err != nil {
 		return nil, err
@@ -131,11 +135,12 @@ func startEmbedded(ctx context.Context) (*Env, error) {
 		_ = os.RemoveAll(real)
 		_ = os.Remove(logPath)
 	}
-	if err := runInitDB(ctx, initdbBin, runDir); err != nil {
+	libDir := filepath.Join(pkg, "native", "lib")
+	if err := runInitDB(ctx, initdbBin, runDir, libDir); err != nil {
 		cleanupFiles()
 		return nil, err
 	}
-	proc, err := startPostgres(postgresBin, runDir, logPath)
+	proc, err := startPostgres(postgresBin, runDir, logPath, libDir)
 	if err != nil {
 		cleanupFiles()
 		return nil, err
@@ -171,9 +176,9 @@ func startEmbedded(ctx context.Context) (*Env, error) {
 	}, nil
 }
 
-func runInitDB(ctx context.Context, bin, dataDir string) error {
+func runInitDB(ctx context.Context, bin, dataDir, libDir string) error {
 	cmd := exec.CommandContext(ctx, bin, "-D", dataDir, "-U", "postgres", "-A", "trust", "-E", "UTF8", "--no-sync")
-	cmd.Env = processEnv()
+	cmd.Env = processEnv(libDir)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if ctx.Err() != nil {
@@ -194,7 +199,7 @@ type pgProc struct {
 	exited chan struct{}
 }
 
-func startPostgres(bin, dataDir, logPath string) (*pgProc, error) {
+func startPostgres(bin, dataDir, logPath, libDir string) (*pgProc, error) {
 	logFile, err := os.Create(logPath)
 	if err != nil {
 		return nil, errors.New("falha ao preparar o log do PostgreSQL de teste")
@@ -207,7 +212,7 @@ func startPostgres(bin, dataDir, logPath string) (*pgProc, error) {
 		"-c", "dynamic_shared_memory_type=mmap",
 		"-c", "fsync=off",
 	)
-	cmd.Env = processEnv()
+	cmd.Env = processEnv(libDir)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -301,8 +306,8 @@ func dataParent() (string, error) {
 		return "", err
 	}
 	candidates := []string{
-		filepath.Join(filepath.Dir(module), ".tmp"),
-		filepath.Join(module, ".tmp"),
+		filepath.Join(filepath.Dir(module), ".tmp", "testdb"),
+		filepath.Join(module, ".tmp", "testdb"),
 	}
 	for _, dir := range candidates {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -329,6 +334,36 @@ func packageDir() (string, error) {
 		return "", missingBinaries()
 	}
 	return dir, nil
+}
+
+func ensureExecutable(pkg string) error {
+	binDir := filepath.Join(pkg, "native", "bin")
+	entries, err := os.ReadDir(binDir)
+	if err != nil {
+		return missingBinaries()
+	}
+	found := false
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		found = true
+		path := filepath.Join(binDir, entry.Name())
+		info, err := os.Stat(path)
+		if err != nil || info.IsDir() {
+			return missingBinaries()
+		}
+		if info.Mode()&0o111 != 0 {
+			continue
+		}
+		if err := os.Chmod(path, info.Mode()|0o755); err != nil {
+			return missingBinaries()
+		}
+	}
+	if !found {
+		return missingBinaries()
+	}
+	return nil
 }
 
 func executableBins(pkg string) (string, string, error) {
@@ -471,16 +506,33 @@ func lockFile(path string) (func(), error) {
 	}, nil
 }
 
-func processEnv() []string {
+func processEnv(libDir string) []string {
 	base := os.Environ()
-	out := make([]string, 0, len(base)+3)
+	out := make([]string, 0, len(base)+4)
+	var existingLib string
 	for _, item := range base {
 		if strings.HasPrefix(item, "LC_ALL=") || strings.HasPrefix(item, "LANG=") || strings.HasPrefix(item, "LC_") {
 			continue
 		}
+		if strings.HasPrefix(item, "LD_LIBRARY_PATH=") {
+			existingLib = strings.TrimPrefix(item, "LD_LIBRARY_PATH=")
+			continue
+		}
 		out = append(out, item)
 	}
-	return append(out, "LC_ALL=C", "LANG=C", "TZ=UTC")
+	out = append(out, "LC_ALL=C", "LANG=C", "TZ=UTC")
+	lib := libDir
+	if existingLib != "" {
+		if lib != "" {
+			lib = lib + string(os.PathListSeparator) + existingLib
+		} else {
+			lib = existingLib
+		}
+	}
+	if lib != "" {
+		out = append(out, "LD_LIBRARY_PATH="+lib)
+	}
+	return out
 }
 
 func readServerVersion(ctx context.Context, adminURL string) (string, int, error) {
