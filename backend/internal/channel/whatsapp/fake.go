@@ -182,7 +182,7 @@ func (f *Fake) dispatchLocked(req TextRequest) Result {
 	seq := f.seq
 	mode := f.mode
 	acceptID := fmt.Sprintf("sim:%s:%d", req.AttemptID, seq)
-	obs := Observation{}
+	var obs Observation
 	dispatched := true
 	lost := false
 	internalID := ""
