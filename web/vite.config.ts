@@ -16,6 +16,7 @@ export default defineConfig({
   cacheDir: path.resolve(rootDir, "node_modules/.vite"),
   server: {
     proxy: {
+      "/api": "http://127.0.0.1:8080",
       "/healthz": "http://127.0.0.1:8080",
       "/readyz": "http://127.0.0.1:8080",
     },

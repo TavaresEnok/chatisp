@@ -12,6 +12,10 @@ export const queryKeys = {
   teams: (tenantId: string) => [tenantId, "teams"] as const,
   reports: (tenantId: string) => [tenantId, "reports"] as const,
   settings: (tenantId: string) => [tenantId, "settings"] as const,
+  memberships: (tenantId: string) => [tenantId, "settings", "memberships"] as const,
+  sessions: (tenantId: string) => [tenantId, "settings", "sessions"] as const,
+  platformTenants: () => ["platform", "tenants"] as const,
+  panelSession: () => ["panel-session"] as const,
 };
 
 export function areaQueryKey(areaId: AreaId, tenantId: string) {
