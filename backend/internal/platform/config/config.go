@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
+
+	"chatisp/internal/platform/crypto"
 )
 
 // Mode is a long-running or one-shot process mode.
@@ -42,6 +44,10 @@ type Config struct {
 	SMTPFrom            string        `env:"CHATISP_SMTP_FROM"`
 	PanelOriginsRaw     string        `env:"CHATISP_PANEL_ORIGINS"`
 	PanelOrigins        []string      `env:"-"`
+	DataKeys            string        `env:"CHATISP_DATA_KEYS"`
+	DataKeysFile        string        `env:"CHATISP_DATA_KEYS_FILE"`
+	DataKeyVersion      string        `env:"CHATISP_DATA_KEY_VERSION"`
+	KeyRing             *crypto.Ring  `env:"-"`
 }
 
 // Load reads environ as KEY=VALUE entries and ignores the process environment.
@@ -66,6 +72,17 @@ func Load(environ []string) (Config, error) {
 		return Config{}, formatConfigError(nil, []string{"CHATISP_PANEL_ORIGINS"})
 	}
 	cfg.PanelOrigins = origins
+	if strings.TrimSpace(cfg.DataKeys) != "" || strings.TrimSpace(cfg.DataKeysFile) != "" {
+		ring, err := crypto.Load(cfg.DataKeys, cfg.DataKeysFile, cfg.DataKeyVersion)
+		if err != nil {
+			name := "CHATISP_DATA_KEYS"
+			if strings.TrimSpace(cfg.DataKeysFile) != "" {
+				name = "CHATISP_DATA_KEYS_FILE"
+			}
+			return Config{}, formatConfigError(nil, []string{name})
+		}
+		cfg.KeyRing = ring
+	}
 	return cfg, nil
 }
 
@@ -156,8 +173,41 @@ func (c Config) Validate() error {
 	if _, ok := parsePanelOrigins(c.PanelOriginsRaw); !ok {
 		invalid = append(invalid, "CHATISP_PANEL_ORIGINS")
 	}
+	keyMissing, keyInvalid := c.keyProblem()
+	if keyMissing != "" {
+		missing = append(missing, keyMissing)
+	}
+	invalid = append(invalid, keyInvalid...)
 
 	return formatConfigError(missing, invalid)
+}
+
+func (c Config) keyProblem() (string, []string) {
+	fileSet := strings.TrimSpace(c.DataKeysFile) != ""
+	envSet := strings.TrimSpace(c.DataKeys) != ""
+	versionSet := strings.TrimSpace(c.DataKeyVersion) != ""
+	if fileSet && envSet {
+		return "", []string{"CHATISP_DATA_KEYS", "CHATISP_DATA_KEYS_FILE"}
+	}
+	if !fileSet && !envSet {
+		if versionSet {
+			return "", []string{"CHATISP_DATA_KEY_VERSION"}
+		}
+		if c.Env == "production" {
+			return "CHATISP_DATA_KEYS", nil
+		}
+		return "", nil
+	}
+	if !versionSet {
+		return "", []string{"CHATISP_DATA_KEY_VERSION"}
+	}
+	if _, err := crypto.Load(c.DataKeys, c.DataKeysFile, c.DataKeyVersion); err != nil {
+		if fileSet {
+			return "", []string{"CHATISP_DATA_KEYS_FILE"}
+		}
+		return "", []string{"CHATISP_DATA_KEYS"}
+	}
+	return "", nil
 }
 
 func noControlChars(value string) bool {
@@ -307,6 +357,9 @@ func envName(field string) string {
 		"SMTPPassword":        "CHATISP_SMTP_PASSWORD",
 		"SMTPFrom":            "CHATISP_SMTP_FROM",
 		"PanelOriginsRaw":     "CHATISP_PANEL_ORIGINS",
+		"DataKeys":            "CHATISP_DATA_KEYS",
+		"DataKeysFile":        "CHATISP_DATA_KEYS_FILE",
+		"DataKeyVersion":      "CHATISP_DATA_KEY_VERSION",
 	}
 	if name, ok := names[field]; ok {
 		return name
