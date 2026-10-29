@@ -238,6 +238,113 @@ func TestGrantRejectsGlobalException(t *testing.T) {
 	}
 }
 
+func TestIPv4CompatibleRangeRejected(t *testing.T) {
+	p := mustPolicy(t, WithGrant(Grant{
+		TenantID:     "tenant-a",
+		ConnectionID: "conn-1",
+		Hosts:        []string{"erp.internal"},
+		Prefixes:     []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("fd00::/64")},
+	}))
+	scope := Scope{TenantID: "tenant-a", ConnectionID: "conn-1"}
+	literals := []string{
+		"http://[::7f00:1]/",
+		"http://[::7F00:1]/",
+		"http://[0:0:0:0:0:0:7f00:1]/",
+		"http://[0000:0000:0000:0000:0000:0000:7f00:0001]/",
+		"http://[::127.0.0.1]/",
+		"http://[0:0:0:0:0:0:127.0.0.1]/",
+		"http://[::8.8.8.8]/",
+		"http://[::808:808]/",
+		"http://[::10.0.0.1]/",
+		"http://[::a00:1]/",
+		"http://[::2]/",
+	}
+	for _, raw := range literals {
+		t.Run(raw, func(t *testing.T) {
+			_, err := p.Inspect(scope, raw)
+			if !errors.Is(err, ErrDestination) {
+				t.Fatalf("got %v", err)
+			}
+			_, err = p.Inspect(Scope{}, raw)
+			if !errors.Is(err, ErrDestination) {
+				t.Fatalf("empty scope got %v", err)
+			}
+		})
+	}
+
+	compat := []netip.Addr{
+		netip.MustParseAddr("::7f00:1"),
+		netip.MustParseAddr("::127.0.0.1"),
+		netip.MustParseAddr("::8.8.8.8"),
+		netip.MustParseAddr("::10.0.0.1"),
+		netip.MustParseAddr("::2"),
+	}
+	for _, addr := range compat {
+		_, err := p.Select(scope, "erp.internal", []netip.Addr{addr})
+		if !errors.Is(err, ErrDestination) {
+			t.Fatalf("grant select %s got %v", addr, err)
+		}
+		_, err = p.Select(Scope{}, "example.test", []netip.Addr{addr})
+		if !errors.Is(err, ErrDestination) {
+			t.Fatalf("dns %s got %v", addr, err)
+		}
+		_, err = p.Select(Scope{TenantID: "tenant-b", ConnectionID: "conn-1"}, "erp.internal", []netip.Addr{addr})
+		if !errors.Is(err, ErrDestination) {
+			t.Fatalf("other tenant %s got %v", addr, err)
+		}
+	}
+
+	public := netip.MustParseAddr("1.2.3.4")
+	global6 := netip.MustParseAddr("2606:4700:4700::1111")
+	private := netip.MustParseAddr("10.1.2.3")
+	mixed := [][]netip.Addr{
+		{public, netip.MustParseAddr("::7f00:1")},
+		{global6, netip.MustParseAddr("::8.8.8.8")},
+		{private, netip.MustParseAddr("::10.0.0.1")},
+		{public, global6, netip.MustParseAddr("::127.0.0.1")},
+	}
+	for _, set := range mixed {
+		_, err := p.Select(scope, "erp.internal", set)
+		if !errors.Is(err, ErrDNS) {
+			t.Fatalf("mixed grant %v got %v", set, err)
+		}
+		_, err = p.Select(scope, "example.test", set)
+		if !errors.Is(err, ErrDNS) {
+			t.Fatalf("mixed name %v got %v", set, err)
+		}
+	}
+
+	if _, err := p.Inspect(scope, "https://[2606:4700:4700::1111]/v"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := p.Select(scope, "example.test", []netip.Addr{global6})
+	if err != nil || got != global6 {
+		t.Fatalf("global %v %v", got, err)
+	}
+	got, err = p.Select(Scope{}, "example.test", []netip.Addr{public, global6})
+	if err != nil || got != public {
+		t.Fatalf("pair %v %v", got, err)
+	}
+	if _, err := p.Inspect(scope, "http://[::ffff:8.8.8.8]/"); !errors.Is(err, ErrDestination) {
+		t.Fatal(err)
+	}
+
+	denied := []Grant{
+		{TenantID: "tenant-a", ConnectionID: "conn-1", Prefixes: []netip.Prefix{netip.MustParsePrefix("::/96")}},
+		{TenantID: "tenant-a", ConnectionID: "conn-1", Prefixes: []netip.Prefix{netip.MustParsePrefix("::7f00:1/128")}},
+		{TenantID: "tenant-a", ConnectionID: "conn-1", Prefixes: []netip.Prefix{netip.MustParsePrefix("::8.8.8.8/128")}},
+		{TenantID: "tenant-a", ConnectionID: "conn-1", Prefixes: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, Hosts: []string{"::7f00:1"}},
+		{TenantID: "tenant-a", ConnectionID: "conn-1", Prefixes: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, Hosts: []string{"::127.0.0.1"}},
+		{TenantID: "tenant-a", ConnectionID: "conn-1", Prefixes: []netip.Prefix{netip.MustParsePrefix("fc00::/7")}, Hosts: []string{"::8.8.8.8"}},
+	}
+	for _, g := range denied {
+		_, err := NewPolicy(WithGrant(g))
+		if !errors.Is(err, ErrGrant) {
+			t.Fatalf("grant %+v got %v", g, err)
+		}
+	}
+}
+
 func mustPolicy(t *testing.T, opts ...Option) *Policy {
 	t.Helper()
 	p, err := NewPolicy(opts...)

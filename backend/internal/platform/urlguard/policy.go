@@ -518,6 +518,8 @@ var hardPrefixes = []netip.Prefix{
 	mustPrefix("240.0.0.0/4"),
 	mustPrefix("::/128"),
 	mustPrefix("::1/128"),
+	// Deprecated IPv4-compatible range (::a.b.c.d). Distinct from IPv4-mapped (::ffff:0:0/96).
+	mustPrefix("::/96"),
 	mustPrefix("::ffff:0:0/96"),
 	mustPrefix("100::/64"),
 	mustPrefix("2001::/32"),
