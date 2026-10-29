@@ -18,4 +18,6 @@ npm run build
 npm run generate:api
 ```
 
-`generate:api` lê `../backend/api/openapi.json` e grava `src/api/schema.ts`. O contrato publicado tem `/healthz` e `/readyz`. Essas rotas não alimentam as áreas: fila, diretório, equipe e relatório continuam vazios até existirem no OpenAPI.
+`generate:api` lê `../backend/api/openapi.json` e grava `src/api/schema.ts`. Não copie esses tipos à mão.
+
+O contrato publicado inclui `/healthz`, `/readyz` e a API do painel em `/api/panel` e `/api/platform`. Fila, diretório, equipe e relatório continuam vazios: essas coleções ainda não existem no OpenAPI. Entrar, convite, recuperação de senha, MFA e a administração de usuários e provedores usam o cliente gerado. O cookie de sessão vai com a requisição; o token de CSRF sai no cabeçalho `X-CSRF-Token`. Ao sair, ao trocar de provedor ou quando o servidor recusa a sessão, o painel limpa a consulta, o estado local e o armazenamento do navegador.

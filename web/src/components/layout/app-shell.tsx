@@ -1,5 +1,6 @@
 import { useEffect, type MouseEvent } from "react";
-import { Outlet, useLocation } from "react-router";
+import { Link, Navigate, Outlet, useLocation } from "react-router";
+import { useEndSession } from "@/components/auth/use-end-session";
 import { AreaNav } from "@/components/layout/area-nav";
 import { areas } from "@/lib/areas";
 import { useSessionStore } from "@/stores/session-store";
@@ -27,14 +28,24 @@ function skipToContent(event: MouseEvent<HTMLAnchorElement>) {
 export function AppShell() {
   const location = useLocation();
   const area = areas.find((item) => item.path === location.pathname);
-  const heading = area?.label ?? "Página não encontrada";
+  const heading =
+    area?.label ??
+    (location.pathname.startsWith("/configuracoes")
+      ? "Configurações"
+      : "Página não encontrada");
   const tenantId = useSessionStore((state) => state.tenantId);
   const displayName = useSessionStore((state) => state.displayName);
+  const principal = useSessionStore((state) => state.principal);
+  const endSession = useEndSession();
 
   useEffect(() => {
     document.documentElement.lang = "pt-BR";
     document.title = `${heading} — Chat ISP`;
   }, [heading]);
+
+  if (principal?.mfaEnrollmentRequired) {
+    return <Navigate to="/mfa" replace />;
+  }
 
   return (
     <div className="min-h-svh bg-background text-foreground">
@@ -60,6 +71,24 @@ export function AppShell() {
             <p className="min-w-0 text-sm break-words text-foreground">
               {sessionSummary(tenantId, displayName)}
             </p>
+            {principal ? (
+              <button
+                type="button"
+                className="mt-2 h-11 rounded-lg px-3 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+                onClick={() => {
+                  void endSession();
+                }}
+              >
+                Sair
+              </button>
+            ) : (
+              <Link
+                to="/entrar"
+                className="mt-2 inline-flex h-11 items-center rounded-lg px-3 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+              >
+                Entrar
+              </Link>
+            )}
           </header>
           <main
             id="conteudo"
