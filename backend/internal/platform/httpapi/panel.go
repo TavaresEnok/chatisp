@@ -54,6 +54,15 @@ func registerPanel(api huma.API, deps Dependencies) {
 	huma.Register(api, panelOp("reset-panel-mfa", http.MethodPost, "/api/panel/mfa/reset", "Redefine o MFA", "Administrador com MFA ativo limpa o fator de um usuário do provedor. A ação é auditada.", http.StatusNoContent, []int{
 		http.StatusUnauthorized, http.StatusForbidden, http.StatusServiceUnavailable,
 	}), panel.resetMFA)
+	huma.Register(api, panelOp("list-panel-memberships", http.MethodGet, "/api/panel/memberships", "Lista usuários do provedor", "Somente administradores. O histórico do vínculo permanece.", http.StatusOK, []int{
+		http.StatusUnauthorized, http.StatusForbidden, http.StatusServiceUnavailable,
+	}), panel.listMemberships)
+	huma.Register(api, panelOp("deactivate-panel-membership", http.MethodPost, "/api/panel/memberships/{membership_id}/deactivate", "Desativa um usuário", "Preserva o histórico e revoga as sessões desse usuário no provedor.", http.StatusNoContent, []int{
+		http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict, http.StatusServiceUnavailable,
+	}), panel.deactivateMembership)
+	huma.Register(api, panelOp("reactivate-panel-membership", http.MethodPost, "/api/panel/memberships/{membership_id}/reactivate", "Reativa um usuário", "Não restaura sessões antigas. O limite de atendentes do plano continua valendo.", http.StatusNoContent, []int{
+		http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict, http.StatusServiceUnavailable,
+	}), panel.reactivateMembership)
 }
 
 func panelOp(id, method, path, summary, description string, status int, errors []int) huma.Operation {
@@ -389,6 +398,68 @@ func (p *panelAPI) confirmMFA(ctx context.Context, input *confirmMFAInput) (*mfa
 	return out, nil
 }
 
+type membershipBody struct {
+	ID        uuid.UUID `json:"id" doc:"Vínculo do usuário com o provedor."`
+	UserID    uuid.UUID `json:"user_id" doc:"Usuário global."`
+	Role      string    `json:"role" doc:"Papel fixo." enum:"admin,supervisor,agent"`
+	Status    string    `json:"status" doc:"Estado do vínculo." enum:"invited,active,disabled"`
+	CreatedAt time.Time `json:"created_at" doc:"Criação do vínculo. Não muda na desativação."`
+}
+
+type membershipListOutput struct {
+	Body struct {
+		Memberships []membershipBody `json:"memberships" doc:"Vínculos do provedor da sessão."`
+	}
+}
+
+type membershipInput struct {
+	Session      string    `cookie:"__Host-session" doc:"Cookie de sessão do painel."`
+	CSRF         string    `header:"X-CSRF-Token" doc:"Token de CSRF vinculado à sessão."`
+	MembershipID uuid.UUID `path:"membership_id" doc:"Vínculo a alterar."`
+}
+
+func (p *panelAPI) listMemberships(ctx context.Context, input *cookieInput) (*membershipListOutput, error) {
+	actor, err := p.readPanel(ctx, input.Session, input.CSRF, false)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := p.auth.ListMemberships(ctx, actor)
+	if err != nil {
+		return nil, authProblem(err)
+	}
+	out := &membershipListOutput{}
+	out.Body.Memberships = make([]membershipBody, 0, len(rows))
+	for _, row := range rows {
+		out.Body.Memberships = append(out.Body.Memberships, membershipBody{
+			ID:        row.ID,
+			UserID:    row.UserID,
+			Role:      row.Role,
+			Status:    row.Status,
+			CreatedAt: row.CreatedAt,
+		})
+	}
+	return out, nil
+}
+
+func (p *panelAPI) deactivateMembership(ctx context.Context, input *membershipInput) (*struct{}, error) {
+	return p.changeMembership(ctx, input, "disabled")
+}
+
+func (p *panelAPI) reactivateMembership(ctx context.Context, input *membershipInput) (*struct{}, error) {
+	return p.changeMembership(ctx, input, "active")
+}
+
+func (p *panelAPI) changeMembership(ctx context.Context, input *membershipInput, status string) (*struct{}, error) {
+	actor, err := p.readPanel(ctx, input.Session, input.CSRF, true)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.auth.SetMembershipStatus(ctx, actor, input.MembershipID, status); err != nil {
+		return nil, authProblem(err)
+	}
+	return &struct{}{}, nil
+}
+
 func (p *panelAPI) resetMFA(ctx context.Context, input *resetMFAInput) (*struct{}, error) {
 	actor, err := p.readPanel(ctx, input.Session, input.CSRF, true)
 	if err != nil {
@@ -447,10 +518,12 @@ func authProblem(err error) error {
 		return huma.Error429TooManyRequests(err.Error())
 	case errors.Is(err, auth.ErrInvalidToken):
 		return huma.Error400BadRequest(err.Error())
-	case errors.Is(err, auth.ErrInvalidPassword), errors.Is(err, auth.ErrInvalidEmail), errors.Is(err, auth.ErrInvalidRole):
+	case errors.Is(err, auth.ErrInvalidPassword), errors.Is(err, auth.ErrInvalidEmail), errors.Is(err, auth.ErrInvalidRole), errors.Is(err, auth.ErrInvalidTimezone), errors.Is(err, auth.ErrInvalidLimits):
 		return huma.Error422UnprocessableEntity(err.Error())
-	case errors.Is(err, auth.ErrConflict), errors.Is(err, auth.ErrTenantRequired), errors.Is(err, auth.ErrMFAAlready):
+	case errors.Is(err, auth.ErrConflict), errors.Is(err, auth.ErrTenantRequired), errors.Is(err, auth.ErrMFAAlready), errors.Is(err, auth.ErrPlanLimit), errors.Is(err, auth.ErrTenantState), errors.Is(err, auth.ErrMembershipState):
 		return huma.Error409Conflict(err.Error())
+	case errors.Is(err, auth.ErrNotFound):
+		return huma.Error404NotFound(err.Error())
 	default:
 		return huma.Error503ServiceUnavailable(auth.ErrUnavailable.Error())
 	}
@@ -487,7 +560,7 @@ func requestClientIP(remote string) string {
 
 func panelSafety(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/panel") {
+		if strings.HasPrefix(r.URL.Path, "/api/panel") || strings.HasPrefix(r.URL.Path, "/api/platform") {
 			w.Header().Set("Cache-Control", "no-store")
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 		}

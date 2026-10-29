@@ -33,32 +33,32 @@ type LoginIdentity struct {
 
 // SessionRecord is a session loaded by its secret hash. The hash itself is not returned.
 type SessionRecord struct {
-	Status             string
-	ID                 uuid.UUID
-	UserID             uuid.UUID
-	TenantID           uuid.UUID
-	MembershipID       uuid.UUID
-	Role               string
-	UserStatus         string
-	MembershipStatus   string
-	TenantStatus       string
-	Email              string
-	CSRFHash           []byte
-	AbsoluteExpiresAt  time.Time
-	IdleExpiresAt      time.Time
+	Status            string
+	ID                uuid.UUID
+	UserID            uuid.UUID
+	TenantID          uuid.UUID
+	MembershipID      uuid.UUID
+	Role              string
+	UserStatus        string
+	MembershipStatus  string
+	TenantStatus      string
+	Email             string
+	CSRFHash          []byte
+	AbsoluteExpiresAt time.Time
+	IdleExpiresAt     time.Time
 }
 
 // NewSession is the hashed material of a new panel session.
 type NewSession struct {
-	ID                 uuid.UUID
-	TokenHash          []byte
-	UserID             uuid.UUID
-	TenantID           uuid.UUID
-	MembershipID       uuid.UUID
-	CSRFHash           []byte
-	Now                time.Time
-	IdleExpiresAt      time.Time
-	AbsoluteExpiresAt  time.Time
+	ID                uuid.UUID
+	TokenHash         []byte
+	UserID            uuid.UUID
+	TenantID          uuid.UUID
+	MembershipID      uuid.UUID
+	CSRFHash          []byte
+	Now               time.Time
+	IdleExpiresAt     time.Time
+	AbsoluteExpiresAt time.Time
 }
 
 // NewAuthToken is a one-time invite or password reset. The raw token is not stored.
@@ -266,6 +266,26 @@ func (s *Store) RevokeSessionForActor(ctx context.Context, sessionID, tenantID, 
 		return "", mapAuthErr(err)
 	}
 	return status, nil
+}
+
+// RevokeTenantSessions revokes every live session of a provider. It requires WithAuth.
+func (s *Store) RevokeTenantSessions(ctx context.Context, tenantID uuid.UUID, now time.Time) error {
+	scope, err := authFrom(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = scope.tx.Exec(ctx, `SELECT auth_revoke_tenant_sessions($1, $2)`, tenantID, now)
+	return mapAuthErr(err)
+}
+
+// RevokeUserTenantSessions revokes live sessions of one user in one provider. It requires WithAuth.
+func (s *Store) RevokeUserTenantSessions(ctx context.Context, tenantID, userID uuid.UUID, now time.Time) error {
+	scope, err := authFrom(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = scope.tx.Exec(ctx, `SELECT auth_revoke_membership_sessions($1, $2, $3)`, tenantID, userID, now)
+	return mapAuthErr(err)
 }
 
 // ListTenantSessions returns live sessions of one tenant. It requires WithAuth.
