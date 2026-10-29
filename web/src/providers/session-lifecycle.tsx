@@ -10,17 +10,22 @@ import { useSessionStore } from "@/stores/session-store";
 export function SessionLifecycle() {
   const queryClient = useQueryClient();
   const principal = useSessionStore((state) => state.principal);
+  const endedReason = useSessionStore((state) => state.endedReason);
   const applySession = useSessionStore((state) => state.applySession);
 
   useEffect(() => {
     setSessionLossHandler(() => {
       const state = useSessionStore.getState();
-      if (!state.principal && !state.csrfToken) {
+      if (state.endedReason === "ended") {
+        return;
+      }
+      const cookieSession = currentCsrfToken();
+      if (!state.principal && !state.csrfToken && !cookieSession) {
         return;
       }
       clearBrowserStorage();
-      queryClient.clear();
       useSessionStore.getState().markSessionEnded();
+      queryClient.clear();
     });
     return () => {
       setSessionLossHandler(null);
@@ -29,14 +34,16 @@ export function SessionLifecycle() {
 
   useQuery({
     queryKey: queryKeys.panelSession(),
-    enabled: principal === null,
+    enabled: principal === null && endedReason === null,
     queryFn: async () => {
-      const cookieToken = currentCsrfToken();
-      if (cookieToken) {
-        setCsrfToken(cookieToken);
+      if (useSessionStore.getState().endedReason === "ended") {
+        return null;
       }
       try {
         const body = await loadCurrentSession();
+        if (useSessionStore.getState().endedReason === "ended") {
+          return null;
+        }
         const csrf = currentCsrfToken();
         if (!body || !csrf) {
           if (!body) {
