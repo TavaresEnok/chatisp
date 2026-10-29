@@ -45,6 +45,15 @@ func registerPanel(api huma.API, deps Dependencies) {
 	huma.Register(api, panelOp("revoke-panel-session", http.MethodPost, "/api/panel/sessions/{session_id}/revoke", "Revoga uma sessão", "O próprio usuário ou um administrador do mesmo provedor.", http.StatusNoContent, []int{
 		http.StatusUnauthorized, http.StatusForbidden, http.StatusServiceUnavailable,
 	}), panel.revoke)
+	huma.Register(api, panelOp("begin-panel-mfa", http.MethodPost, "/api/panel/mfa/enrollment", "Inicia o cadastro do MFA", "Gera o segredo TOTP cifrado e os códigos de recuperação, exibidos uma vez.", http.StatusOK, []int{
+		http.StatusUnauthorized, http.StatusForbidden, http.StatusConflict, http.StatusServiceUnavailable,
+	}), panel.beginMFA)
+	huma.Register(api, panelOp("confirm-panel-mfa", http.MethodPost, "/api/panel/mfa/enrollment/confirm", "Confirma o MFA", "Valida o primeiro código TOTP e libera o painel nesta sessão.", http.StatusOK, []int{
+		http.StatusUnauthorized, http.StatusForbidden, http.StatusConflict, http.StatusTooManyRequests, http.StatusServiceUnavailable,
+	}), panel.confirmMFA)
+	huma.Register(api, panelOp("reset-panel-mfa", http.MethodPost, "/api/panel/mfa/reset", "Redefine o MFA", "Administrador com MFA ativo limpa o fator de um usuário do provedor. A ação é auditada.", http.StatusNoContent, []int{
+		http.StatusUnauthorized, http.StatusForbidden, http.StatusServiceUnavailable,
+	}), panel.resetMFA)
 }
 
 func panelOp(id, method, path, summary, description string, status int, errors []int) huma.Operation {
@@ -70,18 +79,20 @@ type loginInput struct {
 		Email    string `json:"email" doc:"E-mail da conta." maxLength:"320"`
 		Password string `json:"password" doc:"Senha da conta." maxLength:"128"`
 		TenantID string `json:"tenant_id,omitempty" doc:"Provedor, quando a conta participa de mais de um." maxLength:"36"`
+		Code     string `json:"code,omitempty" doc:"Código TOTP ou de recuperação, quando o MFA já está confirmado." maxLength:"64"`
 	}
 }
 
 type sessionBody struct {
-	UserID       uuid.UUID `json:"user_id" doc:"Usuário autenticado."`
-	Email        string    `json:"email" doc:"E-mail da conta."`
-	TenantID     uuid.UUID `json:"tenant_id" doc:"Provedor da sessão."`
-	MembershipID uuid.UUID `json:"membership_id" doc:"Vínculo usado nesta sessão."`
-	Role         string    `json:"role" doc:"Papel no provedor."`
-	SessionID    uuid.UUID `json:"session_id" doc:"Identificador da sessão, distinto do cookie."`
-	CSRFToken    string    `json:"csrf_token" doc:"Token de CSRF desta sessão. Também vai no cookie legível pelo painel."`
-	ExpiresAt    time.Time `json:"expires_at" doc:"Fim absoluto da sessão."`
+	UserID                uuid.UUID `json:"user_id" doc:"Usuário autenticado."`
+	Email                 string    `json:"email" doc:"E-mail da conta."`
+	TenantID              uuid.UUID `json:"tenant_id" doc:"Provedor da sessão."`
+	MembershipID          uuid.UUID `json:"membership_id" doc:"Vínculo usado nesta sessão."`
+	Role                  string    `json:"role" doc:"Papel no provedor."`
+	SessionID             uuid.UUID `json:"session_id" doc:"Identificador da sessão, distinto do cookie."`
+	CSRFToken             string    `json:"csrf_token" doc:"Token de CSRF desta sessão. Também vai no cookie legível pelo painel."`
+	ExpiresAt             time.Time `json:"expires_at" doc:"Fim absoluto da sessão."`
+	MFAEnrollmentRequired bool      `json:"mfa_enrollment_required" doc:"Verdadeiro quando o administrador ainda precisa concluir o MFA."`
 }
 
 type sessionOutput struct {
@@ -99,13 +110,14 @@ type clearedOutput struct {
 }
 
 type principalBody struct {
-	UserID       uuid.UUID `json:"user_id" doc:"Usuário autenticado."`
-	Email        string    `json:"email" doc:"E-mail da conta."`
-	TenantID     uuid.UUID `json:"tenant_id" doc:"Provedor da sessão."`
-	MembershipID uuid.UUID `json:"membership_id" doc:"Vínculo usado nesta sessão."`
-	Role         string    `json:"role" doc:"Papel no provedor."`
-	SessionID    uuid.UUID `json:"session_id" doc:"Identificador da sessão."`
-	ExpiresAt    time.Time `json:"expires_at" doc:"Fim absoluto da sessão."`
+	UserID                uuid.UUID `json:"user_id" doc:"Usuário autenticado."`
+	Email                 string    `json:"email" doc:"E-mail da conta."`
+	TenantID              uuid.UUID `json:"tenant_id" doc:"Provedor da sessão."`
+	MembershipID          uuid.UUID `json:"membership_id" doc:"Vínculo usado nesta sessão."`
+	Role                  string    `json:"role" doc:"Papel no provedor."`
+	SessionID             uuid.UUID `json:"session_id" doc:"Identificador da sessão."`
+	ExpiresAt             time.Time `json:"expires_at" doc:"Fim absoluto da sessão."`
+	MFAEnrollmentRequired bool      `json:"mfa_enrollment_required" doc:"Verdadeiro quando o administrador ainda precisa concluir o MFA."`
 }
 
 type principalOutput struct {
@@ -181,7 +193,7 @@ func (p *panelAPI) login(ctx context.Context, input *loginInput) (*sessionOutput
 	if err := p.available(); err != nil {
 		return nil, err
 	}
-	issued, err := p.auth.Login(ctx, input.Body.Email, input.Body.Password, input.Body.TenantID, clientIP(ctx))
+	issued, err := p.auth.LoginCode(ctx, input.Body.Email, input.Body.Password, input.Body.TenantID, clientIP(ctx), input.Body.Code)
 	if err != nil {
 		return nil, authProblem(err)
 	}
@@ -213,7 +225,7 @@ func (p *panelAPI) current(ctx context.Context, input *cookieInput) (*principalO
 }
 
 func (p *panelAPI) invite(ctx context.Context, input *inviteInput) (*inviteOutput, error) {
-	actor, err := p.read(ctx, input.Session, input.CSRF, true)
+	actor, err := p.readPanel(ctx, input.Session, input.CSRF, true)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +268,7 @@ func (p *panelAPI) confirmReset(ctx context.Context, input *resetConfirmInput) (
 }
 
 func (p *panelAPI) listSessions(ctx context.Context, input *cookieInput) (*sessionListOutput, error) {
-	actor, err := p.read(ctx, input.Session, input.CSRF, false)
+	actor, err := p.readPanel(ctx, input.Session, input.CSRF, false)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +291,7 @@ func (p *panelAPI) listSessions(ctx context.Context, input *cookieInput) (*sessi
 }
 
 func (p *panelAPI) revoke(ctx context.Context, input *revokeInput) (*struct{}, error) {
-	actor, err := p.read(ctx, input.Session, input.CSRF, true)
+	actor, err := p.readPanel(ctx, input.Session, input.CSRF, true)
 	if err != nil {
 		return nil, err
 	}
@@ -307,6 +319,87 @@ func (p *panelAPI) read(ctx context.Context, cookie, csrf string, write bool) (a
 	return principal, nil
 }
 
+func (p *panelAPI) readPanel(ctx context.Context, cookie, csrf string, write bool) (auth.Principal, error) {
+	principal, err := p.read(ctx, cookie, csrf, write)
+	if err != nil {
+		return auth.Principal{}, err
+	}
+	if principal.EnrollmentOnly {
+		return auth.Principal{}, authProblem(auth.ErrEnrollmentRequired)
+	}
+	return principal, nil
+}
+
+type enrollmentOutput struct {
+	Body struct {
+		OTPAuthURL    string   `json:"otpauth_url" doc:"URL otpauth para o aplicativo autenticador."`
+		Secret        string   `json:"secret" doc:"Segredo base32, exibido uma vez."`
+		RecoveryCodes []string `json:"recovery_codes" doc:"Códigos de recuperação, exibidos uma vez."`
+	}
+}
+
+type confirmMFAInput struct {
+	Session string `cookie:"__Host-session" doc:"Cookie de sessão do painel."`
+	CSRF    string `header:"X-CSRF-Token" doc:"Token de CSRF vinculado à sessão."`
+	Body    struct {
+		Code string `json:"code" doc:"Código TOTP de seis dígitos." maxLength:"16"`
+	}
+}
+
+type mfaStateOutput struct {
+	Body struct {
+		MFAEnrollmentRequired bool `json:"mfa_enrollment_required" doc:"Verdadeiro enquanto o MFA obrigatório não foi confirmado."`
+	}
+}
+
+type resetMFAInput struct {
+	Session string `cookie:"__Host-session" doc:"Cookie de sessão do painel."`
+	CSRF    string `header:"X-CSRF-Token" doc:"Token de CSRF vinculado à sessão."`
+	Body    struct {
+		UserID uuid.UUID `json:"user_id" doc:"Usuário cujo MFA será apagado."`
+	}
+}
+
+func (p *panelAPI) beginMFA(ctx context.Context, input *cookieInput) (*enrollmentOutput, error) {
+	actor, err := p.read(ctx, input.Session, input.CSRF, true)
+	if err != nil {
+		return nil, err
+	}
+	created, err := p.auth.BeginEnrollment(ctx, actor)
+	if err != nil {
+		return nil, authProblem(err)
+	}
+	out := &enrollmentOutput{}
+	out.Body.OTPAuthURL = created.OTPAuthURL
+	out.Body.Secret = created.Secret
+	out.Body.RecoveryCodes = created.RecoveryCodes
+	return out, nil
+}
+
+func (p *panelAPI) confirmMFA(ctx context.Context, input *confirmMFAInput) (*mfaStateOutput, error) {
+	actor, err := p.read(ctx, input.Session, input.CSRF, true)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.auth.ConfirmEnrollment(ctx, actor, input.Body.Code); err != nil {
+		return nil, authProblem(err)
+	}
+	out := &mfaStateOutput{}
+	out.Body.MFAEnrollmentRequired = false
+	return out, nil
+}
+
+func (p *panelAPI) resetMFA(ctx context.Context, input *resetMFAInput) (*struct{}, error) {
+	actor, err := p.readPanel(ctx, input.Session, input.CSRF, true)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.auth.ResetMFA(ctx, actor, input.Body.UserID); err != nil {
+		return nil, authProblem(err)
+	}
+	return &struct{}{}, nil
+}
+
 func sessionResponse(issued auth.IssuedSession) *sessionOutput {
 	return &sessionOutput{
 		SetCookie: []string{
@@ -314,27 +407,29 @@ func sessionResponse(issued auth.IssuedSession) *sessionOutput {
 			auth.CSRFSetCookie(issued.CSRFToken, issued.ExpiresAt),
 		},
 		Body: sessionBody{
-			UserID:       issued.Principal.UserID,
-			Email:        issued.Principal.Email,
-			TenantID:     issued.Principal.TenantID,
-			MembershipID: issued.Principal.MembershipID,
-			Role:         issued.Principal.Role,
-			SessionID:    issued.Principal.SessionID,
-			CSRFToken:    issued.CSRFToken,
-			ExpiresAt:    issued.ExpiresAt,
+			UserID:                issued.Principal.UserID,
+			Email:                 issued.Principal.Email,
+			TenantID:              issued.Principal.TenantID,
+			MembershipID:          issued.Principal.MembershipID,
+			Role:                  issued.Principal.Role,
+			SessionID:             issued.Principal.SessionID,
+			CSRFToken:             issued.CSRFToken,
+			ExpiresAt:             issued.ExpiresAt,
+			MFAEnrollmentRequired: issued.EnrollmentRequired,
 		},
 	}
 }
 
 func principalFrom(principal auth.Principal) principalBody {
 	return principalBody{
-		UserID:       principal.UserID,
-		Email:        principal.Email,
-		TenantID:     principal.TenantID,
-		MembershipID: principal.MembershipID,
-		Role:         principal.Role,
-		SessionID:    principal.SessionID,
-		ExpiresAt:    principal.ExpiresAt,
+		UserID:                principal.UserID,
+		Email:                 principal.Email,
+		TenantID:              principal.TenantID,
+		MembershipID:          principal.MembershipID,
+		Role:                  principal.Role,
+		SessionID:             principal.SessionID,
+		ExpiresAt:             principal.ExpiresAt,
+		MFAEnrollmentRequired: principal.EnrollmentOnly,
 	}
 }
 
@@ -344,9 +439,9 @@ func clearSessionCookies() []string {
 
 func authProblem(err error) error {
 	switch {
-	case errors.Is(err, auth.ErrInvalidCredentials), errors.Is(err, auth.ErrUnauthenticated):
+	case errors.Is(err, auth.ErrInvalidCredentials), errors.Is(err, auth.ErrUnauthenticated), errors.Is(err, auth.ErrMFARequired), errors.Is(err, auth.ErrInvalidMFA):
 		return huma.Error401Unauthorized(err.Error())
-	case errors.Is(err, auth.ErrCSRF), errors.Is(err, auth.ErrForbidden):
+	case errors.Is(err, auth.ErrCSRF), errors.Is(err, auth.ErrForbidden), errors.Is(err, auth.ErrEnrollmentRequired):
 		return huma.Error403Forbidden(err.Error())
 	case errors.Is(err, auth.ErrLocked):
 		return huma.Error429TooManyRequests(err.Error())
@@ -354,7 +449,7 @@ func authProblem(err error) error {
 		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, auth.ErrInvalidPassword), errors.Is(err, auth.ErrInvalidEmail), errors.Is(err, auth.ErrInvalidRole):
 		return huma.Error422UnprocessableEntity(err.Error())
-	case errors.Is(err, auth.ErrConflict), errors.Is(err, auth.ErrTenantRequired):
+	case errors.Is(err, auth.ErrConflict), errors.Is(err, auth.ErrTenantRequired), errors.Is(err, auth.ErrMFAAlready):
 		return huma.Error409Conflict(err.Error())
 	default:
 		return huma.Error503ServiceUnavailable(auth.ErrUnavailable.Error())

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"chatisp/internal/platform/crypto"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/mail"
 )
@@ -55,21 +56,24 @@ var DefaultPolicy = Policy{
 
 // Principal is the authenticated panel actor. It carries no cookie secret.
 type Principal struct {
-	SessionID    uuid.UUID
-	UserID       uuid.UUID
-	Email        string
-	TenantID     uuid.UUID
-	MembershipID uuid.UUID
-	Role         string
-	ExpiresAt    time.Time
+	SessionID      uuid.UUID
+	UserID         uuid.UUID
+	Email          string
+	TenantID       uuid.UUID
+	MembershipID   uuid.UUID
+	Role           string
+	ExpiresAt      time.Time
+	EnrollmentOnly bool
+	IsSuperadmin   bool
 }
 
 // IssuedSession is returned once. Token is the cookie value and is not stored.
 type IssuedSession struct {
-	Principal Principal
-	Token     string
-	CSRFToken string
-	ExpiresAt time.Time
+	Principal          Principal
+	Token              string
+	CSRFToken          string
+	ExpiresAt          time.Time
+	EnrollmentRequired bool
 }
 
 // SessionInfo is one live session an administrator may revoke.
@@ -100,6 +104,10 @@ var (
 	ErrMail               = errors.New("não foi possível enviar o e-mail")
 	ErrUnavailable        = errors.New("autenticação indisponível")
 	ErrTenantRequired     = errors.New("selecione o provedor")
+	ErrMFARequired        = errors.New("informe o código de autenticação")
+	ErrInvalidMFA         = errors.New("código de autenticação inválido")
+	ErrEnrollmentRequired = errors.New("conclua o cadastro do MFA antes de acessar o painel")
+	ErrMFAAlready         = errors.New("o MFA já está ativo")
 )
 
 // Options wires the identity service. Now defaults to the wall clock.
@@ -109,6 +117,7 @@ type Options struct {
 	Logger *slog.Logger
 	Policy Policy
 	Now    func() time.Time
+	Keys   *crypto.Ring
 }
 
 // Service is the panel identity use-case. It does not log secrets.
@@ -119,6 +128,7 @@ type Service struct {
 	policy Policy
 	now    func() time.Time
 	dummy  string
+	keys   *crypto.Ring
 }
 
 // New prepares the service and a dummy Argon2id hash used when the account has no password.
@@ -149,6 +159,7 @@ func New(opts Options) (*Service, error) {
 		policy: opts.Policy.normalized(),
 		now:    now,
 		dummy:  dummy,
+		keys:   opts.Keys,
 	}, nil
 }
 
@@ -214,6 +225,11 @@ func dummyPasswordHash() (string, error) {
 
 // Login checks the password, the progressive lock and opens a session.
 func (s *Service) Login(ctx context.Context, email, password, tenantRaw, ip string) (IssuedSession, error) {
+	return s.LoginCode(ctx, email, password, tenantRaw, ip, "")
+}
+
+// LoginCode is Login plus a TOTP or recovery code when MFA is already confirmed.
+func (s *Service) LoginCode(ctx context.Context, email, password, tenantRaw, ip, code string) (IssuedSession, error) {
 	normalized, err := normalizeEmail(email)
 	if err != nil {
 		return IssuedSession{}, ErrInvalidEmail
@@ -226,7 +242,6 @@ func (s *Service) Login(ctx context.Context, email, password, tenantRaw, ip stri
 		s.log.Info("login bloqueado", "component", "auth")
 		return IssuedSession{}, ErrLocked
 	}
-
 	identity, found, err := s.loadIdentity(ctx, normalized)
 	if err != nil {
 		return IssuedSession{}, err
@@ -254,18 +269,11 @@ func (s *Service) Login(ctx context.Context, email, password, tenantRaw, ip stri
 		s.log.Info("login recusado", "component", "auth")
 		return IssuedSession{}, ErrInvalidCredentials
 	}
-
 	membership, err := chooseMembership(identity.Memberships, tenantRaw)
 	if err != nil {
 		return IssuedSession{}, err
 	}
-	issued, err := s.issueSession(ctx, identity.UserID, identity.Email, membership, normalized)
-	if err != nil {
-		return IssuedSession{}, err
-	}
-	s.audit(ctx, membership.TenantID, issued.Principal.UserID, issued.Principal.MembershipID, "login", "session", &issued.Principal.SessionID, "success")
-	s.log.Info("login aceito", "component", "auth")
-	return issued, nil
+	return s.finishLogin(ctx, identity, membership, normalized, ip, code)
 }
 
 // Logout revokes the session that owns the cookie. An unknown cookie still clears it.
@@ -300,6 +308,18 @@ func (s *Service) Authenticate(ctx context.Context, rawToken, csrf string, requi
 		s.log.Error("falha ao ler sessão", "component", "auth")
 		return Principal{}, ErrUnavailable
 	}
+	var gate db.SessionGate
+	if record.Status == "active" {
+		err = s.store.WithAuth(ctx, func(ctx context.Context) error {
+			var err error
+			gate, err = s.store.SessionGate(ctx, HashSecret(rawToken))
+			return err
+		})
+		if err != nil {
+			s.log.Error("falha ao ler sessão", "component", "auth")
+			return Principal{}, ErrUnavailable
+		}
+	}
 	switch record.Status {
 	case "active":
 	case "blocked":
@@ -331,18 +351,23 @@ func (s *Service) Authenticate(ctx context.Context, rawToken, csrf string, requi
 		return Principal{}, ErrUnauthenticated
 	}
 	return Principal{
-		SessionID:    record.ID,
-		UserID:       record.UserID,
-		Email:        record.Email,
-		TenantID:     record.TenantID,
-		MembershipID: record.MembershipID,
-		Role:         record.Role,
-		ExpiresAt:    record.AbsoluteExpiresAt,
+		SessionID:      record.ID,
+		UserID:         record.UserID,
+		Email:          record.Email,
+		TenantID:       record.TenantID,
+		MembershipID:   record.MembershipID,
+		Role:           record.Role,
+		ExpiresAt:      record.AbsoluteExpiresAt,
+		EnrollmentOnly: s.enrollmentOnly(record.Role, gate),
+		IsSuperadmin:   gate.IsSuperadmin,
 	}, nil
 }
 
 // Invite creates a single-use invitation and sends it. The token is not returned.
 func (s *Service) Invite(ctx context.Context, actor Principal, email, role string) (Invite, error) {
+	if err := s.requirePanel(actor); err != nil {
+		return Invite{}, err
+	}
 	if actor.Role != "admin" {
 		return Invite{}, ErrForbidden
 	}
@@ -548,6 +573,9 @@ func (s *Service) ConfirmPasswordReset(ctx context.Context, token, password, ip 
 
 // ListSessions returns live sessions of the actor's tenant. Only an admin may call it.
 func (s *Service) ListSessions(ctx context.Context, actor Principal) ([]SessionInfo, error) {
+	if err := s.requirePanel(actor); err != nil {
+		return nil, err
+	}
 	if actor.Role != "admin" {
 		return nil, ErrForbidden
 	}
@@ -576,6 +604,9 @@ func (s *Service) ListSessions(ctx context.Context, actor Principal) ([]SessionI
 
 // RevokeSession revokes one session of the actor's tenant.
 func (s *Service) RevokeSession(ctx context.Context, actor Principal, sessionID uuid.UUID) error {
+	if err := s.requirePanel(actor); err != nil {
+		return err
+	}
 	if sessionID == uuid.Nil {
 		return ErrUnauthenticated
 	}
@@ -601,7 +632,7 @@ func (s *Service) RevokeSession(ctx context.Context, actor Principal, sessionID 
 	}
 }
 
-func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, email string, membership db.LoginMembership, clearAccount string) (IssuedSession, error) {
+func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, email string, membership db.LoginMembership, clearAccount, assurance string) (IssuedSession, error) {
 	raw, tokenHash, err := NewSecret()
 	if err != nil {
 		return IssuedSession{}, ErrUnavailable
@@ -616,6 +647,9 @@ func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, email stri
 	if idle.After(absolute) {
 		idle = absolute
 	}
+	if assurance != "enrollment" {
+		assurance = "full"
+	}
 	sessionID := uuid.New()
 	err = s.store.WithAuth(ctx, func(ctx context.Context) error {
 		if clearAccount != "" {
@@ -623,7 +657,7 @@ func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, email stri
 				return err
 			}
 		}
-		return s.store.InsertSession(ctx, db.NewSession{
+		if err := s.store.InsertSession(ctx, db.NewSession{
 			ID:                sessionID,
 			TokenHash:         tokenHash,
 			UserID:            userID,
@@ -633,7 +667,13 @@ func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, email stri
 			Now:               now,
 			IdleExpiresAt:     idle,
 			AbsoluteExpiresAt: absolute,
-		})
+		}); err != nil {
+			return err
+		}
+		if assurance == "enrollment" {
+			return s.store.SetSessionAssurance(ctx, sessionID, assurance)
+		}
+		return nil
 	})
 	if err != nil {
 		s.log.Error("falha ao abrir sessão", "component", "auth")
@@ -685,11 +725,29 @@ func (s *Service) issueForMembership(ctx context.Context, userID, tenantID, memb
 		s.log.Error("falha ao concluir sessão do convite", "component", "auth")
 		return IssuedSession{}, ErrUnavailable
 	}
-	return s.issueSession(ctx, userID, email, db.LoginMembership{
+	assurance := "full"
+	if s.keys != nil {
+		record, err := s.mfaRecord(ctx, userID)
+		if err != nil {
+			return IssuedSession{}, err
+		}
+		if record.Confirmed {
+			return IssuedSession{}, ErrMFARequired
+		}
+		if role == "admin" || record.IsSuperadmin {
+			assurance = "enrollment"
+		}
+	}
+	issued, err := s.issueSession(ctx, userID, email, db.LoginMembership{
 		TenantID:     tenantID,
 		MembershipID: membershipID,
 		Role:         role,
 		Status:       "active",
 		TenantStatus: "active",
-	}, email)
+	}, email, assurance)
+	if err != nil {
+		return IssuedSession{}, err
+	}
+	issued.EnrollmentRequired = assurance == "enrollment"
+	return issued, nil
 }

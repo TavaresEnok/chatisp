@@ -107,6 +107,7 @@ func openPanelAuth(ctx context.Context, cfg config.Config, log *slog.Logger) (*a
 		Store:  db.NewStore(pools.App, pools.Platform),
 		Mail:   mail.NewSender(cfg.SMTPAddr, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom),
 		Logger: log,
+		Keys:   cfg.KeyRing,
 	})
 	if err != nil {
 		pools.Close()

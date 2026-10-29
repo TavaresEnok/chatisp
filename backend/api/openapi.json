@@ -40,6 +40,49 @@
         ],
         "type": "object"
       },
+      "ConfirmMFAInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "description": "Código TOTP de seis dígitos.",
+            "maxLength": 16,
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "EnrollmentOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "otpauth_url": {
+            "description": "URL otpauth para o aplicativo autenticador.",
+            "type": "string"
+          },
+          "recovery_codes": {
+            "description": "Códigos de recuperação, exibidos uma vez.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "secret": {
+            "description": "Segredo base32, exibido uma vez.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "otpauth_url",
+          "secret",
+          "recovery_codes"
+        ],
+        "type": "object"
+      },
       "FieldError": {
         "additionalProperties": false,
         "properties": {
@@ -117,6 +160,11 @@
       "LoginInputBody": {
         "additionalProperties": false,
         "properties": {
+          "code": {
+            "description": "Código TOTP ou de recuperação, quando o MFA já está confirmado.",
+            "maxLength": 64,
+            "type": "string"
+          },
           "email": {
             "description": "E-mail da conta.",
             "maxLength": 320,
@@ -139,6 +187,19 @@
         ],
         "type": "object"
       },
+      "MfaStateOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "mfa_enrollment_required": {
+            "description": "Verdadeiro enquanto o MFA obrigatório não foi confirmado.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mfa_enrollment_required"
+        ],
+        "type": "object"
+      },
       "PrincipalBody": {
         "additionalProperties": false,
         "properties": {
@@ -154,6 +215,10 @@
           "membership_id": {
             "description": "Vínculo usado nesta sessão.",
             "type": "string"
+          },
+          "mfa_enrollment_required": {
+            "description": "Verdadeiro quando o administrador ainda precisa concluir o MFA.",
+            "type": "boolean"
           },
           "role": {
             "description": "Papel no provedor.",
@@ -179,7 +244,8 @@
           "membership_id",
           "role",
           "session_id",
-          "expires_at"
+          "expires_at",
+          "mfa_enrollment_required"
         ],
         "type": "object"
       },
@@ -272,6 +338,19 @@
         ],
         "type": "object"
       },
+      "ResetMFAInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "user_id": {
+            "description": "Usuário cujo MFA será apagado.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "type": "object"
+      },
       "ResetRequestInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -303,6 +382,10 @@
             "description": "Vínculo usado nesta sessão.",
             "type": "string"
           },
+          "mfa_enrollment_required": {
+            "description": "Verdadeiro quando o administrador ainda precisa concluir o MFA.",
+            "type": "boolean"
+          },
           "role": {
             "description": "Papel no provedor.",
             "type": "string"
@@ -328,7 +411,8 @@
           "role",
           "session_id",
           "csrf_token",
-          "expires_at"
+          "expires_at",
+          "mfa_enrollment_required"
         ],
         "type": "object"
       },
@@ -601,6 +685,325 @@
           }
         },
         "summary": "Aceita um convite",
+        "tags": [
+          "painel"
+        ]
+      }
+    },
+    "/api/panel/mfa/enrollment": {
+      "post": {
+        "description": "Gera o segredo TOTP cifrado e os códigos de recuperação, exibidos uma vez.",
+        "operationId": "begin-panel-mfa",
+        "parameters": [
+          {
+            "description": "Cookie de sessão do painel.",
+            "in": "cookie",
+            "name": "__Host-session",
+            "schema": {
+              "description": "Cookie de sessão do painel.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Token de CSRF vinculado à sessão.",
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "schema": {
+              "description": "Token de CSRF vinculado à sessão.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentOutputBody"
+                }
+              }
+            },
+            "description": "Sucesso"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Não autenticado"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Acesso negado"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflito"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Dados inválidos"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Erro interno"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Serviço indisponível"
+          }
+        },
+        "summary": "Inicia o cadastro do MFA",
+        "tags": [
+          "painel"
+        ]
+      }
+    },
+    "/api/panel/mfa/enrollment/confirm": {
+      "post": {
+        "description": "Valida o primeiro código TOTP e libera o painel nesta sessão.",
+        "operationId": "confirm-panel-mfa",
+        "parameters": [
+          {
+            "description": "Cookie de sessão do painel.",
+            "in": "cookie",
+            "name": "__Host-session",
+            "schema": {
+              "description": "Cookie de sessão do painel.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Token de CSRF vinculado à sessão.",
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "schema": {
+              "description": "Token de CSRF vinculado à sessão.",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmMFAInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaStateOutputBody"
+                }
+              }
+            },
+            "description": "Sucesso"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Não autenticado"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Acesso negado"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflito"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Dados inválidos"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Muitas tentativas"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Erro interno"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Serviço indisponível"
+          }
+        },
+        "summary": "Confirma o MFA",
+        "tags": [
+          "painel"
+        ]
+      }
+    },
+    "/api/panel/mfa/reset": {
+      "post": {
+        "description": "Administrador com MFA ativo limpa o fator de um usuário do provedor. A ação é auditada.",
+        "operationId": "reset-panel-mfa",
+        "parameters": [
+          {
+            "description": "Cookie de sessão do painel.",
+            "in": "cookie",
+            "name": "__Host-session",
+            "schema": {
+              "description": "Cookie de sessão do painel.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Token de CSRF vinculado à sessão.",
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "schema": {
+              "description": "Token de CSRF vinculado à sessão.",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetMFAInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Não autenticado"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Acesso negado"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Dados inválidos"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Erro interno"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Serviço indisponível"
+          }
+        },
+        "summary": "Redefine o MFA",
         "tags": [
           "painel"
         ]
