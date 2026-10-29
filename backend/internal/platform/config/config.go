@@ -27,13 +27,21 @@ const (
 
 // Config is the validated runtime configuration.
 type Config struct {
-	Env             string        `env:"CHATISP_ENV,required,notEmpty"`
-	HTTPAddr        string        `env:"CHATISP_HTTP_ADDR" envDefault:"127.0.0.1:8080"`
-	MetricsAddr     string        `env:"CHATISP_METRICS_ADDR" envDefault:"127.0.0.1:9090"`
-	DatabaseURL     string        `env:"CHATISP_DATABASE_URL,required,notEmpty"`
-	LogLevel        string        `env:"CHATISP_LOG_LEVEL" envDefault:"info"`
-	ShutdownTimeout time.Duration `env:"CHATISP_SHUTDOWN_TIMEOUT" envDefault:"15s"`
-	MigrationsDir   string        `env:"CHATISP_MIGRATIONS_DIR" envDefault:"db/migrations"`
+	Env                 string        `env:"CHATISP_ENV,required,notEmpty"`
+	HTTPAddr            string        `env:"CHATISP_HTTP_ADDR" envDefault:"127.0.0.1:8080"`
+	MetricsAddr         string        `env:"CHATISP_METRICS_ADDR" envDefault:"127.0.0.1:9090"`
+	DatabaseURL         string        `env:"CHATISP_DATABASE_URL,required,notEmpty"`
+	AppDatabaseURL      string        `env:"CHATISP_APP_DATABASE_URL"`
+	PlatformDatabaseURL string        `env:"CHATISP_PLATFORM_DATABASE_URL"`
+	LogLevel            string        `env:"CHATISP_LOG_LEVEL" envDefault:"info"`
+	ShutdownTimeout     time.Duration `env:"CHATISP_SHUTDOWN_TIMEOUT" envDefault:"15s"`
+	MigrationsDir       string        `env:"CHATISP_MIGRATIONS_DIR" envDefault:"db/migrations"`
+	SMTPAddr            string        `env:"CHATISP_SMTP_ADDR"`
+	SMTPUsername        string        `env:"CHATISP_SMTP_USERNAME"`
+	SMTPPassword        string        `env:"CHATISP_SMTP_PASSWORD"`
+	SMTPFrom            string        `env:"CHATISP_SMTP_FROM"`
+	PanelOriginsRaw     string        `env:"CHATISP_PANEL_ORIGINS"`
+	PanelOrigins        []string      `env:"-"`
 }
 
 // Load reads environ as KEY=VALUE entries and ignores the process environment.
@@ -53,6 +61,11 @@ func Load(environ []string) (Config, error) {
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
 	}
+	origins, ok := parsePanelOrigins(cfg.PanelOriginsRaw)
+	if !ok {
+		return Config{}, formatConfigError(nil, []string{"CHATISP_PANEL_ORIGINS"})
+	}
+	cfg.PanelOrigins = origins
 	return cfg, nil
 }
 
@@ -99,7 +112,89 @@ func (c Config) Validate() error {
 		invalid = append(invalid, "CHATISP_MIGRATIONS_DIR")
 	}
 
+	appSet := strings.TrimSpace(c.AppDatabaseURL) != ""
+	platformSet := strings.TrimSpace(c.PlatformDatabaseURL) != ""
+	if appSet != platformSet {
+		if !appSet {
+			invalid = append(invalid, "CHATISP_APP_DATABASE_URL")
+		}
+		if !platformSet {
+			invalid = append(invalid, "CHATISP_PLATFORM_DATABASE_URL")
+		}
+	}
+	if appSet && !validDatabaseURL(c.AppDatabaseURL) {
+		invalid = append(invalid, "CHATISP_APP_DATABASE_URL")
+	}
+	if platformSet && !validDatabaseURL(c.PlatformDatabaseURL) {
+		invalid = append(invalid, "CHATISP_PLATFORM_DATABASE_URL")
+	}
+
+	if !noControlChars(c.SMTPAddr) || len(c.SMTPAddr) > 256 {
+		invalid = append(invalid, "CHATISP_SMTP_ADDR")
+	}
+	if !noControlChars(c.SMTPUsername) || len(c.SMTPUsername) > 256 {
+		invalid = append(invalid, "CHATISP_SMTP_USERNAME")
+	}
+	if !noControlChars(c.SMTPPassword) || len(c.SMTPPassword) > 512 {
+		invalid = append(invalid, "CHATISP_SMTP_PASSWORD")
+	}
+	if !noControlChars(c.SMTPFrom) || len(c.SMTPFrom) > 320 {
+		invalid = append(invalid, "CHATISP_SMTP_FROM")
+	}
+	smtpTouched := c.SMTPAddr != "" || c.SMTPUsername != "" || c.SMTPPassword != "" || c.SMTPFrom != ""
+	if smtpTouched {
+		if strings.TrimSpace(c.SMTPAddr) == "" || !validListenAddr(c.SMTPAddr) {
+			invalid = append(invalid, "CHATISP_SMTP_ADDR")
+		}
+		if !validMailbox(c.SMTPFrom) {
+			invalid = append(invalid, "CHATISP_SMTP_FROM")
+		}
+		if (c.SMTPUsername == "") != (c.SMTPPassword == "") {
+			invalid = append(invalid, "CHATISP_SMTP_USERNAME", "CHATISP_SMTP_PASSWORD")
+		}
+	}
+	if _, ok := parsePanelOrigins(c.PanelOriginsRaw); !ok {
+		invalid = append(invalid, "CHATISP_PANEL_ORIGINS")
+	}
+
 	return formatConfigError(missing, invalid)
+}
+
+func noControlChars(value string) bool {
+	return !strings.ContainsAny(value, "\r\n\x00")
+}
+
+func validMailbox(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 320 || strings.ContainsAny(value, " \t\r\n<>") {
+		return false
+	}
+	at := strings.IndexByte(value, '@')
+	return at > 0 && at == strings.LastIndexByte(value, '@') && at < len(value)-1
+}
+
+func parsePanelOrigins(raw string) ([]string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, true
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		parsed, err := url.Parse(part)
+		if err != nil || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "" {
+			return nil, false
+		}
+		if parsed.Scheme != "https" && parsed.Scheme != "http" {
+			return nil, false
+		}
+		if parsed.Hostname() == "" {
+			return nil, false
+		}
+		out = append(out, parsed.Scheme+"://"+parsed.Host)
+	}
+	return out, true
 }
 
 func validDatabaseURL(raw string) bool {
@@ -198,13 +293,20 @@ func explainEnvError(err error) error {
 
 func envName(field string) string {
 	names := map[string]string{
-		"Env":             "CHATISP_ENV",
-		"HTTPAddr":        "CHATISP_HTTP_ADDR",
-		"MetricsAddr":     "CHATISP_METRICS_ADDR",
-		"DatabaseURL":     "CHATISP_DATABASE_URL",
-		"LogLevel":        "CHATISP_LOG_LEVEL",
-		"ShutdownTimeout": "CHATISP_SHUTDOWN_TIMEOUT",
-		"MigrationsDir":   "CHATISP_MIGRATIONS_DIR",
+		"Env":                 "CHATISP_ENV",
+		"HTTPAddr":            "CHATISP_HTTP_ADDR",
+		"MetricsAddr":         "CHATISP_METRICS_ADDR",
+		"DatabaseURL":         "CHATISP_DATABASE_URL",
+		"AppDatabaseURL":      "CHATISP_APP_DATABASE_URL",
+		"PlatformDatabaseURL": "CHATISP_PLATFORM_DATABASE_URL",
+		"LogLevel":            "CHATISP_LOG_LEVEL",
+		"ShutdownTimeout":     "CHATISP_SHUTDOWN_TIMEOUT",
+		"MigrationsDir":       "CHATISP_MIGRATIONS_DIR",
+		"SMTPAddr":            "CHATISP_SMTP_ADDR",
+		"SMTPUsername":        "CHATISP_SMTP_USERNAME",
+		"SMTPPassword":        "CHATISP_SMTP_PASSWORD",
+		"SMTPFrom":            "CHATISP_SMTP_FROM",
+		"PanelOriginsRaw":     "CHATISP_PANEL_ORIGINS",
 	}
 	if name, ok := names[field]; ok {
 		return name

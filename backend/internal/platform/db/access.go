@@ -17,11 +17,13 @@ type authKey struct{}
 
 type tenantScope struct {
 	id uuid.UUID
+	tx pgx.Tx
 	q  *dbgen.Queries
 }
 
 type platformScope struct {
-	q *dbgen.Queries
+	tx pgx.Tx
+	q  *dbgen.Queries
 }
 
 type authScope struct {
@@ -56,7 +58,7 @@ func (s *Store) WithTenant(ctx context.Context, tenantID uuid.UUID, fn func(cont
 	if err := setLocal(ctx, tx, "app.tenant_id", tenantID.String()); err != nil {
 		return err
 	}
-	scoped := context.WithValue(ctx, tenantKey{}, tenantScope{id: tenantID, q: dbgen.New(tx)})
+	scoped := context.WithValue(ctx, tenantKey{}, tenantScope{id: tenantID, tx: tx, q: dbgen.New(tx)})
 	if err := fn(scoped); err != nil {
 		return err
 	}
@@ -105,7 +107,7 @@ func (s *Store) WithPlatform(ctx context.Context, fn func(context.Context) error
 	if err := setLocal(ctx, tx, "app.access_scope", "platform"); err != nil {
 		return err
 	}
-	scoped := context.WithValue(ctx, platformKey{}, platformScope{q: dbgen.New(tx)})
+	scoped := context.WithValue(ctx, platformKey{}, platformScope{tx: tx, q: dbgen.New(tx)})
 	if err := fn(scoped); err != nil {
 		return err
 	}

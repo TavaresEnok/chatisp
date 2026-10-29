@@ -122,6 +122,8 @@ func problemType(status int) string {
 		return "urn:chatisp:problem:conflict"
 	case http.StatusUnprocessableEntity:
 		return "urn:chatisp:problem:invalid"
+	case http.StatusTooManyRequests:
+		return "urn:chatisp:problem:too-many-requests"
 	case http.StatusInternalServerError:
 		return "urn:chatisp:problem:internal"
 	case http.StatusServiceUnavailable:
@@ -147,6 +149,8 @@ func problemTitle(status int) string {
 		return "Conflito"
 	case http.StatusUnprocessableEntity:
 		return "Dados inválidos"
+	case http.StatusTooManyRequests:
+		return "Muitas tentativas"
 	case http.StatusServiceUnavailable:
 		return "Serviço indisponível"
 	default:
