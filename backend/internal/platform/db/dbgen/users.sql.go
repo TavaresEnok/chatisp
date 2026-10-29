@@ -36,11 +36,7 @@ type InsertUserRow struct {
 }
 
 func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (InsertUserRow, error) {
-	row := q.db.QueryRow(ctx, insertUser,
-		arg.ID,
-		arg.Email,
-		arg.Status,
-	)
+	row := q.db.QueryRow(ctx, insertUser, arg.ID, arg.Email, arg.Status)
 	var i InsertUserRow
 	err := row.Scan(
 		&i.ID,

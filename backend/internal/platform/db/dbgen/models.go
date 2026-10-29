@@ -24,6 +24,33 @@ type AuditLog struct {
 	CreatedAt     pgtype.Timestamptz
 }
 
+type AuthAttemptCounter struct {
+	Kind            string
+	SubjectHash     []byte
+	Failures        int32
+	WindowStartedAt pgtype.Timestamptz
+	LockedUntil     pgtype.Timestamptz
+}
+
+type AuthToken struct {
+	ID           uuid.UUID
+	TokenHash    []byte
+	Purpose      string
+	UserID       uuid.UUID
+	TenantID     *uuid.UUID
+	MembershipID *uuid.UUID
+	ExpiresAt    pgtype.Timestamptz
+	UsedAt       pgtype.Timestamptz
+	CreatedAt    pgtype.Timestamptz
+}
+
+type Conversation struct {
+	ID        uuid.UUID
+	TenantID  uuid.UUID
+	Summary   string
+	CreatedAt pgtype.Timestamptz
+}
+
 type Membership struct {
 	ID        uuid.UUID
 	TenantID  uuid.UUID
@@ -31,6 +58,14 @@ type Membership struct {
 	Role      string
 	Status    string
 	CreatedAt pgtype.Timestamptz
+}
+
+type MfaRecoveryCode struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	CodeHash  []byte
+	CreatedAt pgtype.Timestamptz
+	UsedAt    pgtype.Timestamptz
 }
 
 type PlatformAuditLog struct {
@@ -44,6 +79,21 @@ type PlatformAuditLog struct {
 	CreatedAt     pgtype.Timestamptz
 }
 
+type Session struct {
+	ID                uuid.UUID
+	TokenHash         []byte
+	UserID            uuid.UUID
+	TenantID          uuid.UUID
+	MembershipID      uuid.UUID
+	CsrfHash          []byte
+	CreatedAt         pgtype.Timestamptz
+	LastSeenAt        pgtype.Timestamptz
+	IdleExpiresAt     pgtype.Timestamptz
+	AbsoluteExpiresAt pgtype.Timestamptz
+	RevokedAt         pgtype.Timestamptz
+	Assurance         string
+}
+
 type Tenant struct {
 	ID        uuid.UUID
 	Timezone  string
@@ -54,9 +104,14 @@ type Tenant struct {
 }
 
 type User struct {
-	ID           uuid.UUID
-	Email        string
-	PasswordHash *string
-	Status       string
-	CreatedAt    pgtype.Timestamptz
+	ID              uuid.UUID
+	Email           string
+	PasswordHash    *string
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	TotpCiphertext  []byte
+	TotpKeyVersion  *string
+	TotpAadTenant   *uuid.UUID
+	TotpConfirmedAt pgtype.Timestamptz
+	IsSuperadmin    bool
 }
