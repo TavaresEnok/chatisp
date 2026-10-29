@@ -7,14 +7,18 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 
+	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/config"
+	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/httpapi"
 	"chatisp/internal/platform/logging"
+	"chatisp/internal/platform/mail"
 	"chatisp/internal/platform/migrate"
 	"chatisp/internal/platform/runtime"
 )
@@ -67,10 +71,48 @@ func run(ctx context.Context, args []string, environ []string, stdout, stderr io
 		if err != nil {
 			return err
 		}
-		return runtime.Run(ctx, runtime.Options{Mode: mode, Config: cfg, Logger: log})
+		var identity *auth.Service
+		if mode == config.ModeAPI || mode == config.ModeAll {
+			opened, cleanup, err := openPanelAuth(ctx, cfg, log)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+			identity = opened
+		}
+		return runtime.Run(ctx, runtime.Options{
+			Mode:           mode,
+			Config:         cfg,
+			Logger:         log,
+			Auth:           identity,
+			TrustedOrigins: cfg.PanelOrigins,
+		})
 	default:
 		return errors.New("modo desconhecido: use api, worker, migrate, all ou openapi")
 	}
+}
+
+func openPanelAuth(ctx context.Context, cfg config.Config, log *slog.Logger) (*auth.Service, func(), error) {
+	if cfg.AppDatabaseURL == "" && cfg.PlatformDatabaseURL == "" {
+		return nil, func() {}, nil
+	}
+	pools, err := db.OpenPools(ctx, db.RoleURLs{
+		App:      cfg.AppDatabaseURL,
+		Platform: cfg.PlatformDatabaseURL,
+	})
+	if err != nil {
+		return nil, nil, errors.New("falha ao preparar autenticação")
+	}
+	identity, err := auth.New(auth.Options{
+		Store:  db.NewStore(pools.App, pools.Platform),
+		Mail:   mail.NewSender(cfg.SMTPAddr, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom),
+		Logger: log,
+	})
+	if err != nil {
+		pools.Close()
+		return nil, nil, errors.New("falha ao preparar autenticação")
+	}
+	return identity, pools.Close, nil
 }
 
 func exportOpenAPI(args []string, stdout, stderr io.Writer) error {

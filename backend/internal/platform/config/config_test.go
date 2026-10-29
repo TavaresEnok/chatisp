@@ -97,3 +97,39 @@ func TestValidateRejectsBadDatabaseURLWithoutValue(t *testing.T) {
 		t.Fatalf("mensagem: %s", err)
 	}
 }
+
+func TestOptionalIdentityConfigDoesNotEchoSecrets(t *testing.T) {
+	secret := "super-secret-smtp"
+	_, err := Load([]string{
+		"CHATISP_ENV=test",
+		"CHATISP_DATABASE_URL=postgres://chatisp:local@127.0.0.1:5432/chatisp",
+		"CHATISP_APP_DATABASE_URL=postgres://app:" + secret + "@127.0.0.1:5432/chatisp",
+		"CHATISP_SMTP_PASSWORD=" + secret,
+		"CHATISP_PANEL_ORIGINS=https://user:" + secret + "@painel.example/extra",
+	})
+	if err == nil {
+		t.Fatal("esperava falha")
+	}
+	if strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "postgres://") {
+		t.Fatalf("mensagem expôs segredo: %s", err)
+	}
+	if !strings.Contains(err.Error(), "CHATISP_PLATFORM_DATABASE_URL") || !strings.Contains(err.Error(), "CHATISP_PANEL_ORIGINS") || !strings.Contains(err.Error(), "CHATISP_SMTP_ADDR") {
+		t.Fatalf("mensagem: %s", err)
+	}
+
+	cfg, err := Load([]string{
+		"CHATISP_ENV=test",
+		"CHATISP_DATABASE_URL=postgres://chatisp:local@127.0.0.1:5432/chatisp",
+		"CHATISP_APP_DATABASE_URL=postgres://app:local@127.0.0.1:5432/chatisp",
+		"CHATISP_PLATFORM_DATABASE_URL=postgres://platform:local@127.0.0.1:5432/chatisp",
+		"CHATISP_SMTP_ADDR=127.0.0.1:2525",
+		"CHATISP_SMTP_FROM=painel@example.com",
+		"CHATISP_PANEL_ORIGINS=https://painel.example, http://127.0.0.1:8080",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.PanelOrigins) != 2 || cfg.PanelOrigins[0] != "https://painel.example" {
+		t.Fatalf("origens: %#v", cfg.PanelOrigins)
+	}
+}

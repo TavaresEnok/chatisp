@@ -15,6 +15,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 
+	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/metrics"
 	"chatisp/internal/platform/version"
@@ -25,10 +26,13 @@ import (
 type ReadyFunc func(context.Context) error
 
 // Dependencies wires the HTTP API. Nil metrics are created internally.
+// A nil Auth still registers the panel routes and answers 503.
 type Dependencies struct {
-	Ready   ReadyFunc
-	Metrics *metrics.Metrics
-	Logger  *slog.Logger
+	Ready          ReadyFunc
+	Metrics        *metrics.Metrics
+	Logger         *slog.Logger
+	Auth           *auth.Service
+	TrustedOrigins []string
 }
 
 // API is the public HTTP handler and its generated OpenAPI document.
@@ -69,6 +73,10 @@ func New(deps Dependencies) *API {
 	router := chi.NewRouter()
 	router.Use(metricsMiddleware(deps.Metrics))
 	router.Use(recoverMiddleware(deps.Logger))
+	router.Use(func(next http.Handler) http.Handler { return panelSafety(next) })
+	router.Use(protectOrigins(deps.TrustedOrigins, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		Write(w, http.StatusForbidden, "origem não permitida")
+	})))
 
 	config := huma.DefaultConfig("Chat ISP", version.Version)
 	// Keep the document limited to the operations below. The default hooks add
@@ -111,6 +119,7 @@ func New(deps Dependencies) *API {
 		}
 		return &readyOutput{Body: readyBody{Status: "ready"}}, nil
 	})
+	registerPanel(api, deps)
 
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		Write(w, http.StatusNotFound, "o caminho solicitado não existe")
@@ -193,10 +202,18 @@ func localizeProblemResponses(_ *huma.OpenAPI, op *huma.Operation) {
 			response.Description = "Sucesso"
 		case "400":
 			response.Description = "Requisição inválida"
+		case "401":
+			response.Description = "Não autenticado"
+		case "403":
+			response.Description = "Acesso negado"
 		case "404":
 			response.Description = "Recurso não encontrado"
+		case "409":
+			response.Description = "Conflito"
 		case "422":
 			response.Description = "Dados inválidos"
+		case "429":
+			response.Description = "Muitas tentativas"
 		case "500":
 			response.Description = "Erro interno"
 		case "503":

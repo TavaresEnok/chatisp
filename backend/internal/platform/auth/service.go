@@ -1,0 +1,695 @@
+package auth
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+
+	"chatisp/internal/platform/db"
+	"chatisp/internal/platform/mail"
+)
+
+const (
+	purposeInvite = "invite"
+	purposeReset  = "password_reset"
+
+	kindLoginAccount = "login_account"
+	kindLoginIP      = "login_ip"
+	kindResetAccount = "reset_account"
+	kindResetIP      = "reset_ip"
+	kindTokenIP      = "token_ip"
+)
+
+// Policy is the calibrated session and lockout schedule.
+type Policy struct {
+	Idle              time.Duration
+	Absolute          time.Duration
+	InviteTTL         time.Duration
+	ResetTTL          time.Duration
+	LockoutThreshold  int
+	LockoutBase       time.Duration
+	LockoutMax        time.Duration
+	LockoutWindow     time.Duration
+	ResetLimit        int
+	TokenFailureLimit int
+}
+
+// DefaultPolicy is the production schedule.
+// Lockout grows from LockoutBase and doubles on each further failure, capped by LockoutMax.
+var DefaultPolicy = Policy{
+	Idle:              30 * time.Minute,
+	Absolute:          12 * time.Hour,
+	InviteTTL:         48 * time.Hour,
+	ResetTTL:          30 * time.Minute,
+	LockoutThreshold:  5,
+	LockoutBase:       time.Minute,
+	LockoutMax:        time.Hour,
+	LockoutWindow:     15 * time.Minute,
+	ResetLimit:        5,
+	TokenFailureLimit: 8,
+}
+
+// Principal is the authenticated panel actor. It carries no cookie secret.
+type Principal struct {
+	SessionID    uuid.UUID
+	UserID       uuid.UUID
+	Email        string
+	TenantID     uuid.UUID
+	MembershipID uuid.UUID
+	Role         string
+	ExpiresAt    time.Time
+}
+
+// IssuedSession is returned once. Token is the cookie value and is not stored.
+type IssuedSession struct {
+	Principal Principal
+	Token     string
+	CSRFToken string
+	ExpiresAt time.Time
+}
+
+// SessionInfo is one live session an administrator may revoke.
+type SessionInfo struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	Current   bool
+}
+
+// Invite is the public result of creating an invitation. The token is only in the e-mail.
+type Invite struct {
+	ExpiresAt time.Time
+}
+
+var (
+	ErrInvalidCredentials = errors.New("credenciais inválidas")
+	ErrLocked             = errors.New("muitas tentativas; tente novamente mais tarde")
+	ErrUnauthenticated    = errors.New("não autenticado")
+	ErrCSRF               = errors.New("token de CSRF ausente ou inválido")
+	ErrForbidden          = errors.New("acesso negado")
+	ErrInvalidToken       = errors.New("token inválido ou expirado")
+	ErrConflict           = errors.New("usuário já participa deste provedor")
+	ErrInvalidPassword    = errors.New("a senha não atende à política")
+	ErrInvalidEmail       = errors.New("e-mail inválido")
+	ErrInvalidRole        = errors.New("papel inválido")
+	ErrMail               = errors.New("não foi possível enviar o e-mail")
+	ErrUnavailable        = errors.New("autenticação indisponível")
+	ErrTenantRequired     = errors.New("selecione o provedor")
+)
+
+// Options wires the identity service. Now defaults to the wall clock.
+type Options struct {
+	Store  *db.Store
+	Mail   mail.Sender
+	Logger *slog.Logger
+	Policy Policy
+	Now    func() time.Time
+}
+
+// Service is the panel identity use-case. It does not log secrets.
+type Service struct {
+	store  *db.Store
+	mail   mail.Sender
+	log    *slog.Logger
+	policy Policy
+	now    func() time.Time
+	dummy  string
+}
+
+// New prepares the service and a dummy Argon2id hash used when the account has no password.
+func New(opts Options) (*Service, error) {
+	if opts.Store == nil {
+		return nil, ErrUnavailable
+	}
+	dummy, err := dummyPasswordHash()
+	if err != nil {
+		return nil, err
+	}
+	sender := opts.Mail
+	if sender == nil {
+		sender = mail.Unavailable{}
+	}
+	logger := opts.Logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	now := opts.Now
+	if now == nil {
+		now = func() time.Time { return time.Now().UTC() }
+	}
+	return &Service{
+		store:  opts.Store,
+		mail:   sender,
+		log:    logger,
+		policy: opts.Policy.normalized(),
+		now:    now,
+		dummy:  dummy,
+	}, nil
+}
+
+func (p Policy) normalized() Policy {
+	base := DefaultPolicy
+	if p.Idle <= 0 {
+		p.Idle = base.Idle
+	}
+	if p.Absolute <= 0 {
+		p.Absolute = base.Absolute
+	}
+	if p.InviteTTL <= 0 {
+		p.InviteTTL = base.InviteTTL
+	}
+	if p.ResetTTL <= 0 {
+		p.ResetTTL = base.ResetTTL
+	}
+	if p.LockoutThreshold <= 0 {
+		p.LockoutThreshold = base.LockoutThreshold
+	}
+	if p.LockoutBase <= 0 {
+		p.LockoutBase = base.LockoutBase
+	}
+	if p.LockoutMax <= 0 {
+		p.LockoutMax = base.LockoutMax
+	}
+	if p.LockoutWindow <= 0 {
+		p.LockoutWindow = base.LockoutWindow
+	}
+	if p.ResetLimit <= 0 {
+		p.ResetLimit = base.ResetLimit
+	}
+	if p.TokenFailureLimit <= 0 {
+		p.TokenFailureLimit = base.TokenFailureLimit
+	}
+	return p
+}
+
+var (
+	dummyOnce sync.Once
+	dummyHash string
+	dummyErr  error
+)
+
+func dummyPasswordHash() (string, error) {
+	dummyOnce.Do(func() {
+		raw, _, err := NewSecret()
+		if err != nil {
+			dummyErr = errors.New("falha ao preparar verificação de senha")
+			return
+		}
+		// NewSecret is 43 characters and satisfies the password policy.
+		dummyHash, dummyErr = HashPassword(raw)
+		if dummyErr != nil {
+			dummyErr = errors.New("falha ao preparar verificação de senha")
+		}
+	})
+	if dummyErr != nil {
+		return "", dummyErr
+	}
+	return dummyHash, nil
+}
+
+// Login checks the password, the progressive lock and opens a session.
+func (s *Service) Login(ctx context.Context, email, password, tenantRaw, ip string) (IssuedSession, error) {
+	normalized, err := normalizeEmail(email)
+	if err != nil {
+		return IssuedSession{}, ErrInvalidEmail
+	}
+	locked, err := s.loginLocked(ctx, normalized, ip)
+	if err != nil {
+		return IssuedSession{}, err
+	}
+	if locked {
+		s.log.Info("login bloqueado", "component", "auth")
+		return IssuedSession{}, ErrLocked
+	}
+
+	identity, found, err := s.loadIdentity(ctx, normalized)
+	if err != nil {
+		return IssuedSession{}, err
+	}
+	hash := s.dummy
+	if found && identity.PasswordHash != "" && identity.Status == "active" {
+		hash = identity.PasswordHash
+	}
+	match := false
+	if PasswordAcceptable(password) {
+		ok, verifyErr := VerifyPassword(password, hash)
+		if verifyErr != nil {
+			ok = false
+		}
+		match = ok
+	}
+	if !found || identity.PasswordHash == "" || identity.Status != "active" {
+		match = false
+	}
+	if !match {
+		if err := s.recordLoginFailure(ctx, normalized, ip); err != nil {
+			return IssuedSession{}, err
+		}
+		s.auditLoginFailure(ctx, identity, found)
+		s.log.Info("login recusado", "component", "auth")
+		return IssuedSession{}, ErrInvalidCredentials
+	}
+
+	membership, err := chooseMembership(identity.Memberships, tenantRaw)
+	if err != nil {
+		return IssuedSession{}, err
+	}
+	issued, err := s.issueSession(ctx, identity.UserID, identity.Email, membership, normalized)
+	if err != nil {
+		return IssuedSession{}, err
+	}
+	s.audit(ctx, membership.TenantID, issued.Principal.UserID, issued.Principal.MembershipID, "login", "session", &issued.Principal.SessionID, "success")
+	s.log.Info("login aceito", "component", "auth")
+	return issued, nil
+}
+
+// Logout revokes the session that owns the cookie. An unknown cookie still clears it.
+func (s *Service) Logout(ctx context.Context, rawToken string) error {
+	if rawToken == "" {
+		return nil
+	}
+	err := s.store.WithAuth(ctx, func(ctx context.Context) error {
+		return s.store.RevokeSessionByHash(ctx, HashSecret(rawToken), s.now())
+	})
+	if err != nil {
+		s.log.Error("falha ao encerrar sessão", "component", "auth")
+		return ErrUnavailable
+	}
+	s.log.Info("logout", "component", "auth")
+	return nil
+}
+
+// Authenticate loads the session for a cookie. Writes must present the bound CSRF token.
+// A revoked, idle or absolutely expired session is rejected on this request.
+func (s *Service) Authenticate(ctx context.Context, rawToken, csrf string, requireCSRF bool) (Principal, error) {
+	if rawToken == "" {
+		return Principal{}, ErrUnauthenticated
+	}
+	var record db.SessionRecord
+	err := s.store.WithAuth(ctx, func(ctx context.Context) error {
+		var err error
+		record, err = s.store.LoadSession(ctx, HashSecret(rawToken), s.now())
+		return err
+	})
+	if err != nil {
+		s.log.Error("falha ao ler sessão", "component", "auth")
+		return Principal{}, ErrUnavailable
+	}
+	switch record.Status {
+	case "active":
+	case "blocked":
+		return Principal{}, ErrForbidden
+	default:
+		return Principal{}, ErrUnauthenticated
+	}
+	if requireCSRF {
+		if csrf == "" || !SecretEqual(HashSecret(csrf), record.CSRFHash) {
+			s.log.Info("csrf recusado", "component", "auth")
+			return Principal{}, ErrCSRF
+		}
+	}
+	idle := s.now().Add(s.policy.Idle)
+	if idle.After(record.AbsoluteExpiresAt) {
+		idle = record.AbsoluteExpiresAt
+	}
+	var touched bool
+	err = s.store.WithAuth(ctx, func(ctx context.Context) error {
+		var err error
+		touched, err = s.store.TouchSession(ctx, record.ID, s.now(), idle)
+		return err
+	})
+	if err != nil {
+		s.log.Error("falha ao renovar sessão", "component", "auth")
+		return Principal{}, ErrUnavailable
+	}
+	if !touched {
+		return Principal{}, ErrUnauthenticated
+	}
+	return Principal{
+		SessionID:    record.ID,
+		UserID:       record.UserID,
+		Email:        record.Email,
+		TenantID:     record.TenantID,
+		MembershipID: record.MembershipID,
+		Role:         record.Role,
+		ExpiresAt:    record.AbsoluteExpiresAt,
+	}, nil
+}
+
+// Invite creates a single-use invitation and sends it. The token is not returned.
+func (s *Service) Invite(ctx context.Context, actor Principal, email, role string) (Invite, error) {
+	if actor.Role != "admin" {
+		return Invite{}, ErrForbidden
+	}
+	normalized, err := normalizeEmail(email)
+	if err != nil {
+		return Invite{}, ErrInvalidEmail
+	}
+	if !validRole(role) {
+		return Invite{}, ErrInvalidRole
+	}
+	user, err := s.ensureUser(ctx, normalized)
+	if err != nil {
+		return Invite{}, err
+	}
+	if user.Status == "disabled" {
+		return Invite{}, ErrForbidden
+	}
+	membership, err := s.ensureInvitedMembership(ctx, actor.TenantID, user.ID, role)
+	if err != nil {
+		return Invite{}, err
+	}
+	raw, hash, err := NewSecret()
+	if err != nil {
+		return Invite{}, ErrUnavailable
+	}
+	now := s.now()
+	expires := now.Add(s.policy.InviteTTL)
+	err = s.store.WithAuth(ctx, func(ctx context.Context) error {
+		return s.store.InsertAuthToken(ctx, db.NewAuthToken{
+			ID:           uuid.New(),
+			TokenHash:    hash,
+			Purpose:      purposeInvite,
+			UserID:       user.ID,
+			TenantID:     actor.TenantID,
+			MembershipID: membership.ID,
+			ExpiresAt:    expires,
+			Now:          now,
+		})
+	})
+	if err != nil {
+		s.log.Error("falha ao gravar convite", "component", "auth")
+		return Invite{}, ErrUnavailable
+	}
+	message := mail.Message{
+		To:      normalized,
+		Subject: "Convite para o Chat ISP",
+		Text: "Você recebeu um convite para acessar o Chat ISP.\n" +
+			"O token abaixo só pode ser usado uma vez e deixa de valer no prazo informado.\n\n" +
+			raw + "\n",
+	}
+	if err := s.mail.Send(ctx, message); err != nil {
+		_ = s.store.WithAuth(ctx, func(ctx context.Context) error {
+			return s.store.InvalidateAuthToken(ctx, hash, s.now())
+		})
+		s.log.Error("falha ao enviar convite", "component", "auth")
+		return Invite{}, ErrMail
+	}
+	s.audit(ctx, actor.TenantID, actor.UserID, actor.MembershipID, "invitation.create", "user", &user.ID, "success")
+	s.log.Info("convite enviado", "component", "auth")
+	return Invite{ExpiresAt: expires}, nil
+}
+
+// AcceptInvite consumes an invite and opens a session.
+func (s *Service) AcceptInvite(ctx context.Context, token, password, ip string) (IssuedSession, error) {
+	if err := s.guardTokenIP(ctx, ip); err != nil {
+		return IssuedSession{}, err
+	}
+	if !PasswordAcceptable(password) {
+		return IssuedSession{}, ErrInvalidPassword
+	}
+	passwordHash, err := HashPassword(password)
+	if err != nil {
+		return IssuedSession{}, ErrInvalidPassword
+	}
+	var result db.TokenResult
+	err = s.store.WithAuth(ctx, func(ctx context.Context) error {
+		var err error
+		result, err = s.store.AcceptInvite(ctx, HashSecret(token), passwordHash, s.now())
+		return err
+	})
+	if err != nil {
+		s.log.Error("falha ao aceitar convite", "component", "auth")
+		return IssuedSession{}, ErrUnavailable
+	}
+	if result.Status != "ok" {
+		s.noteTokenFailure(ctx, ip)
+		s.log.Info("convite recusado", "component", "auth")
+		if result.Status == "blocked" {
+			return IssuedSession{}, ErrForbidden
+		}
+		return IssuedSession{}, ErrInvalidToken
+	}
+	_ = s.clearKind(ctx, kindTokenIP, ip)
+	issued, err := s.issueForMembership(ctx, result.UserID, result.TenantID, result.MembershipID, ip)
+	if err != nil {
+		return IssuedSession{}, err
+	}
+	s.audit(ctx, result.TenantID, result.UserID, result.MembershipID, "invitation.accept", "user", &result.UserID, "success")
+	s.log.Info("convite aceito", "component", "auth")
+	return issued, nil
+}
+
+// RequestPasswordReset sends a single-use token when the account can use one.
+// The result is the same whether or not the e-mail exists.
+func (s *Service) RequestPasswordReset(ctx context.Context, email, ip string) error {
+	normalized, err := normalizeEmail(email)
+	if err != nil {
+		return nil
+	}
+	suppressed, err := s.resetSuppressed(ctx, normalized, ip)
+	if err != nil {
+		return err
+	}
+	if suppressed {
+		s.log.Info("recuperação limitada", "component", "auth")
+		return nil
+	}
+	identity, found, err := s.loadIdentity(ctx, normalized)
+	if err != nil {
+		return err
+	}
+	if !found || identity.Status != "active" || identity.PasswordHash == "" {
+		s.log.Info("recuperação ignorada", "component", "auth")
+		return nil
+	}
+	raw, hash, err := NewSecret()
+	if err != nil {
+		return ErrUnavailable
+	}
+	now := s.now()
+	expires := now.Add(s.policy.ResetTTL)
+	err = s.store.WithAuth(ctx, func(ctx context.Context) error {
+		return s.store.InsertAuthToken(ctx, db.NewAuthToken{
+			ID:        uuid.New(),
+			TokenHash: hash,
+			Purpose:   purposeReset,
+			UserID:    identity.UserID,
+			ExpiresAt: expires,
+			Now:       now,
+		})
+	})
+	if err != nil {
+		s.log.Error("falha ao gravar recuperação", "component", "auth")
+		return ErrUnavailable
+	}
+	message := mail.Message{
+		To:      normalized,
+		Subject: "Recuperação de senha do Chat ISP",
+		Text: "Recebemos um pedido para redefinir a senha do Chat ISP.\n" +
+			"O token abaixo só pode ser usado uma vez e deixa de valer no prazo curto desta mensagem.\n" +
+			"Se você não pediu, ignore este e-mail.\n\n" +
+			raw + "\n",
+	}
+	if err := s.mail.Send(ctx, message); err != nil {
+		_ = s.store.WithAuth(ctx, func(ctx context.Context) error {
+			return s.store.InvalidateAuthToken(ctx, hash, s.now())
+		})
+		s.log.Error("falha ao enviar recuperação", "component", "auth")
+		return ErrMail
+	}
+	if membership, ok := firstActive(identity.Memberships); ok {
+		s.audit(ctx, membership.TenantID, identity.UserID, membership.MembershipID, "password_reset.request", "user", &identity.UserID, "success")
+	}
+	s.log.Info("recuperação enviada", "component", "auth")
+	return nil
+}
+
+// ConfirmPasswordReset consumes a reset token, replaces the password and revokes sessions.
+func (s *Service) ConfirmPasswordReset(ctx context.Context, token, password, ip string) error {
+	if err := s.guardTokenIP(ctx, ip); err != nil {
+		return err
+	}
+	if !PasswordAcceptable(password) {
+		return ErrInvalidPassword
+	}
+	passwordHash, err := HashPassword(password)
+	if err != nil {
+		return ErrInvalidPassword
+	}
+	var result db.TokenResult
+	err = s.store.WithAuth(ctx, func(ctx context.Context) error {
+		var err error
+		result, err = s.store.ConfirmPasswordReset(ctx, HashSecret(token), passwordHash, s.now())
+		return err
+	})
+	if err != nil {
+		s.log.Error("falha ao confirmar recuperação", "component", "auth")
+		return ErrUnavailable
+	}
+	if result.Status != "ok" {
+		s.noteTokenFailure(ctx, ip)
+		s.log.Info("recuperação recusada", "component", "auth")
+		if result.Status == "blocked" {
+			return ErrForbidden
+		}
+		return ErrInvalidToken
+	}
+	_ = s.clearKind(ctx, kindTokenIP, ip)
+	s.auditPasswordReset(ctx, result.UserID)
+	s.log.Info("senha redefinida", "component", "auth")
+	return nil
+}
+
+// ListSessions returns live sessions of the actor's tenant. Only an admin may call it.
+func (s *Service) ListSessions(ctx context.Context, actor Principal) ([]SessionInfo, error) {
+	if actor.Role != "admin" {
+		return nil, ErrForbidden
+	}
+	var rows []db.ListedSession
+	err := s.store.WithAuth(ctx, func(ctx context.Context) error {
+		var err error
+		rows, err = s.store.ListTenantSessions(ctx, actor.TenantID, s.now())
+		return err
+	})
+	if err != nil {
+		s.log.Error("falha ao listar sessões", "component", "auth")
+		return nil, ErrUnavailable
+	}
+	out := make([]SessionInfo, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, SessionInfo{
+			ID:        row.ID,
+			UserID:    row.UserID,
+			CreatedAt: row.CreatedAt,
+			ExpiresAt: row.AbsoluteExpiresAt,
+			Current:   row.ID == actor.SessionID,
+		})
+	}
+	return out, nil
+}
+
+// RevokeSession revokes one session of the actor's tenant.
+func (s *Service) RevokeSession(ctx context.Context, actor Principal, sessionID uuid.UUID) error {
+	if sessionID == uuid.Nil {
+		return ErrUnauthenticated
+	}
+	var status string
+	err := s.store.WithAuth(ctx, func(ctx context.Context) error {
+		var err error
+		status, err = s.store.RevokeSessionForActor(ctx, sessionID, actor.TenantID, actor.UserID, s.now())
+		return err
+	})
+	if err != nil {
+		s.log.Error("falha ao revogar sessão", "component", "auth")
+		return ErrUnavailable
+	}
+	switch status {
+	case "ok":
+		s.audit(ctx, actor.TenantID, actor.UserID, actor.MembershipID, "session.revoke", "session", &sessionID, "success")
+		s.log.Info("sessão revogada", "component", "auth")
+		return nil
+	case "forbidden":
+		return ErrForbidden
+	default:
+		return ErrUnauthenticated
+	}
+}
+
+func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, email string, membership db.LoginMembership, clearAccount string) (IssuedSession, error) {
+	raw, tokenHash, err := NewSecret()
+	if err != nil {
+		return IssuedSession{}, ErrUnavailable
+	}
+	csrf, csrfHash, err := NewSecret()
+	if err != nil {
+		return IssuedSession{}, ErrUnavailable
+	}
+	now := s.now()
+	absolute := now.Add(s.policy.Absolute)
+	idle := now.Add(s.policy.Idle)
+	if idle.After(absolute) {
+		idle = absolute
+	}
+	sessionID := uuid.New()
+	err = s.store.WithAuth(ctx, func(ctx context.Context) error {
+		if clearAccount != "" {
+			if err := s.store.ClearFailures(ctx, kindLoginAccount, SubjectHash(kindLoginAccount, clearAccount)); err != nil {
+				return err
+			}
+		}
+		return s.store.InsertSession(ctx, db.NewSession{
+			ID:                sessionID,
+			TokenHash:         tokenHash,
+			UserID:            userID,
+			TenantID:          membership.TenantID,
+			MembershipID:      membership.MembershipID,
+			CSRFHash:          csrfHash,
+			Now:               now,
+			IdleExpiresAt:     idle,
+			AbsoluteExpiresAt: absolute,
+		})
+	})
+	if err != nil {
+		s.log.Error("falha ao abrir sessão", "component", "auth")
+		return IssuedSession{}, ErrUnavailable
+	}
+	return IssuedSession{
+		Principal: Principal{
+			SessionID:    sessionID,
+			UserID:       userID,
+			Email:        email,
+			TenantID:     membership.TenantID,
+			MembershipID: membership.MembershipID,
+			Role:         membership.Role,
+			ExpiresAt:    absolute,
+		},
+		Token:     raw,
+		CSRFToken: csrf,
+		ExpiresAt: absolute,
+	}, nil
+}
+
+func (s *Service) issueForMembership(ctx context.Context, userID, tenantID, membershipID uuid.UUID, _ string) (IssuedSession, error) {
+	var email string
+	err := s.store.WithPlatform(ctx, func(ctx context.Context) error {
+		user, err := s.store.FindUserByID(ctx, userID)
+		if err != nil {
+			return err
+		}
+		email = user.Email
+		return nil
+	})
+	if err != nil {
+		s.log.Error("falha ao concluir sessão do convite", "component", "auth")
+		return IssuedSession{}, ErrUnavailable
+	}
+	var role string
+	err = s.store.WithTenant(ctx, tenantID, func(ctx context.Context) error {
+		row, err := s.store.FindMembershipByUser(ctx, userID)
+		if err != nil {
+			return err
+		}
+		if row.ID != membershipID || row.Status != "active" {
+			return db.ErrNotFound
+		}
+		role = row.Role
+		return nil
+	})
+	if err != nil {
+		s.log.Error("falha ao concluir sessão do convite", "component", "auth")
+		return IssuedSession{}, ErrUnavailable
+	}
+	return s.issueSession(ctx, userID, email, db.LoginMembership{
+		TenantID:     tenantID,
+		MembershipID: membershipID,
+		Role:         role,
+		Status:       "active",
+		TenantStatus: "active",
+	}, email)
+}

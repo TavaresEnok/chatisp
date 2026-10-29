@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/config"
 	"chatisp/internal/platform/httpapi"
 	"chatisp/internal/platform/logging"
@@ -26,6 +27,8 @@ type Options struct {
 	Metrics         *metrics.Metrics
 	HTTPListener    net.Listener
 	MetricsListener net.Listener
+	Auth            *auth.Service
+	TrustedOrigins  []string
 }
 
 // Run serves until ctx is cancelled or a listener fails, then shuts down gracefully.
@@ -50,9 +53,11 @@ func Run(parent context.Context, opts Options) error {
 	var httpServer *http.Server
 	if opts.Mode == config.ModeAPI || opts.Mode == config.ModeAll {
 		api := httpapi.New(httpapi.Dependencies{
-			Ready:   gate.Check,
-			Metrics: meter,
-			Logger:  opts.Logger,
+			Ready:          gate.Check,
+			Metrics:        meter,
+			Logger:         opts.Logger,
+			Auth:           opts.Auth,
+			TrustedOrigins: opts.TrustedOrigins,
 		})
 		httpServer = newServer(api.Handler, opts.Logger)
 	}
