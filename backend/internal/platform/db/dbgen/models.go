@@ -81,10 +81,79 @@ type ContactChannelIdentity struct {
 }
 
 type Conversation struct {
-	ID        uuid.UUID
-	TenantID  uuid.UUID
-	Summary   string
-	CreatedAt pgtype.Timestamptz
+	ID                       uuid.UUID
+	TenantID                 uuid.UUID
+	Summary                  string
+	CreatedAt                pgtype.Timestamptz
+	InboxID                  *uuid.UUID
+	ContactID                *uuid.UUID
+	ContactIdentityID        *uuid.UUID
+	Status                   string
+	Controller               string
+	ControllerEpoch          int64
+	Version                  int64
+	AssigneeID               *uuid.UUID
+	Protocol                 *string
+	ProtocolPeriod           *string
+	ProtocolCommunicated     bool
+	ExternalProtocol         *string
+	LastCustomerMessageAt    pgtype.Timestamptz
+	LastEligibleHumanReplyAt pgtype.Timestamptz
+	WaitingSince             pgtype.Timestamptz
+	CycleNumber              int32
+	UpdatedAt                pgtype.Timestamptz
+}
+
+type ConversationCycle struct {
+	TenantID          uuid.UUID
+	ID                uuid.UUID
+	ConversationID    uuid.UUID
+	CycleNumber       int32
+	OpenedAt          pgtype.Timestamptz
+	ClosedAt          pgtype.Timestamptz
+	CloseReason       *string
+	CloseResult       *string
+	CloseSummary      *string
+	CloseAuthorID     *uuid.UUID
+	CloseMembershipID *uuid.UUID
+	CloseAuthorKind   *string
+	ExternalReference *string
+}
+
+type ConversationEvent struct {
+	TenantID        uuid.UUID
+	ID              uuid.UUID
+	ConversationID  uuid.UUID
+	CycleNumber     int32
+	Kind            string
+	ActorID         *uuid.UUID
+	At              pgtype.Timestamptz
+	Version         int64
+	ControllerEpoch int64
+	Controller      string
+	AssigneeID      *uuid.UUID
+}
+
+type CredentialSecret struct {
+	TenantID   uuid.UUID
+	ID         uuid.UUID
+	Entity     string
+	EntityID   uuid.UUID
+	Field      string
+	KeyVersion string
+	Ciphertext []byte
+	Aad        string
+	CreatedAt  pgtype.Timestamptz
+}
+
+type IdempotencyRecord struct {
+	TenantID        uuid.UUID
+	ID              uuid.UUID
+	PrincipalID     uuid.UUID
+	Operation       string
+	ClientRequestID string
+	RequestHash     []byte
+	CreatedAt       pgtype.Timestamptz
 }
 
 type Inbox struct {
@@ -98,6 +167,32 @@ type Inbox struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
+type InboxSendLease struct {
+	TenantID     uuid.UUID
+	InboxID      uuid.UUID
+	OwnerID      uuid.UUID
+	LeaseVersion int64
+	ExpiresAt    pgtype.Timestamptz
+}
+
+type IngressDelivery struct {
+	ID         uuid.UUID
+	Source     string
+	AppID      string
+	BodySha256 []byte
+	Body       []byte
+	State      string
+	ReceivedAt pgtype.Timestamptz
+}
+
+type IngressQuarantine struct {
+	ID         uuid.UUID
+	DeliveryID uuid.UUID
+	Reason     string
+	RemoteRef  string
+	CreatedAt  pgtype.Timestamptz
+}
+
 type Membership struct {
 	ID        uuid.UUID
 	TenantID  uuid.UUID
@@ -107,12 +202,105 @@ type Membership struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type Message struct {
+	TenantID           uuid.UUID
+	ID                 uuid.UUID
+	ConversationID     uuid.UUID
+	ConnectorID        uuid.UUID
+	IdempotencyID      *uuid.UUID
+	ExternalMessageID  *string
+	Direction          string
+	Origin             string
+	Visibility         string
+	Body               string
+	LocalState         *string
+	Controller         *string
+	ControllerEpoch    *int64
+	ClientRequestID    *string
+	AuthorMembershipID *uuid.UUID
+	TrustedAt          pgtype.Timestamptz
+	IngestedAt         pgtype.Timestamptz
+	Historical         bool
+}
+
+type MessageStatusEvent struct {
+	TenantID          uuid.UUID
+	ID                uuid.UUID
+	ConnectorID       uuid.UUID
+	MessageID         *uuid.UUID
+	ExternalMessageID *string
+	DedupKey          string
+	Kind              string
+	TrustedAt         pgtype.Timestamptz
+	IngestedAt        pgtype.Timestamptz
+	BillingCategory   *string
+	Billable          string
+	Pending           bool
+	Detail            string
+}
+
+type MetaApp struct {
+	TenantID  uuid.UUID
+	ID        uuid.UUID
+	AppID     string
+	Status    string
+	CreatedAt pgtype.Timestamptz
+}
+
+type MetaAppSecret struct {
+	TenantID   uuid.UUID
+	MetaAppID  uuid.UUID
+	KeyVersion string
+	Ciphertext []byte
+	Aad        string
+}
+
+type MetaPhoneNumber struct {
+	TenantID      uuid.UUID
+	ID            uuid.UUID
+	MetaWabaID    uuid.UUID
+	PhoneNumberID string
+	DisplayNumber *string
+	Status        string
+	ConnectorID   uuid.UUID
+	InboxID       uuid.UUID
+}
+
+type MetaWaba struct {
+	TenantID  uuid.UUID
+	ID        uuid.UUID
+	MetaAppID uuid.UUID
+	WabaID    string
+	Status    string
+}
+
 type MfaRecoveryCode struct {
 	ID        uuid.UUID
 	UserID    uuid.UUID
 	CodeHash  []byte
 	CreatedAt pgtype.Timestamptz
 	UsedAt    pgtype.Timestamptz
+}
+
+type OutboundAttempt struct {
+	TenantID          uuid.UUID
+	ID                uuid.UUID
+	MessageID         uuid.UUID
+	ConversationID    uuid.UUID
+	IdempotencyID     *uuid.UUID
+	AttemptNo         int32
+	State             string
+	Controller        string
+	ControllerEpoch   int64
+	Origin            string
+	LeaseVersion      *int64
+	DispatchedAt      pgtype.Timestamptz
+	DriverRef         *string
+	ErrorCode         *string
+	ErrorMessage      *string
+	PreviousAttemptID *uuid.UUID
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
 }
 
 type PlatformAuditLog struct {
@@ -124,6 +312,41 @@ type PlatformAuditLog struct {
 	Result        string
 	CorrelationID *string
 	CreatedAt     pgtype.Timestamptz
+}
+
+type ProtocolCounter struct {
+	TenantID  uuid.UUID
+	Period    string
+	LastValue int64
+}
+
+type RealtimeEvent struct {
+	TenantID      uuid.UUID
+	Seq           int64
+	ID            uuid.UUID
+	EventType     string
+	AggregateType string
+	AggregateID   uuid.UUID
+	Version       int64
+	Payload       json.RawMessage
+	CreatedAt     pgtype.Timestamptz
+}
+
+type RealtimeTenantCursor struct {
+	TenantID    uuid.UUID
+	Seq         int64
+	RetainAfter int64
+}
+
+type SendReservation struct {
+	TenantID     uuid.UUID
+	ID           uuid.UUID
+	InboxID      uuid.UUID
+	AttemptID    uuid.UUID
+	OwnerID      uuid.UUID
+	LeaseVersion int64
+	ExpiresAt    pgtype.Timestamptz
+	State        string
 }
 
 type Session struct {
@@ -150,6 +373,20 @@ type Tenant struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type TenantJobReservation struct {
+	TenantID  uuid.UUID
+	ID        uuid.UUID
+	QueueName string
+	OwnerID   uuid.UUID
+	ExpiresAt pgtype.Timestamptz
+}
+
+type TenantJobSlot struct {
+	TenantID  uuid.UUID
+	QueueName string
+	MaxSlots  int32
+}
+
 type User struct {
 	ID              uuid.UUID
 	Email           string
@@ -161,4 +398,18 @@ type User struct {
 	TotpAadTenant   *uuid.UUID
 	TotpConfirmedAt pgtype.Timestamptz
 	IsSuperadmin    bool
+}
+
+type WebhookItem struct {
+	TenantID      uuid.UUID
+	ID            uuid.UUID
+	DeliveryID    uuid.UUID
+	InboxID       uuid.UUID
+	ConnectorID   uuid.UUID
+	PhoneNumberID string
+	ExternalKey   string
+	Kind          string
+	State         string
+	Payload       json.RawMessage
+	CreatedAt     pgtype.Timestamptz
 }
