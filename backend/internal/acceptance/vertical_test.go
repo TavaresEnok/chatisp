@@ -27,6 +27,7 @@ import (
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/jobs"
 	"chatisp/internal/platform/testdb"
+	"chatisp/internal/sectors"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
@@ -244,6 +245,22 @@ func TestVertical(t *testing.T) {
 		}
 		if err := json.Unmarshal(request("POST", "/api/panel/channels/meta", b, a, 200), &out); err != nil || out.InboxID == "" {
 			t.Fatalf("configuração: %+v %v", out, err)
+		}
+		// New boxes require explicit operational configuration before ingress.
+		sectorService := sectors.New(store)
+		principal := sectors.Principal{TenantID: a.tenant, UserID: a.user, MembershipID: a.member, Role: "admin"}
+		sector, err := sectorService.Create(ctx, principal, "Atendimento "+suffix)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := sectorService.Bind(ctx, principal, sector.ID, a.member, "membership", true); err != nil {
+			t.Fatal(err)
+		}
+		if err := sectorService.Bind(ctx, principal, sector.ID, uuid.MustParse(out.InboxID), "inbox", true); err != nil {
+			t.Fatal(err)
+		}
+		if err := sectorService.SetDefault(ctx, principal, sector.ID, uuid.MustParse(out.InboxID)); err != nil {
+			t.Fatal(err)
 		}
 		return out.InboxID
 	}

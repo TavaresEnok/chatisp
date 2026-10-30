@@ -20,15 +20,19 @@ import (
 	"chatisp/internal/attendance/pipeline"
 	"chatisp/internal/attendance/service"
 	"chatisp/internal/channel/configuration"
+	"chatisp/internal/contactdirectory"
+	"chatisp/internal/notifications"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/config"
 	"chatisp/internal/platform/crypto"
 	"chatisp/internal/platform/db"
+	panelapi "chatisp/internal/platform/httpapi"
 	"chatisp/internal/platform/jobs"
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/runtime"
 	"chatisp/internal/platform/testdb"
 	"chatisp/internal/realtime"
+	"chatisp/internal/sectors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -198,8 +202,23 @@ func runDemo(ctx context.Context, apiListener, metricsListener, fakeListener net
 	if err = identity.ConfirmEnrollment(ctx, actor, code); err != nil {
 		return err
 	}
-	_, err = channels.Configure(ctx, auth.HashSecret(issued.Token), configuration.Manual{InboxName: "SIMULAÇÃO Atendimento", DisplayNumber: "+5511999990001", AppID: info.App, AppSecret: info.Secret, WABAID: info.Waba, PhoneNumberID: info.Phone, AccessToken: uuid.NewString()})
+	configured, err := channels.Configure(ctx, auth.HashSecret(issued.Token), configuration.Manual{InboxName: "SIMULAÇÃO Atendimento", DisplayNumber: "+5511999990001", AppID: info.App, AppSecret: info.Secret, WABAID: info.Waba, PhoneNumberID: info.Phone, AccessToken: uuid.NewString()})
 	if err != nil {
+		return err
+	}
+	sectorService := sectors.New(store)
+	principal := sectors.Principal{TenantID: tenant, UserID: admin, MembershipID: adminMember, Role: "admin"}
+	sector, err := sectorService.Create(ctx, principal, "SIMULAÇÃO Atendimento")
+	if err != nil {
+		return err
+	}
+	if err = sectorService.Bind(ctx, principal, sector.ID, configured.InboxID, "inbox", true); err != nil {
+		return err
+	}
+	if err = sectorService.Bind(ctx, principal, sector.ID, member, "membership", true); err != nil {
+		return err
+	}
+	if err = sectorService.SetDefault(ctx, principal, sector.ID, configured.InboxID); err != nil {
 		return err
 	}
 	inserts, err := jobs.New(nil, jobs.Handlers{})
@@ -235,7 +254,7 @@ func runDemo(ctx context.Context, apiListener, metricsListener, fakeListener net
 	if ready != nil {
 		ready <- info
 	}
-	return runtime.Run(ctx, runtime.Options{Mode: config.ModeAll, Config: config.Config{LogLevel: "info", ShutdownTimeout: 15 * time.Second}, HTTPListener: apiListener, MetricsListener: metricsListener, Auth: identity, Attendance: attendance, Channels: channels, Realtime: rt, Webhook: wh, JobsClient: worker, TrustedOrigins: origins, ReadyChecks: []func(context.Context) error{pools.App.Ping, pools.Platform.Ping, pools.Ingress.Ping, wp.Ping}})
+	return runtime.Run(ctx, runtime.Options{Mode: config.ModeAll, Config: config.Config{LogLevel: "info", ShutdownTimeout: 15 * time.Second}, HTTPListener: apiListener, MetricsListener: metricsListener, Auth: identity, Attendance: attendance, Channels: channels, Sectors: sectorService, Contacts: contactdirectory.Service{DB: store, Visibility: panelapi.ContactVisibility{}}, Notifications: notifications.New(store), Realtime: rt, Webhook: wh, JobsClient: worker, TrustedOrigins: origins, ReadyChecks: []func(context.Context) error{pools.App.Ping, pools.Platform.Ping, pools.Ingress.Ping, wp.Ping}})
 }
 
 // panelProxy forwards API upgrades directly to the real server, and assets to Vite.

@@ -2,7 +2,9 @@ package sectors
 
 import (
 	"context"
+	"errors"
 
+	attendanceStore "chatisp/internal/attendance/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -101,13 +103,33 @@ func RequireInbox(ctx context.Context, tx pgx.Tx, p Principal, inboxID uuid.UUID
 	return nil
 }
 
-// RequireConversation returns ErrForbidden unless the principal may access the conversation; on success the authorization is pinned for the rest of the tx.
+// RequireConversation pins authorization on success. Wrong inbox for an otherwise
+// authorized conversation is attendanceStore.ErrNotFound; other denials are ErrForbidden.
 func RequireConversation(ctx context.Context, tx pgx.Tx, p Principal, inboxID, conversationID uuid.UUID) error {
 	ok, e := CanAccessConversation(ctx, tx, p, inboxID, conversationID)
 	if e != nil {
 		return e
 	}
 	if !ok {
+		// Preserve M2's not-found response for a wrong inbox only when the
+		// conversation is independently authorized in its actual inbox. Missing,
+		// cross-tenant and revoked conversations remain forbidden. Return the
+		// attendance storage sentinel understood by existing consumer adapters;
+		// this is still a denial, never permission to act through another inbox.
+		var actualInbox uuid.UUID
+		err := tx.QueryRow(ctx, `SELECT inbox_id FROM conversations WHERE tenant_id=$1 AND id=$2 AND inbox_id IS NOT NULL FOR SHARE`, p.TenantID, conversationID).Scan(&actualInbox)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if err == nil && actualInbox != inboxID {
+			visible, err := CanAccessConversation(ctx, tx, p, actualInbox, conversationID)
+			if err != nil {
+				return err
+			}
+			if visible {
+				return attendanceStore.ErrNotFound
+			}
+		}
 		return ErrForbidden
 	}
 	return nil
