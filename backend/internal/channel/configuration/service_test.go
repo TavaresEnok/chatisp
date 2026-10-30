@@ -331,29 +331,22 @@ func TestConfigureReportsPersistedAppSecretKeyVersion(t *testing.T) {
 	}
 
 	form.AppSecret = "segredo-teste-local-novo1"
-	moved, err := later.Configure(ctx, admin.hash, form)
-	if err != nil {
-		t.Fatal(err)
+	form.AccessToken = "token-teste-local-alterado"
+	if _, err := later.Configure(ctx, admin.hash, form); !errors.Is(err, ErrConflict) {
+		t.Fatalf("troca unilateral do segredo: %v", err)
 	}
-	if moved.AppSecretKeyVersion != "v2" || moved.TokenKeyVersion != "v2" {
-		t.Fatalf("segredo novo: %+v", moved)
-	}
-	if version := storedAppSecretVersion(t, admin.tenant); version != "v2" {
-		t.Fatalf("versão após troca: %s", version)
-	}
-	refreshed, err := later.Status(ctx, admin.hash)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, box := range refreshed.Boxes {
-		if box.AppSecretKeyVersion != "v2" {
-			t.Fatalf("status após troca: %+v", box)
-		}
+	if version := storedAppSecretVersion(t, admin.tenant); version != "v1" {
+		t.Fatalf("segredo alterado após conflito: %s", version)
 	}
 	trusted, err := later.Server().ResolveApp(ctx, form.AppID)
-	if err != nil || trusted.AppSecret != form.AppSecret {
-		t.Fatalf("abertura após troca de chave: %v", err)
+	if err != nil || trusted.AppSecret != testSecret {
+		t.Fatalf("segredo original após conflito: %v", err)
 	}
+	material, err := later.Server().ResolveMaterial(ctx, admin.tenant, created.ConnectorID, saved.Version)
+	if err != nil || material.AccessToken != testToken {
+		t.Fatalf("token ou versão alterados após conflito: %v", err)
+	}
+
 }
 
 func TestIngressAppSecretAndStaleCredentialReport(t *testing.T) {
@@ -491,14 +484,8 @@ func TestIngressAppSecretAndStaleCredentialReport(t *testing.T) {
 }
 
 func setAppStatus(ctx context.Context, tenantID uuid.UUID, appID, status string) error {
-	return testStore.WithTenantTx(ctx, tenantID, func(ctx context.Context, tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `
-			UPDATE meta_apps
-			SET status = $3
-			WHERE tenant_id = $1
-			  AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-			  AND app_id = $2
-		`, tenantID, appID, status)
+	return db.WithIngressTx(ctx, testPools.Ingress, func(ctx context.Context, tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `UPDATE meta_app_registry SET status = $2 WHERE app_id = $1`, appID, status)
 		if err != nil {
 			return err
 		}
@@ -519,7 +506,7 @@ func TestPrivilegesQuarantineAndDiscarded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	boxB, err := svc.Configure(ctx, adminB.hash, manual("Caixa B", "app-teste-q2", "waba-teste-q2", "phone-teste-q2", "token-teste-local-dddd", "segredo-teste-local-dddd"))
+	boxB, err := svc.Configure(ctx, adminB.hash, manual("Caixa B", "app-teste-q1", "waba-teste-q2", "phone-teste-q2", "token-teste-local-dddd", testSecret))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -527,19 +514,19 @@ func TestPrivilegesQuarantineAndDiscarded(t *testing.T) {
 		t.Fatal("caixas de tenants diferentes colidiram")
 	}
 
-	var deliveryA, deliveryB uuid.UUID
+	var deliveryB uuid.UUID
 	bodyA := []byte(`{"body":"` + testMarker + `-A"}`)
 	bodyB := []byte(`{"body":"` + testMarker + `-B"}`)
 	if err := db.WithIngressTx(ctx, testPools.Ingress, func(ctx context.Context, tx pgx.Tx) error {
-		first, err := (store.Repo{}).StoreDelivery(ctx, tx, "app-teste-q1", bodyA, "unknown_phone", "5511900000099")
+		_, err := (store.Repo{}).StoreDelivery(ctx, tx, "app-teste-q1", bodyA, "unknown_phone", "5511900000099")
 		if err != nil {
 			return err
 		}
-		second, err := (store.Repo{}).StoreDelivery(ctx, tx, "app-teste-q2", bodyB, "unknown_phone", "5511900000088")
+		second, err := (store.Repo{}).StoreDelivery(ctx, tx, "app-teste-q1", bodyB, "unknown_phone", "5511900000088")
 		if err != nil {
 			return err
 		}
-		deliveryA, deliveryB = first.ID, second.ID
+		deliveryB = second.ID
 		routed, err := (store.Repo{}).StoreDelivery(ctx, tx, "app-teste-q1", []byte(`{"item":"ok-`+testMarker+`"}`), "", "")
 		if err != nil {
 			return err
@@ -597,8 +584,12 @@ func TestPrivilegesQuarantineAndDiscarded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(view.Quarantine) != 1 || view.Quarantine[0].DeliveryID != deliveryA || view.Quarantine[0].Reason != "unknown_phone" {
+	if len(view.Quarantine) != 0 {
 		t.Fatalf("quarentena: %+v", view.Quarantine)
+	}
+	viewB, err := svc.Inspect(ctx, adminB.hash)
+	if err != nil || len(viewB.Quarantine) != 0 || len(viewB.Items) != 0 {
+		t.Fatalf("inspeção do segundo tenant: %+v %v", viewB, err)
 	}
 	if len(view.Items) != 1 || view.Items[0].ExternalKey != "item-quarentena" || view.Items[0].State != "quarantined" {
 		t.Fatalf("itens: %+v", view.Items)
@@ -628,6 +619,8 @@ func TestPrivilegesQuarantineAndDiscarded(t *testing.T) {
 	assertDenied(t, execDenied(testPools.Ingress, ctx, `SELECT count(*) FROM messages`))
 	assertDenied(t, execDenied(testPools.Ingress, ctx, `SELECT ciphertext FROM credential_secrets`))
 	assertDenied(t, execDenied(testPools.App, ctx, `SELECT body FROM ingress_deliveries`))
+	assertDenied(t, execDenied(testPools.App, ctx, `SELECT ciphertext FROM meta_app_registry_secrets`))
+	assertDenied(t, execDenied(testPools.App, ctx, `SELECT app_id FROM meta_app_registry`))
 
 	var platformMessages, ingressSecrets, appEnvelope bool
 	if err := conn.QueryRow(ctx, `
@@ -757,7 +750,7 @@ func storedAppSecretVersion(t *testing.T, tenantID uuid.UUID) string {
 	var version string
 	err := testStore.WithTenantTx(context.Background(), tenantID, func(ctx context.Context, tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
-			SELECT key_version FROM meta_app_secrets WHERE tenant_id = $1
+			SELECT meta_app_secret_version(id) FROM meta_apps WHERE tenant_id = $1
 		`, tenantID).Scan(&version)
 	})
 	if err != nil {
@@ -810,10 +803,11 @@ func transplantSecrets(ctx context.Context, from, to uuid.UUID) error {
 		return fmt.Errorf("token transplantado em %d linhas", tag.RowsAffected())
 	}
 	tag, err = conn.Exec(ctx, `
-		UPDATE meta_app_secrets AS dst
-		SET ciphertext = src.ciphertext, aad = src.aad, key_version = src.key_version
-		FROM meta_app_secrets AS src
-		WHERE src.tenant_id = $1 AND dst.tenant_id = $2
+		UPDATE meta_app_registry_secrets AS dst
+		SET ciphertext = src.ciphertext, key_version = src.key_version
+		FROM meta_app_registry_secrets AS src, meta_apps AS a, meta_apps AS b
+		WHERE a.tenant_id = $1 AND b.tenant_id = $2
+		  AND src.registry_id = a.registry_id AND dst.registry_id = b.registry_id
 	`, from, to)
 	if err != nil {
 		return err

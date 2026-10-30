@@ -52,6 +52,11 @@ func (s *Server) ResolveMaterial(ctx context.Context, tenantID, connectorID uuid
 	if err != nil {
 		return Material{}, mapWriteErr(err)
 	}
+	trusted, err := s.ResolveApp(ctx, material.AppID)
+	if err != nil {
+		return Material{}, err
+	}
+	material.AppSecret = trusted.AppSecret
 	return material, nil
 }
 
@@ -68,40 +73,15 @@ func (s *Server) ResolveApp(ctx context.Context, appID string) (TrustedApp, erro
 	if appID == "" {
 		return TrustedApp{}, ErrInvalid
 	}
-	var trusted TrustedApp
-	err := db.WithIngressTx(ctx, s.svc.ingress, func(ctx context.Context, tx pgx.Tx) error {
-		var tenantID, appRow uuid.UUID
-		var storedAppID string
-		err := tx.QueryRow(ctx, `
-			SELECT tenant_id, id, app_id
-			FROM meta_apps
-			WHERE app_id = $1
-			  AND status = 'active'
-		`, appID).Scan(&tenantID, &appRow, &storedAppID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if tenantID == uuid.Nil || appRow == uuid.Nil || storedAppID == "" {
-			return ErrNotFound
-		}
-		sealed, err := (store.Repo{}).ReadAppSecret(ctx, tx, storedAppID)
-		if err != nil {
-			return err
-		}
-		secret, err := s.svc.open(tenantID, appRow, entityApp, fieldAppSecret, sealed)
-		if err != nil {
-			return err
-		}
-		trusted = TrustedApp{AppID: storedAppID, AppSecret: secret}
-		return nil
-	})
+	r, err := s.svc.registry(ctx, appID)
 	if err != nil {
 		return TrustedApp{}, mapWriteErr(err)
 	}
-	return trusted, nil
+	secret, err := s.svc.openRegistry(r)
+	if err != nil {
+		return TrustedApp{}, mapWriteErr(err)
+	}
+	return TrustedApp{AppID: appID, AppSecret: secret}, nil
 }
 
 // ReportInvalidCredential marks the connector degraded when version is still
@@ -175,13 +155,11 @@ func (s *Service) loadMaterial(ctx context.Context, tx pgx.Tx, tenantID, connect
 		appRow, wabaRow                    uuid.UUID
 		appID, wabaID, phoneID             string
 		token                              store.Secret
-		appSecret                          store.Secret
 	)
 	err := tx.QueryRow(ctx, `
 		SELECT c.status, c.enabled, c.connector_type, c.version,
 		       a.id, a.app_id, w.id, w.waba_id, p.phone_number_id,
-		       cred.key_version, cred.ciphertext, cred.aad,
-		       sec.key_version, sec.ciphertext, sec.aad
+		       cred.key_version, cred.ciphertext, cred.aad
 		FROM channel_connectors AS c
 		JOIN meta_phone_numbers AS p
 		  ON p.tenant_id = c.tenant_id AND p.connector_id = c.id AND p.status = 'active'
@@ -194,8 +172,6 @@ func (s *Service) loadMaterial(ctx context.Context, tx pgx.Tx, tenantID, connect
 		 AND cred.entity = 'channel_connector'
 		 AND cred.entity_id = c.id
 		 AND cred.field = 'access_token'
-		JOIN meta_app_secrets AS sec
-		  ON sec.tenant_id = a.tenant_id AND sec.meta_app_id = a.id
 		WHERE c.tenant_id = $1
 		  AND c.tenant_id = `+tenantSetting+`
 		  AND c.id = $2
@@ -203,7 +179,6 @@ func (s *Service) loadMaterial(ctx context.Context, tx pgx.Tx, tenantID, connect
 		&status, &enabled, &connectorType, &versionText,
 		&appRow, &appID, &wabaRow, &wabaID, &phoneID,
 		&token.KeyVersion, &token.Ciphertext, &token.AAD,
-		&appSecret.KeyVersion, &appSecret.Ciphertext, &appSecret.AAD,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Material{}, ErrNotFound
@@ -228,13 +203,9 @@ func (s *Service) loadMaterial(ctx context.Context, tx pgx.Tx, tenantID, connect
 	if err != nil {
 		return Material{}, err
 	}
-	secret, err := s.open(tenantID, appRow, entityApp, fieldAppSecret, appSecret)
-	if err != nil {
-		return Material{}, err
-	}
 	return Material{
 		Version: current, AppID: appID, WABAID: wabaID, PhoneNumberID: phoneID,
-		AccessToken: access, AppSecret: secret,
+		AccessToken: access,
 	}, nil
 }
 

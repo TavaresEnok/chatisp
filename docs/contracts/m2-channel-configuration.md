@@ -38,7 +38,7 @@ O tipo ativo não é atualizado por este pacote. A linha `evolution` continua re
 
 `Inspect` devolve três listas, só com identificadores:
 
-- quarentena de ingresso cujo `app_id` pertence ao tenant, sem o corpo de `ingress_deliveries`;
+- itens de quarentena atribuídos ao tenant; quarentenas globais de ingresso sem atribuição confiável ficam restritas ao servidor, inclusive quando o App ID é compartilhado;
 - `webhook_items` do tenant com `state=quarantined`, sem payload;
 - jobs `discarded` em `river.river_job` cujo `args.tenant_id` é o tenant da sessão, sem argumentos e sem texto de erro.
 

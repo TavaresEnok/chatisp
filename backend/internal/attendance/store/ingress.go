@@ -32,19 +32,25 @@ func (Repo) RegisterMeta(ctx context.Context, tx pgx.Tx, in MetaBinding) error {
 	if !ok || in.Secret.KeyVersion == "" || len(in.Secret.Ciphertext) == 0 || in.Secret.AAD == "" {
 		return ErrInvalid
 	}
+	registryID := in.RegistryID
+	create := registryID == uuid.Nil
+	if create {
+		registryID = in.AppRowID
+	} else if in.Capability == uuid.Nil {
+		return ErrInvalid
+	}
+	var bindingID uuid.UUID
+	err := tx.QueryRow(ctx, `SELECT bind_meta_app($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+		appID, in.AppRowID, registryID, in.Secret.KeyVersion, in.Secret.Ciphertext,
+		in.AADScope, in.AADTenantID, in.AADEntity, in.AADEntityID, in.AADField,
+		in.Secret.AAD, create, in.Capability).Scan(&bindingID)
+	if err != nil {
+		return err
+	}
+	if bindingID != in.AppRowID {
+		return ErrInvalid
+	}
 	q := queries(tx)
-	if err := q.InsertMetaApp(ctx, dbgen.InsertMetaAppParams{TenantID: in.TenantID, ID: in.AppRowID, AppID: appID}); err != nil {
-		return err
-	}
-	if err := q.InsertMetaSecret(ctx, dbgen.InsertMetaSecretParams{
-		TenantID:   in.TenantID,
-		MetaAppID:  in.AppRowID,
-		KeyVersion: in.Secret.KeyVersion,
-		Ciphertext: in.Secret.Ciphertext,
-		Aad:        in.Secret.AAD,
-	}); err != nil {
-		return err
-	}
 	if err := q.InsertMetaWaba(ctx, dbgen.InsertMetaWabaParams{
 		TenantID:  in.TenantID,
 		ID:        in.WabaRowID,

@@ -34,13 +34,17 @@ func (s *Service) Configure(ctx context.Context, sessionHash []byte, in Manual) 
 	if err != nil {
 		return Box{}, err
 	}
+	registry, err := s.prepareRegistry(ctx, in.AppID, in.AppSecret)
+	if err != nil {
+		return Box{}, mapWriteErr(err)
+	}
 	var box Box
 	err = s.store.WithTenantTx(ctx, actor.TenantID, func(ctx context.Context, tx pgx.Tx) error {
 		if err := s.requireAdmin(ctx, actor); err != nil {
 			return err
 		}
 		var err error
-		box, err = s.configure(ctx, tx, actor, in)
+		box, err = s.configure(ctx, tx, actor, in, registry)
 		return err
 	})
 	if err != nil {
@@ -120,8 +124,12 @@ type wabaRow struct {
 	AppID uuid.UUID
 }
 
-func (s *Service) configure(ctx context.Context, tx pgx.Tx, actor actor, in Manual) (Box, error) {
+func (s *Service) configure(ctx context.Context, tx pgx.Tx, actor actor, in Manual, registry registrySecret) (Box, error) {
 	phone, err := lockPhone(ctx, tx, actor.TenantID, in.PhoneNumberID)
+	if err != nil {
+		return Box{}, err
+	}
+	boundID, err := bindRegistry(ctx, tx, in.AppID, registry)
 	if err != nil {
 		return Box{}, err
 	}
@@ -129,23 +137,22 @@ func (s *Service) configure(ctx context.Context, tx pgx.Tx, actor actor, in Manu
 	if err != nil {
 		return Box{}, err
 	}
+	if app.ID != boundID {
+		return Box{}, ErrConflict
+	}
 	waba, err := findWaba(ctx, tx, actor.TenantID, in.WABAID)
 	if err != nil {
 		return Box{}, err
 	}
 	if phone.ID != uuid.Nil {
-		return s.rotate(ctx, tx, actor, in, phone, app, waba)
+		return s.rotate(ctx, tx, actor, in, phone, app, waba, registry.Secret.KeyVersion)
 	}
-	return s.create(ctx, tx, actor, in, app, waba)
+	return s.create(ctx, tx, actor, in, app, waba, registry.Secret.KeyVersion)
 }
 
-func (s *Service) rotate(ctx context.Context, tx pgx.Tx, actor actor, in Manual, phone phoneRow, app appRow, waba wabaRow) (Box, error) {
+func (s *Service) rotate(ctx context.Context, tx pgx.Tx, actor actor, in Manual, phone phoneRow, app appRow, waba wabaRow, appSecretVersion string) (Box, error) {
 	if phone.Type != connectorMeta || app.ID == uuid.Nil || waba.ID == uuid.Nil || waba.ID != phone.WabaRowID || waba.AppID != app.ID {
 		return Box{}, ErrInvalid
-	}
-	changed, appSecretVersion, err := s.writeAppSecret(ctx, tx, actor.TenantID, app.ID, in.AppSecret)
-	if err != nil {
-		return Box{}, err
 	}
 	if err := s.writeToken(ctx, tx, actor.TenantID, phone.ConnectorID, in.AccessToken); err != nil {
 		return Box{}, err
@@ -160,11 +167,6 @@ func (s *Service) rotate(ctx context.Context, tx pgx.Tx, actor actor, in Manual,
 	if err != nil {
 		return Box{}, err
 	}
-	if changed {
-		if err := bumpAppConnectors(ctx, tx, actor.TenantID, app.ID, phone.ConnectorID); err != nil {
-			return Box{}, err
-		}
-	}
 	if err := s.audit(ctx, actor, actionConfigured, phone.ConnectorID, "success"); err != nil {
 		return Box{}, err
 	}
@@ -176,58 +178,25 @@ func (s *Service) rotate(ctx context.Context, tx pgx.Tx, actor actor, in Manual,
 	}, nil
 }
 
-func (s *Service) create(ctx context.Context, tx pgx.Tx, actor actor, in Manual, app appRow, waba wabaRow) (Box, error) {
+func (s *Service) create(ctx context.Context, tx pgx.Tx, actor actor, in Manual, app appRow, waba wabaRow, appSecretVersion string) (Box, error) {
 	if waba.ID != uuid.Nil && (app.ID == uuid.Nil || waba.AppID != app.ID) {
 		return Box{}, ErrInvalid
 	}
 	connectorID, inboxID := uuid.New(), uuid.New()
-	appSecretVersion := ""
 	if err := insertConnector(ctx, tx, actor.TenantID, connectorID, in.PhoneNumberID); err != nil {
 		return Box{}, err
 	}
 	if err := insertInbox(ctx, tx, actor.TenantID, inboxID, connectorID, in.InboxName, in.DisplayNumber); err != nil {
 		return Box{}, err
 	}
-	if app.ID == uuid.Nil {
-		app.ID = uuid.New()
+	if waba.ID == uuid.Nil {
 		waba.ID = uuid.New()
-		phoneID := uuid.New()
-		secret, err := s.seal(actor.TenantID, app.ID, entityApp, fieldAppSecret, in.AppSecret)
-		if err != nil {
+		if err := insertWaba(ctx, tx, actor.TenantID, waba.ID, app.ID, in.WABAID); err != nil {
 			return Box{}, err
 		}
-		appSecretVersion = secret.KeyVersion
-		var display string
-		if in.DisplayNumber != "" {
-			display = in.DisplayNumber
-		}
-		if err := (store.Repo{}).RegisterMeta(ctx, tx, store.MetaBinding{
-			TenantID: actor.TenantID, AppRowID: app.ID, AppID: in.AppID, Secret: secret,
-			WabaRowID: waba.ID, WabaID: in.WABAID, PhoneRowID: phoneID, PhoneNumberID: in.PhoneNumberID,
-			DisplayNumber: display, ConnectorID: connectorID, InboxID: inboxID,
-		}); err != nil {
-			return Box{}, err
-		}
-	} else {
-		changed, version, err := s.writeAppSecret(ctx, tx, actor.TenantID, app.ID, in.AppSecret)
-		if err != nil {
-			return Box{}, err
-		}
-		appSecretVersion = version
-		if waba.ID == uuid.Nil {
-			waba.ID = uuid.New()
-			if err := insertWaba(ctx, tx, actor.TenantID, waba.ID, app.ID, in.WABAID); err != nil {
-				return Box{}, err
-			}
-		}
-		if err := insertPhone(ctx, tx, actor.TenantID, uuid.New(), waba.ID, connectorID, inboxID, in); err != nil {
-			return Box{}, err
-		}
-		if changed {
-			if err := bumpAppConnectors(ctx, tx, actor.TenantID, app.ID, connectorID); err != nil {
-				return Box{}, err
-			}
-		}
+	}
+	if err := insertPhone(ctx, tx, actor.TenantID, uuid.New(), waba.ID, connectorID, inboxID, in); err != nil {
+		return Box{}, err
 	}
 	if err := s.writeToken(ctx, tx, actor.TenantID, connectorID, in.AccessToken); err != nil {
 		return Box{}, err
@@ -247,9 +216,9 @@ func (s *Service) create(ctx context.Context, tx pgx.Tx, actor actor, in Manual,
 	}, nil
 }
 
-// writeAppSecret stores a new App Secret under the current ring key.
-// The same plaintext keeps the existing ciphertext. The returned version is
-// the one left in meta_app_secrets, which can be older than ring.Current.
+// writeAppSecret verifies the configured secret without allowing a tenant
+// administrator to rotate the app's authentication authority. A failed
+// decryption must never be treated as permission to replace the ciphertext.
 func (s *Service) writeAppSecret(ctx context.Context, tx pgx.Tx, tenantID, appID uuid.UUID, plaintext string) (bool, string, error) {
 	var current store.Secret
 	err := tx.QueryRow(ctx, `
@@ -258,33 +227,22 @@ func (s *Service) writeAppSecret(ctx context.Context, tx pgx.Tx, tenantID, appID
 		WHERE tenant_id = $1
 		  AND tenant_id = `+tenantSetting+`
 		  AND meta_app_id = $2
+		FOR UPDATE
 	`, tenantID, appID).Scan(&current.KeyVersion, &current.Ciphertext, &current.AAD)
-	if err == nil {
-		opened, openErr := s.open(tenantID, appID, entityApp, fieldAppSecret, current)
-		if openErr == nil && sameSecret(opened, plaintext) {
-			return false, current.KeyVersion, nil
-		}
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		return false, "", err
-	}
-	sealed, err := s.seal(tenantID, appID, entityApp, fieldAppSecret, plaintext)
-	if err != nil {
-		return false, "", err
-	}
-	tag, err := tx.Exec(ctx, `
-		UPDATE meta_app_secrets
-		SET key_version = $3, ciphertext = $4, aad = $5
-		WHERE tenant_id = $1
-		  AND tenant_id = `+tenantSetting+`
-		  AND meta_app_id = $2
-	`, tenantID, appID, sealed.KeyVersion, sealed.Ciphertext, sealed.AAD)
-	if err != nil {
-		return false, "", err
-	}
-	if tag.RowsAffected() != 1 {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return false, "", ErrNotFound
 	}
-	return true, sealed.KeyVersion, nil
+	if err != nil {
+		return false, "", err
+	}
+	opened, err := s.open(tenantID, appID, entityApp, fieldAppSecret, current)
+	if err != nil {
+		return false, "", err
+	}
+	if !sameSecret(opened, plaintext) {
+		return false, "", ErrConflict
+	}
+	return false, current.KeyVersion, nil
 }
 
 func (s *Service) writeToken(ctx context.Context, tx pgx.Tx, tenantID, connectorID uuid.UUID, plaintext string) error {
