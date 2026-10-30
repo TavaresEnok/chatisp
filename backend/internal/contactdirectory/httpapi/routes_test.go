@@ -193,11 +193,11 @@ func TestDirectoryPGHTTP(t *testing.T) {
 	// Two real conversation rows on one contact; the double excludes one independently.
 	visible := uuid.New()
 	e = store.WithTenantTx(ctx, a.p.TenantID, func(ctx context.Context, tx pgx.Tx) error {
-		conn, inbox, ident := uuid.New(), uuid.New(), uuid.New()
+		conn, inbox, ident, sector := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 		queries := []struct {
 			sql  string
 			args []any
-		}{{`INSERT INTO channel_connectors(id,tenant_id,connector_type,remote_origin) VALUES($1,$2,'meta_cloud',$3)`, []any{conn, a.p.TenantID, conn.String()}}, {`INSERT INTO inboxes(id,tenant_id,connector_id,name) VALUES($1,$2,$3,'test')`, []any{inbox, a.p.TenantID, conn}}, {`INSERT INTO contact_channel_identities(id,tenant_id,contact_id,connector_id,external_id) VALUES($1,$2,$3,$4,'test')`, []any{ident, a.p.TenantID, c.ID, conn}}, {`INSERT INTO conversations(id,tenant_id,inbox_id,contact_id,contact_identity_id,status,protocol,protocol_period,cycle_number) VALUES($1,$2,$3,$4,$5,'closed','one','202610',1),($6,$2,$3,$4,$5,'closed','two','202610',1)`, []any{visible, a.p.TenantID, inbox, c.ID, ident, denied}}}
+		}{{`INSERT INTO channel_connectors(id,tenant_id,connector_type,remote_origin) VALUES($1,$2,'meta_cloud',$3)`, []any{conn, a.p.TenantID, conn.String()}}, {`INSERT INTO inboxes(id,tenant_id,connector_id,name) VALUES($1,$2,$3,'test')`, []any{inbox, a.p.TenantID, conn}}, {`INSERT INTO sectors(tenant_id,id,name,active) VALUES($1,$2,'test',true)`, []any{a.p.TenantID, sector}}, {`INSERT INTO sector_inboxes(tenant_id,sector_id,inbox_id) VALUES($1,$2,$3)`, []any{a.p.TenantID, sector, inbox}}, {`INSERT INTO inbox_sector_defaults(tenant_id,inbox_id,sector_id) VALUES($1,$2,$3)`, []any{a.p.TenantID, inbox, sector}}, {`INSERT INTO contact_channel_identities(id,tenant_id,contact_id,connector_id,external_id) VALUES($1,$2,$3,$4,'test')`, []any{ident, a.p.TenantID, c.ID, conn}}, {`INSERT INTO conversations(id,tenant_id,inbox_id,contact_id,contact_identity_id,status,protocol,protocol_period,cycle_number) VALUES($1,$2,$3,$4,$5,'closed','one','202610',1),($6,$2,$3,$4,$5,'closed','two','202610',1)`, []any{visible, a.p.TenantID, inbox, c.ID, ident, denied}}}
 		for _, q := range queries {
 			if _, e := tx.Exec(ctx, q.sql, q.args...); e != nil {
 				return e
