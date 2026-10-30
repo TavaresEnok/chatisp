@@ -38,6 +38,7 @@ func TestCatalogRoleBoundary(t *testing.T) {
 		"inboxes",
 		"contacts",
 		"contact_channel_identities",
+		"conversations",
 	}
 	rows, err := admin.Query(ctx, `
 		SELECT c.relname, pg_get_userbyid(c.relowner), c.relrowsecurity, c.relforcerowsecurity
@@ -121,16 +122,44 @@ func TestCatalogRoleBoundary(t *testing.T) {
 		}
 	}
 
-	var convoCols string
-	if err := admin.QueryRow(ctx, `
-		SELECT string_agg(column_name, ',' ORDER BY ordinal_position)
-		FROM information_schema.columns
-		WHERE table_schema = 'public' AND table_name = 'conversations'
-	`).Scan(&convoCols); err != nil {
-		t.Fatal(err)
+	// Check the original contract without forbidding additive attendance columns.
+	for _, col := range []struct {
+		name, dataType, defaultExpr string
+	}{
+		{"id", "uuid", ""},
+		{"tenant_id", "uuid", ""},
+		{"summary", "text", "''::text"},
+		{"created_at", "timestamp with time zone", "now()"},
+	} {
+		var dataType, nullable string
+		var defaultExpr *string
+		err := admin.QueryRow(ctx, `
+			SELECT data_type, is_nullable, column_default
+			FROM information_schema.columns
+			WHERE table_schema = 'public' AND table_name = 'conversations' AND column_name = $1
+		`, col.name).Scan(&dataType, &nullable, &defaultExpr)
+		if err != nil {
+			t.Fatalf("conversations.%s: %v", col.name, err)
+		}
+		if dataType != col.dataType || nullable != "NO" ||
+			(col.defaultExpr == "" && defaultExpr != nil) ||
+			(col.defaultExpr != "" && (defaultExpr == nil || *defaultExpr != col.defaultExpr)) {
+			t.Fatalf("conversations.%s type=%s nullable=%s default=%v", col.name, dataType, nullable, defaultExpr)
+		}
 	}
-	if convoCols != "id,tenant_id,summary,created_at" {
-		t.Fatalf("conversations mudou: %s", convoCols)
+	for _, constraint := range []struct{ name, definition string }{
+		{"conversations_pkey", "PRIMARY KEY (tenant_id, id)"},
+		{"conversations_tenant_fkey", "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"},
+		{"conversations_summary_len", "CHECK ((char_length(summary) <= 4000))"},
+	} {
+		var definition string
+		err := admin.QueryRow(ctx, `
+			SELECT pg_get_constraintdef(oid) FROM pg_constraint
+			WHERE conrelid = 'public.conversations'::regclass AND conname = $1 AND convalidated
+		`, constraint.name).Scan(&definition)
+		if err != nil || definition != constraint.definition {
+			t.Fatalf("conversations constraint %s: definition=%q err=%v", constraint.name, definition, err)
+		}
 	}
 }
 
