@@ -1,7 +1,8 @@
 import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { areas } from "@/lib/areas";
+import { resetSessionStore, useSessionStore } from "@/stores/session-store";
 import { renderPanel } from "@/test/render-panel";
 
 const areaLabels = [
@@ -34,6 +35,10 @@ function expectPortugueseUi() {
 }
 
 describe("painel", () => {
+  afterEach(() => {
+    resetSessionStore();
+    vi.unstubAllGlobals();
+  });
   it("abre o Painel a partir da raiz", async () => {
     renderPanel("/");
     expect(
@@ -43,6 +48,20 @@ describe("painel", () => {
   });
 
   it("percorre as seis áreas com o teclado", async () => {
+    useSessionStore.getState().applySession({
+      tenantId: "provedor-a", userId: "operador", sessionId: "sessao-a",
+      email: "operador@example.test", membershipId: "membro-a", role: "agent",
+      expiresAt: "2099-01-01", mfaEnrollmentRequired: false,
+    }, "csrf");
+    vi.stubGlobal("WebSocket", undefined);
+    vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
+      if (new URL(request.url).pathname.endsWith("/inboxes")) {
+        return new Response(JSON.stringify({ inboxes: [] }), {
+          status: 200, headers: { "content-type": "application/json" },
+        });
+      }
+      throw new Error(`Requisição inesperada: ${request.url}`);
+    }));
     const user = userEvent.setup();
     renderPanel("/painel");
 
@@ -65,7 +84,7 @@ describe("painel", () => {
     for (const [index, area] of areas.entries()) {
       await user.keyboard("{Enter}");
       expect(
-        screen.getByRole("heading", { level: 1, name: area.label }),
+        await screen.findByRole("heading", { level: 1, name: area.label }),
       ).toBeInTheDocument();
       expect(links[index]).toHaveAttribute("aria-current", "page");
       expectPortugueseUi();
@@ -90,8 +109,8 @@ describe("painel", () => {
     expect(links[5]).toHaveFocus();
   });
 
-  it("mostra estado vazio honesto em cada área", () => {
-    for (const area of areas) {
+  it("mostra estado vazio honesto nas áreas genéricas", () => {
+    for (const area of areas.filter((item) => item.id !== "conversations")) {
       renderPanel(area.path);
       expect(
         screen.getByRole("heading", { level: 1, name: area.label }),
@@ -107,6 +126,17 @@ describe("painel", () => {
       expectPortugueseUi();
       cleanup();
     }
+  });
+
+  it("encaminha acesso anônimo às conversas para entrar", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    renderPanel("/conversas");
+    expect(await screen.findByRole("heading", { level: 1, name: "Entrar" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: "Conversas" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Caixa")).not.toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+    expectPortugueseUi();
   });
 
   it("explica um endereço desconhecido em português", () => {
