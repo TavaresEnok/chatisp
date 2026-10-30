@@ -10,7 +10,37 @@ import (
 	"chatisp/internal/attendance/store"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/db/dbgen"
+	"chatisp/internal/sectors"
 )
+
+func sectorPrincipal(p Principal) sectors.Principal {
+	return sectors.Principal{TenantID: p.TenantID, UserID: p.UserID, MembershipID: p.MembershipID, Role: p.Role, IsSuperadmin: p.IsSuperadmin}
+}
+
+func requireConversation(ctx context.Context, tx pgx.Tx, p Principal, inbox, conversation uuid.UUID) error {
+	err := sectors.RequireConversation(ctx, tx, sectorPrincipal(p), inbox, conversation)
+	if errors.Is(err, sectors.ErrForbidden) {
+		return ErrForbidden
+	}
+	return err
+}
+
+// lockAuthorizedConversation takes the write lock before the policy's shared
+// conversation lock, avoiding lock promotion between concurrent actions. The
+// policy still pins all authorization rows until this transaction completes.
+func lockAuthorizedConversation(ctx context.Context, tx pgx.Tx, p Principal, inbox, conversation uuid.UUID) (store.Conversation, error) {
+	conv, err := lockConversation(ctx, tx, p.TenantID, conversation)
+	if errors.Is(err, store.ErrNotFound) {
+		return store.Conversation{}, ErrForbidden
+	}
+	if err != nil {
+		return store.Conversation{}, err
+	}
+	if err := requireConversation(ctx, tx, p, inbox, conversation); err != nil {
+		return store.Conversation{}, err
+	}
+	return conv, nil
+}
 
 func (s Service) authorize(ctx context.Context, tx pgx.Tx, p Principal, inboxID uuid.UUID, sending bool) error {
 	if err := s.authorizePrincipal(ctx, tx, p); err != nil {
@@ -18,6 +48,12 @@ func (s Service) authorize(ctx context.Context, tx pgx.Tx, p Principal, inboxID 
 	}
 	if inboxID == uuid.Nil {
 		return ErrInboxForbidden
+	}
+	if err := sectors.RequireInbox(ctx, tx, sectorPrincipal(p), inboxID); err != nil {
+		if errors.Is(err, sectors.ErrForbidden) {
+			return ErrInboxForbidden
+		}
+		return err
 	}
 	var status, kind string
 	var enabled bool
@@ -84,14 +120,13 @@ func (s Service) authorAllowed(ctx context.Context, tx pgx.Tx, tenantID, message
 		return false, err
 	}
 	var author *uuid.UUID
+	var inbox, conversation uuid.UUID
 	var origin string
 	err := tx.QueryRow(ctx, `
-		SELECT author_membership_id, origin
-		FROM messages
-		WHERE tenant_id = $1
-		  AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-		  AND id = $2
-	`, tenantID, messageID).Scan(&author, &origin)
+		SELECT m.author_membership_id, m.origin, c.inbox_id, c.id
+		FROM messages m JOIN conversations c ON c.tenant_id=m.tenant_id AND c.id=m.conversation_id
+		WHERE m.tenant_id = $1 AND m.id = $2
+	`, tenantID, messageID).Scan(&author, &origin, &inbox, &conversation)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, store.ErrNotFound
 	}
@@ -104,15 +139,21 @@ func (s Service) authorAllowed(ctx context.Context, tx pgx.Tx, tenantID, message
 	if author == nil || *author == uuid.Nil {
 		return false, nil
 	}
+	return AuthorAllowed(ctx, tx, tenantID, *author, inbox, conversation)
+}
+
+// AuthorAllowed revalidates a queued human author in the caller's transaction.
+func AuthorAllowed(ctx context.Context, tx pgx.Tx, tenantID, author, inbox, conversation uuid.UUID) (bool, error) {
 	var role, status string
-	err = tx.QueryRow(ctx, `
-		SELECT role, status
+	var user uuid.UUID
+	err := tx.QueryRow(ctx, `
+		SELECT role, status, user_id
 		FROM memberships
 		WHERE tenant_id = $1
 		  AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
 		  AND id = $2
-		FOR UPDATE
-	`, tenantID, *author).Scan(&role, &status)
+		FOR SHARE
+	`, tenantID, author).Scan(&role, &status, &user)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -122,12 +163,11 @@ func (s Service) authorAllowed(ctx context.Context, tx pgx.Tx, tenantID, message
 	if status != "active" {
 		return false, nil
 	}
-	switch role {
-	case "admin", "supervisor", "agent":
-		return true, nil
-	default:
+	ok, err := sectors.CanAccessConversation(ctx, tx, sectors.Principal{TenantID: tenantID, UserID: user, MembershipID: author, Role: role}, inbox, conversation)
+	if errors.Is(err, sectors.ErrForbidden) {
 		return false, nil
 	}
+	return ok, err
 }
 
 func (s Service) tenantActive(ctx context.Context) error {

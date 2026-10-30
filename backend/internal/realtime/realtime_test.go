@@ -1260,16 +1260,20 @@ func TestBoundedAttendanceLimitExceededAndPaging(t *testing.T) {
 
 	ctx := context.Background()
 	p := principal(w)
+	conversationID := uuid.New()
 
 	// 1. Verify that inserting 505 events allows bounded pagination:
 	// Page 1 returns maxEventsPerBatch (500) and NextCursor == 500 (distinguishing examined page from pending)
 	// Page 2 returns the remaining 5 events with NextCursor == 505
 	err := testStore.WithTenantTx(ctx, w.tenant, func(txCtx context.Context, tx pgx.Tx) error {
+		if _, err := tx.Exec(txCtx, `INSERT INTO conversations (id, tenant_id, inbox_id, contact_id, contact_identity_id, protocol, protocol_period, status, version, controller, controller_epoch, cycle_number, summary) VALUES ($1,$2,$3,$4,$5,'PAGING','202610','closed',1,'bot',1,1,'')`, conversationID, w.tenant, w.inbox, w.contact, w.identity); err != nil {
+			return err
+		}
 		for i := 1; i <= 505; i++ {
 			if _, err := tx.Exec(txCtx, `
 				INSERT INTO realtime_events (tenant_id, seq, id, event_type, aggregate_type, aggregate_id, version, payload)
 				VALUES ($1, $2, $3, 'conversation.test', 'conversation', $4, 1, '{}')
-			`, w.tenant, int64(i), uuid.New(), w.contact); err != nil {
+			`, w.tenant, int64(i), uuid.New(), conversationID); err != nil {
 				return err
 			}
 		}
@@ -1342,6 +1346,81 @@ func TestBoundedAttendanceLimitExceededAndPaging(t *testing.T) {
 		t.Fatalf("esperava cursor coerente (505) no snapshot com excesso de carga, obteve %d", snap.NextCursor)
 	}
 	_ = adapter
+}
+
+func TestQueuedDeliveryRejectsRevokedSector(t *testing.T) {
+	w := seedWorld(t, "agent")
+	_, id := sendTestMessageCustom(t, w, w.inbox, w.contact, w.identity, w.connector, "privado")
+	c := &conn{handler: NewHandler(Options{DB: testStore}), principal: Principal{TenantID: w.tenant, UserID: w.user, MembershipID: w.membership, Role: w.role}}
+	msg := ServerMessage{Type: "events", InboxID: w.inbox, Events: []store.Event{{AggregateType: "conversation", AggregateID: id}}}
+	if err := c.checkDelivery(context.Background(), msg); err != nil {
+		t.Fatal(err)
+	}
+	if err := testStore.WithTenantTx(context.Background(), w.tenant, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `DELETE FROM sector_memberships WHERE tenant_id=$1 AND membership_id=$2`, w.tenant, w.membership)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.checkDelivery(context.Background(), msg); err == nil {
+		t.Fatal("evento enfileirado permaneceu autorizado após revogação")
+	}
+	if _, err := testAttendance.Send(context.Background(), principal(w), attendanceService.SendInput{InboxID: w.inbox, ConversationID: id}); err == nil {
+		t.Fatal("escrita permaneceu autorizada após revogação")
+	}
+}
+
+func TestSectorIsolationBeforePagination(t *testing.T) {
+	w := seedWorld(t, "agent")
+	_, visible := sendTestMessage(t, w, w.inbox, "visível")
+	hidden, sector := uuid.New(), uuid.New()
+	var before int64
+	err := testStore.WithTenantTx(context.Background(), w.tenant, func(ctx context.Context, tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `INSERT INTO sectors (tenant_id,id,name) VALUES ($1,$2,'Outro')`, w.tenant, sector); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO sector_inboxes (tenant_id,sector_id,inbox_id) VALUES ($1,$2,$3)`, w.tenant, sector, w.inbox); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO conversations (id,tenant_id,inbox_id,sector_id,contact_id,contact_identity_id,protocol,protocol_period,status,version,controller,controller_epoch,cycle_number,summary,assignee_id) VALUES ($1,$2,$3,$4,$5,$6,'HIDDEN','202610','closed',1,'human',1,1,'privado',$7)`, hidden, w.tenant, w.inbox, sector, w.contact, w.identity, w.membership); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, `SELECT seq FROM realtime_tenant_cursors WHERE tenant_id=$1`, w.tenant).Scan(&before); err != nil {
+			return err
+		}
+		for i, id := range []uuid.UUID{visible, hidden, visible} {
+			if _, err := tx.Exec(ctx, `INSERT INTO realtime_events (tenant_id,seq,id,event_type,aggregate_type,aggregate_id,version,payload) VALUES ($1,$2,$3,'conversation.test','conversation',$4,1,'{}')`, w.tenant, before+int64(i)+1, uuid.New(), id); err != nil {
+				return err
+			}
+		}
+		_, err := tx.Exec(ctx, `UPDATE realtime_tenant_cursors SET seq=$2 WHERE tenant_id=$1`, w.tenant, before+3)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := NewBoundedAttendance(testStore, testAttendance)
+	snap, err := b.Snapshot(context.Background(), principal(w), store.SnapshotInput{InboxID: w.inbox})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range snap.Conversations {
+		if h.ID == hidden {
+			t.Fatal("conversa de outro setor vazou no snapshot")
+		}
+	}
+	page, err := b.Events(context.Background(), principal(w), w.inbox, before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 2 || page.NextCursor != before+3 {
+		t.Fatalf("página ou cursor incorretos: %#v", page)
+	}
+	for _, ev := range page.Events {
+		if ev.AggregateID == hidden {
+			t.Fatal("evento de outro setor vazou")
+		}
+	}
 }
 
 type denyingAttendance struct{ AttendanceService }

@@ -13,7 +13,12 @@ import (
 	"chatisp/internal/attendance/store"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/db/dbgen"
+	"chatisp/internal/sectors"
 )
+
+func sectorPrincipal(p attendanceService.Principal) sectors.Principal {
+	return sectors.Principal{TenantID: p.TenantID, UserID: p.UserID, MembershipID: p.MembershipID, Role: p.Role, IsSuperadmin: p.IsSuperadmin}
+}
 
 // BoundedAttendance wraps queries against PostgreSQL with strict SQL limits,
 // preventing unconstrained memory allocation before materializing full result sets.
@@ -49,6 +54,14 @@ func (b *BoundedAttendance) Events(ctx context.Context, p attendanceService.Prin
 		if err := authorizeInbox(ctx, tx, p, inboxID); err != nil {
 			return err
 		}
+		ceiling, err := store.CursorCeiling(ctx, tx, p.TenantID)
+		if err != nil {
+			return err
+		}
+		ids, err := sectors.AuthorizedConversationIDs(ctx, tx, sectorPrincipal(p), inboxID)
+		if err != nil {
+			return err
+		}
 
 		q := dbgen.New(tx)
 		if err := q.EnsureRealtimeCursor(ctx, p.TenantID); err != nil {
@@ -65,6 +78,9 @@ func (b *BoundedAttendance) Events(ctx context.Context, p attendanceService.Prin
 		if after < cursor.RetainAfter {
 			return store.ErrResync
 		}
+		if cursor.Seq > ceiling {
+			cursor.Seq = ceiling
+		}
 
 		if cursor.Seq <= after {
 			page = store.EventPage{NextCursor: cursor.Seq, Events: nil}
@@ -78,9 +94,10 @@ func (b *BoundedAttendance) Events(ctx context.Context, p attendanceService.Prin
 			  AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
 			  AND seq > $2
 			  AND seq <= $3
+			  AND aggregate_type = 'conversation' AND aggregate_id = ANY($5::uuid[])
 			ORDER BY seq
 			LIMIT $4
-		`, p.TenantID, after, cursor.Seq, maxEventsPerBatch)
+		`, p.TenantID, after, cursor.Seq, maxEventsPerBatch, ids)
 		if err != nil {
 			return err
 		}
@@ -136,8 +153,22 @@ func (b *BoundedAttendance) Snapshot(ctx context.Context, p attendanceService.Pr
 		if err := authorizeInbox(ctx, tx, p, in.InboxID); err != nil {
 			return err
 		}
+		ceiling, err := store.CursorCeiling(ctx, tx, p.TenantID)
+		if err != nil {
+			return err
+		}
+		ids, err := sectors.AuthorizedConversationIDs(ctx, tx, sectorPrincipal(p), in.InboxID)
+		if err != nil {
+			return err
+		}
 
 		if in.ConversationID != uuid.Nil {
+			if err := sectors.RequireConversation(ctx, tx, sectorPrincipal(p), in.InboxID, in.ConversationID); err != nil {
+				if errors.Is(err, sectors.ErrForbidden) {
+					return attendanceService.ErrForbidden
+				}
+				return err
+			}
 			var convInbox uuid.UUID
 			err := tx.QueryRow(ctx, `
 				SELECT inbox_id
@@ -166,6 +197,9 @@ func (b *BoundedAttendance) Snapshot(ctx context.Context, p attendanceService.Pr
 			}
 			return err
 		}
+		if cursor.Seq > ceiling {
+			cursor.Seq = ceiling
+		}
 
 		// Read conversations with limit = maxSnapshotConversations + 1 to detect overflow without unbounded materialization
 		convRows, err := tx.Query(ctx, `
@@ -175,9 +209,10 @@ func (b *BoundedAttendance) Snapshot(ctx context.Context, p attendanceService.Pr
 			WHERE tenant_id = $1
 			  AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
 			  AND inbox_id = $2
+			  AND id = ANY($4::uuid[])
 			ORDER BY created_at, id
 			LIMIT $3
-		`, p.TenantID, in.InboxID, maxSnapshotConversations+1)
+		`, p.TenantID, in.InboxID, maxSnapshotConversations+1, ids)
 		if err != nil {
 			return err
 		}
@@ -269,6 +304,12 @@ func (b *BoundedAttendance) Snapshot(ctx context.Context, p attendanceService.Pr
 }
 
 func authorizeInbox(ctx context.Context, tx pgx.Tx, p attendanceService.Principal, inboxID uuid.UUID) error {
+	if err := sectors.RequireInbox(ctx, tx, sectorPrincipal(p), inboxID); err != nil {
+		if errors.Is(err, sectors.ErrForbidden) {
+			return attendanceService.ErrInboxForbidden
+		}
+		return err
+	}
 	if p.TenantID == uuid.Nil || p.UserID == uuid.Nil || p.MembershipID == uuid.Nil {
 		return attendanceService.ErrForbidden
 	}

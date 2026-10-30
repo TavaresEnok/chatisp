@@ -335,6 +335,9 @@ func seedTenantWithMeta(t *testing.T, appID, wabaID, phoneID, token, appSecret s
 	}
 	st.connectorID, st.inboxID = box.ConnectorID, box.InboxID
 	if err := testStore.WithTenantTx(ctx, st.tenantID, func(ctx context.Context, tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `WITH s AS (INSERT INTO sectors (tenant_id,id,name,legacy_default) VALUES ($1,$2,'Padrão',true)), i AS (INSERT INTO sector_inboxes VALUES ($1,$2,$3)), m AS (INSERT INTO sector_memberships VALUES ($1,$2,$4)) INSERT INTO inbox_sector_defaults VALUES ($1,$3,$2)`, st.tenantID, uuid.New(), st.inboxID, st.memberID); err != nil {
+			return err
+		}
 		return tx.QueryRow(ctx, `SELECT p.id, w.id, a.id FROM meta_phone_numbers p JOIN meta_wabas w ON w.tenant_id=p.tenant_id AND w.id=p.meta_waba_id JOIN meta_apps a ON a.tenant_id=w.tenant_id AND a.id=w.meta_app_id WHERE p.tenant_id=$1 AND p.phone_number_id=$2`, st.tenantID, phoneID).Scan(&st.phoneRowID, &st.wabaRowID, &st.appRowID)
 	}); err != nil {
 		t.Fatalf("falha ao consultar vínculo meta: %v", err)
@@ -373,6 +376,9 @@ func seedSecondBoxForTenant(t *testing.T, st seededTenant, phoneID string) (uuid
 			INSERT INTO inboxes (id, tenant_id, connector_id, name)
 			VALUES ($1, $2, $3, 'Segunda Caixa Meta')
 		`, inboxID, st.tenantID, connectorID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `WITH i AS (INSERT INTO sector_inboxes SELECT tenant_id,id,$2 FROM sectors WHERE tenant_id=$1 AND legacy_default RETURNING tenant_id,sector_id,inbox_id) INSERT INTO inbox_sector_defaults SELECT tenant_id,inbox_id,sector_id FROM i`, st.tenantID, inboxID); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	"chatisp/internal/sectors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -25,7 +26,11 @@ func (s Service) ListInboxes(ctx context.Context, p Principal) ([]Inbox, error) 
 		if err := s.authorizePrincipal(ctx, tx, p); err != nil {
 			return err
 		}
-		rows, err := tx.Query(ctx, `SELECT i.id, i.name, i.presented_number, c.connector_type, c.status, c.enabled FROM inboxes i JOIN channel_connectors c ON c.tenant_id = i.tenant_id AND c.id = i.connector_id WHERE i.tenant_id = $1 ORDER BY i.name, i.id`, p.TenantID)
+		ids, err := sectors.AuthorizedInboxIDs(ctx, tx, sectorPrincipal(p))
+		if err != nil {
+			return err
+		}
+		rows, err := tx.Query(ctx, `SELECT i.id, i.name, i.presented_number, c.connector_type, c.status, c.enabled FROM inboxes i JOIN channel_connectors c ON c.tenant_id = i.tenant_id AND c.id = i.connector_id WHERE i.tenant_id = $1 AND i.id = ANY($2::uuid[]) ORDER BY i.name, i.id`, p.TenantID, ids)
 		if err != nil {
 			return err
 		}

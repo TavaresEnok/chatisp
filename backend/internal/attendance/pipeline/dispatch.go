@@ -263,18 +263,14 @@ func (h *outboundHandler) DispatchOutbound(ctx context.Context, tenantID, attemp
 		}
 		allowed := attemptState == "sending" && tenantStatus == "active" && enabled && channelStatus == "connected" && channelKind == "meta_cloud" && channelVersion == versionText
 		if origin == "human" {
-			var role, status string
 			if author == nil {
 				allowed = false
 			} else {
-				err = tx.QueryRow(ctx, `SELECT role, status FROM memberships WHERE tenant_id=$1 AND id=$2 FOR UPDATE`, tenantID, *author).Scan(&role, &status)
-				if errors.Is(err, pgx.ErrNoRows) {
-					allowed = false
-				} else if err != nil {
-					return err
-				} else if status != "active" || (role != "admin" && role != "supervisor" && role != "agent") {
-					allowed = false
+				authorOK, authorErr := service.AuthorAllowed(ctx, tx, tenantID, *author, inboxID, conversationID)
+				if authorErr != nil {
+					return authorErr
 				}
+				allowed = allowed && authorOK
 			}
 		}
 		if attemptEpoch != currentEpoch || convStatus == "closed" {

@@ -224,6 +224,9 @@ type SnapshotInput struct {
 	TenantID       uuid.UUID
 	InboxID        uuid.UUID
 	ConversationID uuid.UUID
+	// AuthorizedIDs restricts the list when non-nil; authorization is pinned by the caller.
+	AuthorizedIDs []uuid.UUID
+	CursorCeiling *int64
 }
 
 // Snapshot is a consistent list plus the cursor of the examined range.

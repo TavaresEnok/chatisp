@@ -1,0 +1,9 @@
+# Acesso operacional por setor
+
+Attendance usa `sectors.RequireInbox` para a caixa e `RequireConversation` para cada ação ou histórico. Listas e eventos usam `AuthorizedConversationIDs` na mesma transação da leitura, com restrição SQL antes do limite. Metadados de caixas para admin e supervisor não concedem acesso a conversas sem vínculo `sector_inboxes`. A atribuição de conversa não concede acesso ao agente. A policy rejeita superadmin como operador; o gate de sessão existente verifica MFA e matrícula para admin.
+
+O ingresso usa o setor padrão explícito da caixa criado pelo backfill da migração 9; uma caixa nova precisa de vínculo e padrão. Conversas existentes mantêm seu setor quando o padrão muda. O envio humano verifica o autor e a conversa na reserva e novamente na fronteira de despacho, preservando lease, epoch e portão do tenant; a rede permanece fora da transação.
+
+Snapshot e replay capturam o teto do cursor antes de obter os IDs autorizados, evitando avançar sobre uma conversa criada concorrentemente. Eventos invisíveis não são retornados e o cursor avança até o trecho examinado. Um payload de WebSocket enfileirado é revalidado ao sair da fila; perda de autorização fecha a conexão com `authorization_revoked`. A verificação periódica usa o intervalo configurado de revalidação (padrão cinco segundos), além do tempo das transações e entrega do fechamento. Uma operação que já passou pela validação pode terminar após a revogação, pois não se mantém lock durante a rede. Informação já recebida não é apagada pelo servidor.
+
+B8-16 tem teste de cursor com eventos intercalados invisíveis e setores na mesma caixa. B8-17 ainda exige prova ponta a ponta de transferência com sessão aberta e limpeza do cache visual pelo cliente. A integração frontend e o aceite completo desses cenários permanecem pendentes.

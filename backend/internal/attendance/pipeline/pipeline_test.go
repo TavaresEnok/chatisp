@@ -2647,7 +2647,7 @@ func TestTenantStatusGateDispatch(t *testing.T) {
 			if suspensionFirst {
 				waitLock("SELECT pg_advisory_xact_lock%")
 			} else {
-				waitLock("SELECT role, status FROM memberships WHERE tenant_id=%")
+				waitLock("%SELECT role, status, user_id%")
 				suspension = make(chan error, 1)
 				go func() {
 					suspension <- testStore.WithPlatform(ctx, func(c context.Context) error {

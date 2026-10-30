@@ -13,6 +13,7 @@ import (
 	"chatisp/internal/conversation"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/db/dbgen"
+	"chatisp/internal/sectors"
 )
 
 // Service orchestrates attendance commands. Repo is stateless.
@@ -39,7 +40,14 @@ func (s Service) Snapshot(ctx context.Context, p Principal, in store.SnapshotInp
 		if err := s.authorize(ctx, tx, p, in.InboxID, false); err != nil {
 			return err
 		}
+		ceiling, err := store.CursorCeiling(ctx, tx, p.TenantID)
+		if err != nil {
+			return err
+		}
 		if in.ConversationID != uuid.Nil {
+			if err := requireConversation(ctx, tx, p, in.InboxID, in.ConversationID); err != nil {
+				return err
+			}
 			conv, err := loadConversation(ctx, tx, p.TenantID, in.ConversationID)
 			if err != nil {
 				return err
@@ -48,8 +56,12 @@ func (s Service) Snapshot(ctx context.Context, p Principal, in store.SnapshotInp
 				return store.ErrNotFound
 			}
 		}
+		ids, err := sectors.AuthorizedConversationIDs(ctx, tx, sectorPrincipal(p), in.InboxID)
+		if err != nil {
+			return err
+		}
 		snap, err := s.Repo.Snapshot(ctx, tx, store.SnapshotInput{
-			TenantID: p.TenantID, InboxID: in.InboxID, ConversationID: in.ConversationID,
+			TenantID: p.TenantID, InboxID: in.InboxID, ConversationID: in.ConversationID, AuthorizedIDs: ids, CursorCeiling: &ceiling,
 		})
 		if err != nil {
 			return err
@@ -67,6 +79,17 @@ func (s Service) History(ctx context.Context, p Principal, inboxID, conversation
 		if err := s.authorize(ctx, tx, p, inboxID, false); err != nil {
 			return err
 		}
+		ceiling, err := store.CursorCeiling(ctx, tx, p.TenantID)
+		if err != nil {
+			return err
+		}
+		if err := requireConversation(ctx, tx, p, inboxID, conversationID); err != nil {
+			return err
+		}
+		ids, err := sectors.AuthorizedConversationIDs(ctx, tx, sectorPrincipal(p), inboxID)
+		if err != nil {
+			return err
+		}
 		conv, err := loadConversation(ctx, tx, p.TenantID, conversationID)
 		if err != nil {
 			return err
@@ -75,7 +98,7 @@ func (s Service) History(ctx context.Context, p Principal, inboxID, conversation
 			return store.ErrNotFound
 		}
 		snap, err := s.Repo.Snapshot(ctx, tx, store.SnapshotInput{
-			TenantID: p.TenantID, InboxID: inboxID, ConversationID: conversationID,
+			TenantID: p.TenantID, InboxID: inboxID, ConversationID: conversationID, AuthorizedIDs: ids, CursorCeiling: &ceiling,
 		})
 		if err != nil {
 			return err
@@ -105,7 +128,15 @@ func (s Service) Events(ctx context.Context, p Principal, inboxID uuid.UUID, aft
 		if err := s.authorize(ctx, tx, p, inboxID, false); err != nil {
 			return err
 		}
-		got, err := s.Repo.ReadEvents(ctx, tx, p.TenantID, after)
+		ceiling, err := store.CursorCeiling(ctx, tx, p.TenantID)
+		if err != nil {
+			return err
+		}
+		ids, err := sectors.AuthorizedConversationIDs(ctx, tx, sectorPrincipal(p), inboxID)
+		if err != nil {
+			return err
+		}
+		got, err := s.Repo.ReadAuthorizedEvents(ctx, tx, p.TenantID, after, ids, ceiling)
 		if err != nil {
 			return err
 		}
@@ -135,6 +166,9 @@ func (s Service) ReceiveText(ctx context.Context, p Principal, in ReceiveInput) 
 			if err != nil {
 				return err
 			}
+			if err := requireConversation(ctx, tx, p, in.InboxID, got.Conversation.ID); err != nil {
+				return err
+			}
 			out.InboundResult = got
 			return nil
 		} else if !errors.Is(err, pgx.ErrNoRows) {
@@ -143,6 +177,9 @@ func (s Service) ReceiveText(ctx context.Context, p Principal, in ReceiveInput) 
 		if in.Historical {
 			got, err := s.attachHistorical(ctx, tx, p, in, external)
 			if err != nil {
+				return err
+			}
+			if err := requireConversation(ctx, tx, p, in.InboxID, got.Conversation.ID); err != nil {
 				return err
 			}
 			out.InboundResult = got
@@ -154,6 +191,9 @@ func (s Service) ReceiveText(ctx context.Context, p Principal, in ReceiveInput) 
 		}
 		got, err := s.Repo.AcceptInbound(ctx, tx, inbound(p, in))
 		if err != nil {
+			return err
+		}
+		if err := requireConversation(ctx, tx, p, in.InboxID, got.Conversation.ID); err != nil {
 			return err
 		}
 		out = ReceiveResult{InboundResult: got, Reopened: reopened && !got.Duplicate}
@@ -177,7 +217,7 @@ func (s Service) Assume(ctx context.Context, p Principal, inboxID, conversationI
 		if err := s.authorize(ctx, tx, p, inboxID, false); err != nil {
 			return err
 		}
-		conv, err := lockConversation(ctx, tx, p.TenantID, conversationID)
+		conv, err := lockAuthorizedConversation(ctx, tx, p, inboxID, conversationID)
 		if err != nil {
 			return err
 		}
@@ -220,7 +260,7 @@ func (s Service) Send(ctx context.Context, p Principal, in SendInput) (SendResul
 		if body == "" || requestID == "" || in.At.IsZero() || in.ExpectedVersion < 1 {
 			return store.ErrInvalid
 		}
-		conv, err := lockConversation(ctx, tx, p.TenantID, in.ConversationID)
+		conv, err := lockAuthorizedConversation(ctx, tx, p, in.InboxID, in.ConversationID)
 		if err != nil {
 			return err
 		}
@@ -308,7 +348,7 @@ func (s Service) Close(ctx context.Context, p Principal, in CloseInput) (CloseRe
 		if in.FarewellBody != "" && in.FarewellRequestID == "" {
 			return store.ErrInvalid
 		}
-		conv, err := lockConversation(ctx, tx, p.TenantID, in.ConversationID)
+		conv, err := lockAuthorizedConversation(ctx, tx, p, in.InboxID, in.ConversationID)
 		if err != nil {
 			return err
 		}
@@ -402,7 +442,7 @@ func (s Service) Reopen(ctx context.Context, p Principal, in ReopenInput) (store
 		if in.ClientRequestID == "" || in.At.IsZero() || in.ExpectedVersion < 1 {
 			return store.ErrInvalid
 		}
-		conv, err := lockConversation(ctx, tx, p.TenantID, in.ConversationID)
+		conv, err := lockAuthorizedConversation(ctx, tx, p, in.InboxID, in.ConversationID)
 		if err != nil {
 			return err
 		}

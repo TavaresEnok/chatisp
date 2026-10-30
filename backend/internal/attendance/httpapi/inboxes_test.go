@@ -61,6 +61,12 @@ func TestInboxesSessionAndMembership(t *testing.T) {
 		t.Fatal(err)
 	}
 	request(w, 403)
+	if _, err := conn.Exec(context.Background(), `DELETE FROM inbox_sector_defaults WHERE inbox_id=$1`, other.inbox); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(context.Background(), `DELETE FROM sector_inboxes WHERE inbox_id=$1`, other.inbox); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := conn.Exec(context.Background(), `DELETE FROM inboxes WHERE id=$1`, other.inbox); err != nil {
 		t.Fatal(err)
 	}
