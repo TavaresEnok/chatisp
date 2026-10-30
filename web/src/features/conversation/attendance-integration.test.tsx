@@ -94,7 +94,9 @@ it("expõe conflito de versão do servidor", async () => {
 it("preserva versões em respostas perdidas e interpreta replay persistido", async () => {
   vi.stubGlobal("WebSocket", undefined);
   let version = 3, assumeCalls = 0, closeCalls = 0, sendState = "uncertain";
-  const requests: { path: string; body: any }[] = [];
+  const requests: { path: string; body: unknown }[] = [];
+  const expectedVersion = (body: unknown) =>
+    typeof body === "object" && body !== null && "expected_version" in body ? body.expected_version : undefined;
   vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
     const path = new URL(request.url).pathname;
     const body = request.method === "POST" ? await request.json() : null;
@@ -115,7 +117,7 @@ it("preserva versões em respostas perdidas e interpreta replay persistido", asy
   version = 5;
   await act(async () => { await qc.invalidateQueries({ queryKey: ["attendance"] }); });
   await act(async () => { await hook.result.current.assume("c1"); });
-  expect(requests.filter((r) => r.path.endsWith("/assume")).map((r) => r.body.expected_version)).toEqual([3, 3]);
+  expect(requests.filter((r) => r.path.endsWith("/assume")).map((r) => expectedVersion(r.body))).toEqual([3, 3]);
   let sendResult: unknown;
   await act(async () => { sendResult = await hook.result.current.send("c1", { intentKey: "send", text: "Olá" }); });
   expect(sendResult).toMatchObject({ outcome: "uncertain" });
@@ -127,22 +129,22 @@ it("preserva versões em respostas perdidas e interpreta replay persistido", asy
   await waitFor(() => expect(hook.result.current.detail.data?.head.version).toBe(6));
   let closeResult: unknown;
   await act(async () => { closeResult = await hook.result.current.close({ ...close, clientRequestId: "close2" }); });
-  expect(requests.filter((r) => r.path.endsWith("/close")).map((r) => r.body.expected_version)).toEqual([5, 6]);
+  expect(requests.filter((r) => r.path.endsWith("/close")).map((r) => expectedVersion(r.body))).toEqual([5, 6]);
   expect(closeResult).toMatchObject({ outcome: "done", farewellFailed: true });
 });
 
 it("limita resync por carga e encerra sessão revogada pelo socket", async () => {
-  const sockets: any[] = [];
+  const sockets: Socket[] = [];
   class Socket { onopen?: () => void; onmessage?: (event: { data: string }) => void; onclose?: (event: { code: number; reason: string }) => void; send = vi.fn(); close = vi.fn(); constructor() { sockets.push(this); } }
   vi.stubGlobal("WebSocket", Socket);
   useSessionStore.getState().applySession({ tenantId: "t", userId: "u", sessionId: "s", email: "a@b.test", membershipId: "m", role: "agent", expiresAt: "2099-01-01", mfaEnrollmentRequired: false }, "csrf");
   const qc = new QueryClient(); qc.setQueryData(["attendance", "t", "u", "s", "i1", "history"], { secret: "texto" });
   function Probe() { return <p>{useAttendanceEvents("i1", ["attendance", "t", "u", "s", "i1"])}</p>; }
   render(<QueryClientProvider client={qc}><Probe /></QueryClientProvider>);
-  act(() => { sockets[0].onopen(); for (let i = 0; i < 3; i++) sockets[0].onmessage({ data: JSON.stringify({ type: "resync", reason: "load_limit_exceeded", inbox_id: "i1" }) }); });
-  expect(sockets[0].send).toHaveBeenCalledTimes(1);
+  act(() => { sockets[0]?.onopen?.(); for (let i = 0; i < 3; i++) sockets[0]?.onmessage?.({ data: JSON.stringify({ type: "resync", reason: "load_limit_exceeded", inbox_id: "i1" }) }); });
+  expect(sockets[0]?.send).toHaveBeenCalledTimes(1);
   expect(screen.getByText("degraded")).toBeInTheDocument();
-  act(() => sockets[0].onclose({ code: 1008, reason: "authorization_revoked" }));
+  act(() => sockets[0]?.onclose?.({ code: 1008, reason: "authorization_revoked" }));
   expect(useSessionStore.getState().principal).toBeNull();
   expect(qc.getQueryData(["attendance", "t", "u", "s", "i1", "history"])).toBeUndefined();
 });
