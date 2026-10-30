@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -18,11 +19,16 @@ import (
 
 func TestMigration08RejectsUnsafeRollback(t *testing.T) {
 	ctx := context.Background()
+	// Bootstrap changes cluster-wide role passwords; never use an external cluster.
+	t.Setenv(testdb.EnvDatabaseURL, "")
 	env, err := testdb.Start(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer env.Close()
+	if !env.Embedded {
+		t.Fatal("migration 8 requires its own disposable cluster")
+	}
 	secrets, err := db.NewRoleSecrets()
 	if err != nil {
 		t.Fatal(err)
@@ -35,9 +41,19 @@ func TestMigration08RejectsUnsafeRollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = db.ApplyMigrations(ctx, urls.Owner, dir); err != nil {
+	conn, err := sql.Open("pgx", urls.Owner)
+	if err != nil {
 		t.Fatal(err)
 	}
+	defer conn.Close()
+	provider, err := goose.NewProvider(goose.DialectPostgres, conn, os.DirFS(dir), goose.WithDisableGlobalRegistry(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = provider.UpTo(ctx, 8); err != nil {
+		t.Fatal(err)
+	}
+	assertMigration08Version(t, ctx, provider, 8)
 	pools, err := db.OpenPools(ctx, urls)
 	if err != nil {
 		t.Fatal(err)
@@ -50,26 +66,15 @@ func TestMigration08RejectsUnsafeRollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn, err := sql.Open("pgx", urls.Owner)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close()
-	provider, err := goose.NewProvider(goose.DialectPostgres, conn, os.DirFS(dir), goose.WithDisableGlobalRegistry(true))
-	if err != nil {
-		t.Fatal(err)
-	}
 	a := seedActor(t, "admin", true, "full")
 	input := manual("A", "rollback-proof", "rollback-waba-a", "rollback-phone-a", testToken, testSecret)
 	if _, err = svc.Configure(ctx, a.hash, input); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = provider.Down(ctx); err == nil || !strings.Contains(err.Error(), "lacks compatible legacy representation") {
+	if _, err = provider.DownTo(ctx, 7); err == nil || !strings.Contains(err.Error(), "app binding lacks compatible legacy representation") {
 		t.Fatalf("single new binding rollback: %v", err)
 	}
-	if _, err = provider.Up(ctx); err != nil {
-		t.Fatal(err)
-	}
+	assertMigration08Version(t, ctx, provider, 8)
 	app, err := svc.Server().ResolveApp(ctx, input.AppID)
 	if err != nil || app.AppSecret != testSecret {
 		t.Fatalf("binding after failed rollback: %v", err)
@@ -83,11 +88,32 @@ func TestMigration08RejectsUnsafeRollback(t *testing.T) {
 	if _, err = svc.Configure(ctx, b.hash, input); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = provider.Down(ctx); err == nil || !strings.Contains(err.Error(), "shared app bindings would be lost") {
+	if _, err = provider.DownTo(ctx, 7); err == nil || !strings.Contains(err.Error(), "shared app bindings would be lost") {
 		t.Fatalf("shared binding rollback: %v", err)
 	}
-	if _, err = svc.Server().ResolveApp(ctx, input.AppID); err != nil {
-		t.Fatal(err)
+	assertMigration08Version(t, ctx, provider, 8)
+	app, err = svc.Server().ResolveApp(ctx, input.AppID)
+	if err != nil || app.AppSecret != testSecret {
+		t.Fatalf("shared app after failed rollback: %+v %v", app, err)
+	}
+	for _, actor := range []seeded{a, b} {
+		status, err := svc.Status(ctx, actor.hash)
+		if err != nil || len(status.Boxes) != 1 || status.Boxes[0].AppSecretKeyVersion == "" {
+			t.Fatalf("shared binding after failed rollback: %+v %v", status, err)
+		}
+		box := status.Boxes[0]
+		material, err := svc.Server().ResolveMaterial(ctx, actor.tenant, box.ConnectorID, box.Version)
+		if err != nil || material.AppSecret != testSecret || material.AccessToken != testToken {
+			t.Fatalf("shared material after failed rollback: %+v %v", material, err)
+		}
+	}
+}
+
+func assertMigration08Version(t *testing.T, ctx context.Context, provider *goose.Provider, want int64) {
+	t.Helper()
+	got, err := provider.GetDBVersion(ctx)
+	if err != nil || got != want {
+		t.Fatalf("migration version: got %d, want %d: %v", got, want, err)
 	}
 }
 
@@ -190,11 +216,15 @@ func TestSharedAppLegacySecret(t *testing.T) {
 // Exercise writes made by the old service after 00007's initial backfill.
 func TestMigration08LegacyWrites(t *testing.T) {
 	ctx := context.Background()
+	t.Setenv(testdb.EnvDatabaseURL, "")
 	env, err := testdb.Start(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer env.Close()
+	if !env.Embedded {
+		t.Fatal("migration 8 requires its own disposable cluster")
+	}
 	secrets, err := db.NewRoleSecrets()
 	if err != nil {
 		t.Fatal(err)
@@ -207,9 +237,19 @@ func TestMigration08LegacyWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = db.ApplyMigrations(ctx, urls.Owner, dir); err != nil {
+	conn, err := sql.Open("pgx", urls.Owner)
+	if err != nil {
 		t.Fatal(err)
 	}
+	defer conn.Close()
+	provider, err := goose.NewProvider(goose.DialectPostgres, conn, os.DirFS(dir), goose.WithDisableGlobalRegistry(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = provider.UpTo(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	assertMigration08Version(t, ctx, provider, 7)
 	pools, err := db.OpenPools(ctx, urls)
 	if err != nil {
 		t.Fatal(err)
@@ -220,18 +260,6 @@ func TestMigration08LegacyWrites(t *testing.T) {
 	defer func() { testStore = oldStore }()
 	svc, err := New(testStore, pools.Ingress, testRing(t))
 	if err != nil {
-		t.Fatal(err)
-	}
-	conn, err := sql.Open("pgx", urls.Owner)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close()
-	provider, err := goose.NewProvider(goose.DialectPostgres, conn, os.DirFS(dir), goose.WithDisableGlobalRegistry(true))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = provider.Down(ctx); err != nil {
 		t.Fatal(err)
 	}
 	a := seedActor(t, "admin", true, "full")
@@ -258,8 +286,29 @@ func TestMigration08LegacyWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = provider.Up(ctx); err == nil || !strings.Contains(err.Error(), "legacy app conflicts") {
+	if _, err = provider.UpTo(ctx, 8); err == nil || !strings.Contains(err.Error(), "legacy app conflicts with canonical registry") {
 		t.Fatalf("conflicting upgrade: %v", err)
+	}
+	assertMigration08Version(t, ctx, provider, 7)
+	err = db.WithIngressTx(ctx, pools.Ingress, func(ctx context.Context, tx pgx.Tx) error {
+		var appID, status string
+		if err := tx.QueryRow(ctx, `SELECT app_id, status FROM meta_app_registry WHERE id = $1`, id).Scan(&appID, &status); err != nil {
+			return err
+		}
+		if appID != "legacy-upgrade" || status != "disabled" {
+			t.Fatalf("conflicting canonical authority overwritten: %q %q", appID, status)
+		}
+		var count int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM meta_app_registry_secrets WHERE registry_id = $1`, id).Scan(&count); err != nil {
+			return err
+		}
+		if count != 0 {
+			t.Fatal("failed upgrade inserted a canonical secret")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 	err = db.WithIngressTx(ctx, pools.Ingress, func(ctx context.Context, tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `DELETE FROM meta_app_registry WHERE id = $1 AND status = 'disabled'`, id)
@@ -268,9 +317,41 @@ func TestMigration08LegacyWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = provider.Up(ctx); err != nil {
+	if _, err = provider.UpTo(ctx, 8); err != nil {
 		t.Fatal(err)
 	}
+	assertMigration08Version(t, ctx, provider, 8)
+	assertLegacySecret := func() {
+		t.Helper()
+		err := db.WithIngressTx(ctx, pools.Ingress, func(ctx context.Context, tx pgx.Tx) error {
+			var appID, status, version, scope, entity, field, aad string
+			var tenantID, entityID uuid.UUID
+			var ciphertext []byte
+			err := tx.QueryRow(ctx, `SELECT r.app_id,r.status,s.key_version,s.ciphertext,s.aad_scope,s.aad_tenant_id,s.aad_entity,s.aad_entity_id,s.aad_field,s.aad FROM meta_app_registry r JOIN meta_app_registry_secrets s ON s.registry_id=r.id WHERE r.id=$1`, id).Scan(&appID, &status, &version, &ciphertext, &scope, &tenantID, &entity, &entityID, &field, &aad)
+			if err != nil {
+				return err
+			}
+			if appID != "legacy-upgrade" || status != "active" || version != secret.KeyVersion || !bytes.Equal(ciphertext, secret.Ciphertext) || scope != "legacy_tenant" || tenantID != a.tenant || entity != entityApp || entityID != id || field != fieldAppSecret || aad != secret.AAD {
+				t.Fatal("legacy canonical identity, status, ciphertext or AAD changed")
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	assertLegacySecret()
+	// A compatible legacy binding can still be rolled back and upgraded again.
+	if _, err = provider.DownTo(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	assertMigration08Version(t, ctx, provider, 7)
+	assertLegacySecret()
+	if _, err = provider.UpTo(ctx, 8); err != nil {
+		t.Fatal(err)
+	}
+	assertMigration08Version(t, ctx, provider, 8)
+	assertLegacySecret()
 	app, err := svc.Server().ResolveApp(ctx, "legacy-upgrade")
 	if err != nil || app.AppSecret != testSecret {
 		t.Fatalf("legacy app: %+v %v", app, err)
@@ -288,4 +369,5 @@ func TestMigration08LegacyWrites(t *testing.T) {
 	if err != nil || material.AppSecret != testSecret || material.AccessToken != testToken {
 		t.Fatalf("material: %+v %v", material, err)
 	}
+	assertLegacySecret()
 }
