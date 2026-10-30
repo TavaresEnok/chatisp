@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { conversationScopeKey } from "@/features/conversation/send-intent";
+import { formattedText } from "@/features/conversation/text-format";
 import type {
   ConversationScope,
   DeliveryReceipt,
@@ -302,7 +303,7 @@ function EntryContent({ entry }: { entry: TimelineEntry }) {
       </p>
       {entry.kind === "text" ? (
         <>
-          <p className="whitespace-pre-wrap break-words text-foreground">{entry.text}</p>
+          <p className="whitespace-pre-wrap break-words text-foreground">{formattedText(entry.text)}</p>
           <p className="flex flex-wrap gap-2">
             {entry.localState ? (
               <span data-local-state={entry.localState} className={localStateClass[entry.localState]}>
