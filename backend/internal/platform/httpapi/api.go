@@ -15,6 +15,10 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 
+	attendanceHttpAPI "chatisp/internal/attendance/httpapi"
+	attendanceService "chatisp/internal/attendance/service"
+	channelConfig "chatisp/internal/channel/configuration"
+	channelHttpAPI "chatisp/internal/channel/httpapi"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/metrics"
@@ -33,6 +37,10 @@ type Dependencies struct {
 	Logger         *slog.Logger
 	Auth           *auth.Service
 	TrustedOrigins []string
+	Attendance     attendanceService.Service
+	Channels       *channelConfig.Service
+	Realtime       http.Handler
+	Webhook        http.Handler
 }
 
 // API is the public HTTP handler and its generated OpenAPI document.
@@ -121,6 +129,35 @@ func New(deps Dependencies) *API {
 	})
 	registerPanel(api, deps)
 	registerPlatform(api, deps)
+	attendanceHttpAPI.Register(api, attendanceHttpAPI.Dependencies{
+		Auth:           deps.Auth,
+		Attendance:     deps.Attendance,
+		TrustedOrigins: deps.TrustedOrigins,
+	})
+	channelHttpAPI.Register(api, channelHttpAPI.Dependencies{
+		Auth:           deps.Auth,
+		Channels:       deps.Channels,
+		TrustedOrigins: deps.TrustedOrigins,
+	})
+
+	realtimeHandler := deps.Realtime
+	if realtimeHandler == nil {
+		realtimeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			Write(w, http.StatusServiceUnavailable, "serviço indisponível")
+		})
+	}
+	router.Handle("/api/panel/realtime", realtimeHandler)
+	router.Handle("/api/panel/ws", realtimeHandler)
+
+	webhookHandler := deps.Webhook
+	if webhookHandler == nil {
+		webhookHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			Write(w, http.StatusServiceUnavailable, "serviço indisponível")
+		})
+	}
+	router.Handle("/api/webhooks/meta", webhookHandler)
+	router.Handle("/webhooks/meta", webhookHandler)
+	router.Handle("/meta/webhook", webhookHandler)
 
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		Write(w, http.StatusNotFound, "o caminho solicitado não existe")

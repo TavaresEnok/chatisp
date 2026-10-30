@@ -73,6 +73,7 @@ func Apply(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		return errors.New("falha ao aplicar migrações")
 	}
 	log.Info("migrações aplicadas", "component", "migrate", "count", len(results))
+
 	return nil
 }
 

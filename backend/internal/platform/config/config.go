@@ -32,9 +32,11 @@ type Config struct {
 	Env                 string        `env:"CHATISP_ENV,required,notEmpty"`
 	HTTPAddr            string        `env:"CHATISP_HTTP_ADDR" envDefault:"127.0.0.1:8080"`
 	MetricsAddr         string        `env:"CHATISP_METRICS_ADDR" envDefault:"127.0.0.1:9090"`
-	DatabaseURL         string        `env:"CHATISP_DATABASE_URL,required,notEmpty"`
+	DatabaseURL         string        `env:"CHATISP_DATABASE_URL"`
 	AppDatabaseURL      string        `env:"CHATISP_APP_DATABASE_URL"`
 	PlatformDatabaseURL string        `env:"CHATISP_PLATFORM_DATABASE_URL"`
+	IngressDatabaseURL  string        `env:"CHATISP_INGRESS_DATABASE_URL"`
+	JobsDatabaseURL     string        `env:"CHATISP_JOBS_DATABASE_URL"`
 	LogLevel            string        `env:"CHATISP_LOG_LEVEL" envDefault:"info"`
 	ShutdownTimeout     time.Duration `env:"CHATISP_SHUTDOWN_TIMEOUT" envDefault:"15s"`
 	MigrationsDir       string        `env:"CHATISP_MIGRATIONS_DIR" envDefault:"db/migrations"`
@@ -48,10 +50,23 @@ type Config struct {
 	DataKeysFile        string        `env:"CHATISP_DATA_KEYS_FILE"`
 	DataKeyVersion      string        `env:"CHATISP_DATA_KEY_VERSION"`
 	KeyRing             *crypto.Ring  `env:"-"`
+	MetaSimulation      bool          `env:"CHATISP_META_SIMULATION"`
+	MetaStandInURL      string        `env:"CHATISP_META_STANDIN_URL"`
+	MetaVerifyToken     string        `env:"CHATISP_META_VERIFY_TOKEN"`
+	MetaAppID           string        `env:"CHATISP_META_APP_ID"`
 }
 
 // Load reads environ as KEY=VALUE entries and ignores the process environment.
 func Load(environ []string) (Config, error) {
+	return load(environ, true)
+}
+
+// LoadRuntime loads configuration without requiring the migration owner DSN.
+func LoadRuntime(environ []string) (Config, error) {
+	return load(environ, false)
+}
+
+func load(environ []string, requireOwner bool) (Config, error) {
 	values := make(map[string]string, len(environ))
 	for _, item := range environ {
 		key, value, ok := strings.Cut(item, "=")
@@ -62,9 +77,12 @@ func Load(environ []string) (Config, error) {
 	}
 	var cfg Config
 	if err := env.ParseWithOptions(&cfg, env.Options{Environment: values}); err != nil {
+		if requireOwner && strings.TrimSpace(values["CHATISP_DATABASE_URL"]) == "" {
+			return Config{}, errors.Join(formatConfigError([]string{"CHATISP_DATABASE_URL"}, nil), explainEnvError(err))
+		}
 		return Config{}, explainEnvError(err)
 	}
-	if err := cfg.Validate(); err != nil {
+	if err := cfg.validate(requireOwner); err != nil {
 		return Config{}, err
 	}
 	origins, ok := parsePanelOrigins(cfg.PanelOriginsRaw)
@@ -88,6 +106,10 @@ func Load(environ []string) (Config, error) {
 
 // Validate checks semantic rules. Error text contains variable names only.
 func (c Config) Validate() error {
+	return c.validate(true)
+}
+
+func (c Config) validate(requireOwner bool) error {
 	var missing []string
 	var invalid []string
 
@@ -99,9 +121,9 @@ func (c Config) Validate() error {
 		invalid = append(invalid, "CHATISP_ENV")
 	}
 
-	if strings.TrimSpace(c.DatabaseURL) == "" {
+	if strings.TrimSpace(c.DatabaseURL) == "" && requireOwner {
 		missing = append(missing, "CHATISP_DATABASE_URL")
-	} else if !validDatabaseURL(c.DatabaseURL) {
+	} else if strings.TrimSpace(c.DatabaseURL) != "" && !validDatabaseURL(c.DatabaseURL) {
 		invalid = append(invalid, "CHATISP_DATABASE_URL")
 	}
 
@@ -144,6 +166,24 @@ func (c Config) Validate() error {
 	}
 	if platformSet && !validDatabaseURL(c.PlatformDatabaseURL) {
 		invalid = append(invalid, "CHATISP_PLATFORM_DATABASE_URL")
+	}
+	if strings.TrimSpace(c.IngressDatabaseURL) != "" && !validDatabaseURL(c.IngressDatabaseURL) {
+		invalid = append(invalid, "CHATISP_INGRESS_DATABASE_URL")
+	}
+	if strings.TrimSpace(c.JobsDatabaseURL) != "" && !validDatabaseURL(c.JobsDatabaseURL) {
+		invalid = append(invalid, "CHATISP_JOBS_DATABASE_URL")
+	}
+
+	if c.Env == "production" {
+		if c.MetaSimulation {
+			invalid = append(invalid, "CHATISP_META_SIMULATION")
+		}
+		if strings.TrimSpace(c.MetaStandInURL) != "" {
+			invalid = append(invalid, "CHATISP_META_STANDIN_URL")
+		}
+	}
+	if strings.TrimSpace(c.MetaStandInURL) != "" && !validStandInURL(c.MetaStandInURL) {
+		invalid = append(invalid, "CHATISP_META_STANDIN_URL")
 	}
 
 	if !noControlChars(c.SMTPAddr) || len(c.SMTPAddr) > 256 {
@@ -261,6 +301,43 @@ func validDatabaseURL(raw string) bool {
 	return parsed.Host != ""
 }
 
+func validStandInURL(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if strings.ContainsAny(raw, " \t\r\n") {
+		return false
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || parsed.User != nil {
+		return false
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return false
+	}
+	if parsed.Hostname() == "graph.facebook.com" || strings.HasSuffix(parsed.Hostname(), ".facebook.com") {
+		return false
+	}
+	if !isLoopbackHost(parsed.Host) {
+		return false
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" || strings.Contains(parsed.Path, "..") || strings.Contains(parsed.Path, "\\") {
+		return false
+	}
+	return true
+}
+
+func isLoopbackHost(hostport string) bool {
+	host, _, err := net.SplitHostPort(hostport)
+	if err != nil {
+		host = hostport
+	}
+	host = strings.TrimSuffix(host, ".")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func validListenAddr(addr string) bool {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -349,6 +426,8 @@ func envName(field string) string {
 		"DatabaseURL":         "CHATISP_DATABASE_URL",
 		"AppDatabaseURL":      "CHATISP_APP_DATABASE_URL",
 		"PlatformDatabaseURL": "CHATISP_PLATFORM_DATABASE_URL",
+		"IngressDatabaseURL":  "CHATISP_INGRESS_DATABASE_URL",
+		"JobsDatabaseURL":     "CHATISP_JOBS_DATABASE_URL",
 		"LogLevel":            "CHATISP_LOG_LEVEL",
 		"ShutdownTimeout":     "CHATISP_SHUTDOWN_TIMEOUT",
 		"MigrationsDir":       "CHATISP_MIGRATIONS_DIR",
@@ -360,6 +439,10 @@ func envName(field string) string {
 		"DataKeys":            "CHATISP_DATA_KEYS",
 		"DataKeysFile":        "CHATISP_DATA_KEYS_FILE",
 		"DataKeyVersion":      "CHATISP_DATA_KEY_VERSION",
+		"MetaSimulation":      "CHATISP_META_SIMULATION",
+		"MetaStandInURL":      "CHATISP_META_STANDIN_URL",
+		"MetaVerifyToken":     "CHATISP_META_VERIFY_TOKEN",
+		"MetaAppID":           "CHATISP_META_APP_ID",
 	}
 	if name, ok := names[field]; ok {
 		return name

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/db"
@@ -46,6 +47,11 @@ func TestMain(m *testing.M) {
 	urls, err := db.Bootstrap(ctx, env.AdminURL, secrets)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "falha no bootstrap: %s\n", err)
+		env.Close()
+		os.Exit(1)
+	}
+	if err := ensureTestJobsRole(ctx, env.AdminURL); err != nil {
+		fmt.Fprintf(os.Stderr, "falha ao criar papel chatisp_jobs: %s\n", err)
 		env.Close()
 		os.Exit(1)
 	}
@@ -315,4 +321,42 @@ func mailToken(text string) string {
 		}
 	}
 	return last
+}
+
+func ensureTestJobsRole(ctx context.Context, adminURL string) error {
+	conn, err := pgx.Connect(ctx, adminURL)
+	if err != nil {
+		return err
+	}
+	defer conn.Close(ctx)
+	var exists bool
+	if err := conn.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'chatisp_jobs')`).Scan(&exists); err != nil {
+		return err
+	}
+	verb := "CREATE"
+	if exists {
+		verb = "ALTER"
+	}
+	var stmt string
+	if err := conn.QueryRow(ctx, `
+		SELECT format('%s ROLE chatisp_jobs LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD %L', $1::text, 'teste-jobs')
+	`, verb).Scan(&stmt); err != nil {
+		return err
+	}
+	if _, err := conn.Exec(ctx, stmt); err != nil {
+		return err
+	}
+	for _, query := range []string{
+		`SELECT format('GRANT CONNECT, CREATE ON DATABASE %I TO chatisp_owner', current_database())`,
+		`SELECT format('GRANT CONNECT ON DATABASE %I TO chatisp_jobs', current_database())`,
+	} {
+		var grant string
+		if err := conn.QueryRow(ctx, query).Scan(&grant); err != nil {
+			return err
+		}
+		if _, err := conn.Exec(ctx, grant); err != nil {
+			return err
+		}
+	}
+	return nil
 }

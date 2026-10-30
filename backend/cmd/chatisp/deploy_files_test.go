@@ -13,6 +13,7 @@ func TestDeployAndCIYAMLParseWithoutSecrets(t *testing.T) {
 	root := repoRoot(t)
 	files := []string{
 		filepath.Join(root, "deploy", "compose.yaml"),
+		filepath.Join(root, "deploy", "compose.yml"),
 		filepath.Join(root, ".github", "workflows", "ci.yml"),
 	}
 	for _, path := range files {
