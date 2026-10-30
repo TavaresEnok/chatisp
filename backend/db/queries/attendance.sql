@@ -130,7 +130,8 @@ WHERE tenant_id = sqlc.arg('tenant_id')
   AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
   AND id = sqlc.arg('id')
   AND version = sqlc.arg('expected_version')
-  AND status = 'open'
+  AND status IN ('open', 'waiting_customer')
+  AND (status = 'open' OR waiting_since IS NULL OR sqlc.arg('accepted_at') > waiting_since)
   AND (last_customer_message_at IS NULL OR sqlc.arg('accepted_at') >= last_customer_message_at)
 RETURNING id, version, status, waiting_since;
 

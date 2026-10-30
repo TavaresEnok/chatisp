@@ -364,7 +364,10 @@ func (Repo) NoteAcceptedReply(ctx context.Context, tx pgx.Tx, tenantID, conversa
 	if current.Status == StatusClosed {
 		return Conversation{}, ErrClosed
 	}
-	if current.Status != StatusOpen {
+	if current.Status != StatusOpen && current.Status != StatusWaitingCustomer {
+		return current, nil
+	}
+	if current.Status == StatusWaitingCustomer && !current.WaitingSince.IsZero() && !acceptedAt.After(current.WaitingSince) {
 		return current, nil
 	}
 	if !current.LastCustomerMessageAt.IsZero() && acceptedAt.Before(current.LastCustomerMessageAt) {
@@ -382,19 +385,21 @@ func (Repo) NoteAcceptedReply(ctx context.Context, tx pgx.Tx, tenantID, conversa
 	if err != nil {
 		return Conversation{}, err
 	}
-	if err := q.InsertTimeline(ctx, dbgen.InsertTimelineParams{
-		TenantID:        tenantID,
-		ID:              uuid.New(),
-		ConversationID:  conversationID,
-		CycleNumber:     current.CycleNumber,
-		Kind:            "wait_started",
-		At:              ts(acceptedAt),
-		Version:         row.Version,
-		ControllerEpoch: current.ControllerEpoch,
-		Controller:      current.Controller,
-		AssigneeID:      uuidPtr(current.AssigneeID),
-	}); err != nil {
-		return Conversation{}, err
+	if current.Status != StatusWaitingCustomer {
+		if err := q.InsertTimeline(ctx, dbgen.InsertTimelineParams{
+			TenantID:        tenantID,
+			ID:              uuid.New(),
+			ConversationID:  conversationID,
+			CycleNumber:     current.CycleNumber,
+			Kind:            "wait_started",
+			At:              ts(acceptedAt),
+			Version:         row.Version,
+			ControllerEpoch: current.ControllerEpoch,
+			Controller:      current.Controller,
+			AssigneeID:      uuidPtr(current.AssigneeID),
+		}); err != nil {
+			return Conversation{}, err
+		}
 	}
 	if err := publish(ctx, q, tenantID, "conversation.waiting", "conversation", conversationID, row.Version, map[string]any{
 		"conversation_id": conversationID.String(),

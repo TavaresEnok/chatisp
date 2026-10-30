@@ -2132,7 +2132,8 @@ WHERE tenant_id = $2
   AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
   AND id = $3
   AND version = $4
-  AND status = 'open'
+  AND status IN ('open', 'waiting_customer')
+  AND (status = 'open' OR waiting_since IS NULL OR $1 > waiting_since)
   AND (last_customer_message_at IS NULL OR $1 >= last_customer_message_at)
 RETURNING id, version, status, waiting_since
 `
