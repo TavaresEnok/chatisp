@@ -65,6 +65,8 @@ Sem make, os mesmos comandos são `./scripts/dev.sh`, `./scripts/test.sh`, `./sc
 
 Para experimentar o atendimento com banco descartável e Meta simulado, veja [o roteiro M2](docs/m2-entrega.md). O comando é `go -C backend run ./cmd/m2demo demo`, após instalar as dependências conforme o roteiro.
 
+O demo inclui setor padrão e vínculo setor/caixa do agente para o recorte M3A. [A entrega M3A](docs/m3a-entrega.md) registra as provas de autorização, contatos, compositor e notificações, a revogação de vínculo populado com histórico preservado e o backlog restante. A migração incremental 00012 separa identidade histórica e autorização operacional. M3 completo, revisão independente, gate amplo final e Playwright permanecem pendentes.
+
 ```sh
 ./scripts/test.sh
 ```

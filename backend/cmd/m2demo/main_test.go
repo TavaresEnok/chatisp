@@ -108,6 +108,58 @@ func TestDemoHealthAndRealLogin(t *testing.T) {
 			headers.Set("Cookie", cookie.Name+"="+cookie.Value)
 		}
 	}
+	get := func(path string) []byte {
+		t.Helper()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Cookie", headers.Get("Cookie"))
+		response, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		data, err := io.ReadAll(response.Body)
+		if err != nil || response.StatusCode != 200 {
+			t.Fatalf("%s: %d %s %v", path, response.StatusCode, data, err)
+		}
+		return data
+	}
+	var boxes struct {
+		Inboxes []struct {
+			ID string `json:"id"`
+		} `json:"inboxes"`
+	}
+	if err := json.Unmarshal(get("/api/panel/inboxes"), &boxes); err != nil || len(boxes.Inboxes) != 1 {
+		t.Fatalf("vínculo setor/caixa do agente: %+v %v", boxes, err)
+	}
+	get("/api/panel/sectors")
+	get("/api/panel/contacts")
+	get("/api/panel/preferences/notifications")
+	if err := receive([]string{"-api", base, "-app", info.App, "-secret", info.Secret, "-waba", info.Waba, "-phone", info.Phone}); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(15 * time.Second)
+	for {
+		var snapshot struct {
+			Conversations []struct {
+				ID string `json:"id"`
+			} `json:"conversations"`
+		}
+		path := "/api/panel/inboxes/" + boxes.Inboxes[0].ID + "/conversations"
+		if err := json.Unmarshal(get(path), &snapshot); err != nil {
+			t.Fatal(err)
+		}
+		if len(snapshot.Conversations) == 1 {
+			get(path + "/" + snapshot.Conversations[0].ID + "/history")
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("demo não distribuiu ao setor padrão")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 	ws, upgrade, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(proxy.URL, "http")+"/api/panel/ws", &websocket.DialOptions{HTTPHeader: headers})
 	if err != nil {
 		if upgrade != nil {

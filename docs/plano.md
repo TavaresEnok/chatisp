@@ -257,13 +257,14 @@ Estado de todas as linhas: pendente.
 ## M3 — Webchat do atendente
 
 - Estado: pendente
+- Recorte M3A: implementações reunidas e provas dirigidas em [m3a-entrega.md](m3a-entrega.md); migração incremental 00012 permite revogar vínculo populado preservando histórico, com validação concorrente de atribuição. Fixture M2 usa configuração explícita de setor padrão e mantém suas assertions. Aceite aguarda revisão independente e gate final do controlador. Não equivale à conclusão deste marco.
 - Entrega (C.1): filas, abas, filtros, busca, contato, transferências, notas, etiquetas, prioridade, leitura por usuário, rascunho, atalhos e colisão.
 - Critério: Playwright cobre receber, assumir, transferir, responder e encerrar. Teclado, falhas e reconexão são verificados.
 - Dependências: M2. Setores existem porque a transferência e a visão do atendente precisam deles. Round-robin fica no M5.
 
 ### Requisitos V1 e V1 simples
 
-Estado de todas as linhas: pendente.
+O aceite integral das linhas permanece pendente. O recorte M3A e suas evidências são acompanhados separadamente; transferências, capacidade, abas, busca completa, notas de conversa, tags, prioridade, leitura, colisão, CPF/CNPJ autorizado com cifra/HMAC e Playwright de M3 completo seguem no backlog.
 
 | ID | Prioridade | Requisito | Evidência |
 | --- | --- | --- | --- |
