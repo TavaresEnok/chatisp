@@ -1,4 +1,5 @@
 import http from "node:http";
+import type { components } from "@/api/schema";
 
 export type SeenRequest = {
   method: string;
@@ -199,6 +200,11 @@ export class PanelDouble {
       return;
     }
 
+    if (method === "GET" && path === "/api/panel/preferences/notifications") {
+      const preferences: components["schemas"]["Preferences"] = { sound: true, browser: false, silent: false };
+      sendJson(res, 200, preferences);
+      return;
+    }
     if (method === "POST" && path === "/api/panel/mfa/enrollment") {
       sendJson(res, 200, {
         otpauth_url: "otpauth://totp/Chat%20ISP:ana@provedor.test?secret=SEGREDOBASE32",

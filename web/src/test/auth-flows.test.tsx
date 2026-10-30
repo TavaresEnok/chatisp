@@ -146,9 +146,13 @@ describe("identidade", () => {
     await withPanel(denied, "/entrar", async () => {
       const user = await enter("ana@provedor.test", "senha-certa");
       expect(await screen.findByRole("heading", { level: 1, name: "Painel" })).toBeInTheDocument();
+      expect(useSessionStore.getState().principal?.role).toBe("admin");
       denied.membershipStatus = 403;
       await user.click(screen.getByRole("link", { name: "Configurações" }));
-      expect(await screen.findByRole("alert")).toHaveTextContent("acesso negado");
+      await waitFor(() => {
+        expect(screen.getAllByRole("alert").some((alert) => alert.textContent?.includes("acesso negado"))).toBe(true);
+      });
+      expect(denied.requests.some((request) => request.method === "GET" && request.path === "/api/panel/memberships")).toBe(true);
       expect(screen.queryByRole("list", { name: "Usuários do provedor" })).not.toBeInTheDocument();
     });
   });
