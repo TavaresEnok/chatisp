@@ -11,6 +11,7 @@ import (
 
 	"chatisp/internal/platform/crypto"
 	"chatisp/internal/platform/db"
+	"chatisp/internal/platform/testdb"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -19,11 +20,30 @@ import (
 
 func TestMetaRegistryMigrationBackfillAndRollback(t *testing.T) {
 	ctx := context.Background()
+	// Bootstrap changes cluster-wide role passwords, so even a separate database
+	// on the externally configured cluster would affect the shared test harness.
+	t.Setenv(testdb.EnvDatabaseURL, "")
+	env, err := testdb.Start(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(env.Close)
+	if !env.Embedded {
+		t.Fatal("o teste de migração exige um cluster descartável próprio")
+	}
+	secrets, err := db.NewRoleSecrets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	urls, err := db.Bootstrap(ctx, env.AdminURL, secrets)
+	if err != nil {
+		t.Fatal(err)
+	}
 	dir, err := db.MigrationsDir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn, err := sql.Open("pgx", testURLs.Owner)
+	conn, err := sql.Open("pgx", urls.Owner)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,15 +52,18 @@ func TestMetaRegistryMigrationBackfillAndRollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = provider.Down(ctx); err != nil {
+	if _, err = provider.UpTo(ctx, 6); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		if _, e := provider.Up(ctx); e != nil {
-			t.Errorf("restauração da migração: %v", e)
+	assertVersion := func(want int64) {
+		t.Helper()
+		got, e := provider.GetDBVersion(ctx)
+		if e != nil || got != want {
+			t.Fatalf("versão da migração: got %d, want %d: %v", got, want, e)
 		}
-	})
-	admin, err := pgx.Connect(ctx, testEnv.AdminURL)
+	}
+	assertVersion(6)
+	admin, err := pgx.Connect(ctx, env.AdminURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,10 +91,11 @@ func TestMetaRegistryMigrationBackfillAndRollback(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err = provider.Up(ctx); err != nil {
+	if _, err = provider.UpTo(ctx, 7); err != nil {
 		t.Fatal(err)
 	}
-	ingress, err := pgx.Connect(ctx, testURLs.Ingress)
+	assertVersion(7)
+	ingress, err := pgx.Connect(ctx, urls.Ingress)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +121,7 @@ func TestMetaRegistryMigrationBackfillAndRollback(t *testing.T) {
 	if err = admin.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM meta_app_secrets s JOIN meta_apps a ON (a.tenant_id,a.id)=(s.tenant_id,s.meta_app_id) WHERE a.id=$1) AND EXISTS (SELECT 1 FROM pg_constraint WHERE conname='meta_app_secrets_app_fkey') AND EXISTS (SELECT 1 FROM pg_constraint WHERE conname='meta_apps_app_id_key')`, app).Scan(&exists); err != nil || !exists {
 		t.Fatal("estrutura legada não preservada", err)
 	}
-	for _, url := range []string{testURLs.App, testURLs.Platform} {
+	for _, url := range []string{urls.App, urls.Platform} {
 		role, e := pgx.Connect(ctx, url)
 		if e != nil {
 			t.Fatal(e)
@@ -111,13 +135,15 @@ func TestMetaRegistryMigrationBackfillAndRollback(t *testing.T) {
 	if _, err = ingress.Exec(ctx, `UPDATE meta_app_registry SET status='disabled' WHERE id=$1`, app); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = provider.Down(ctx); err == nil {
+	if _, err = provider.DownTo(ctx, 6); err == nil {
 		t.Fatal("reversão deveria rejeitar perda")
 	}
+	assertVersion(7)
 	if _, err = ingress.Exec(ctx, `UPDATE meta_app_registry SET status='active' WHERE id=$1`, app); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = provider.Down(ctx); err != nil {
+	if _, err = provider.DownTo(ctx, 6); err != nil {
 		t.Fatal(err)
 	}
+	assertVersion(6)
 }
