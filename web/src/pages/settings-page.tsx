@@ -12,6 +12,7 @@ export function SettingsPage() {
   return (
     <AreaPage areaId="settings">
       <SettingsSections />
+      {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <Link to="/configuracoes/canais">Caixas Meta</Link> : null}
       {principal && !principal.mfaEnrollmentRequired ? (
         <p className="text-sm">
           <Link to="/mfa" className="font-medium underline-offset-4 hover:underline">

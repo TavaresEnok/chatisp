@@ -26,6 +26,9 @@ export type CloseAttendanceFields = {
   reason: string;
   result: CloseResult;
   synthesis: string;
+  clientRequestId: string;
+  farewellBody?: string;
+  farewellRequestId?: string;
 };
 
 export type CloseAttendanceCommand = CloseAttendanceFields & {
@@ -33,8 +36,9 @@ export type CloseAttendanceCommand = CloseAttendanceFields & {
 };
 
 export type AttendanceActionResult =
-  | { outcome: "done" }
+  | { outcome: "done"; farewellFailed?: boolean }
   | { outcome: "conflict"; detail: string }
+  | { outcome: "lost"; detail: string }
   | { outcome: "failed"; detail: string };
 
 export type ConversationDetailBinding = {
@@ -78,8 +82,8 @@ export function readAttendanceResult(value: unknown): AttendanceActionResult {
     return { outcome: "failed", detail: LOST_FALLBACK };
   }
   const outcome = value.outcome;
-  if (outcome === "done") return { outcome: "done" };
-  if (outcome === "conflict" || outcome === "failed") {
+  if (outcome === "done") return { outcome: "done", farewellFailed: "farewellFailed" in value && value.farewellFailed === true };
+  if (outcome === "conflict" || outcome === "failed" || outcome === "lost") {
     const detail = "detail" in value && typeof value.detail === "string" ? value.detail.trim() : "";
     return {
       outcome,

@@ -71,7 +71,6 @@ describe("workspace de atendimento", () => {
     const user = userEvent.setup();
     const assumePending = deferred<AttendanceActionResult>();
     const sendPending = deferred<SendTextResult>();
-    const farewellPending = deferred<SendTextResult>();
     const onSelect = vi.fn();
     const onAssume = vi
       .fn()
@@ -87,15 +86,15 @@ describe("workspace de atendimento", () => {
         outcome: "conflict",
         detail: "A versão da conversa mudou.",
       })
-      .mockResolvedValueOnce({ outcome: "done" });
-    const onFarewell = vi
-      .fn()
-      .mockImplementationOnce(() => farewellPending.promise)
-      .mockResolvedValueOnce({ outcome: "accepted" });
+      .mockResolvedValueOnce({ outcome: "done", farewellFailed: true });
+    const onFarewell = vi.fn();
     const createIntentKey = vi
       .fn()
       .mockReturnValueOnce("chave-envio")
-      .mockReturnValueOnce("chave-despedida");
+      .mockReturnValueOnce("chave-encerramento")
+      .mockReturnValueOnce("chave-despedida")
+      .mockReturnValueOnce("novo-encerramento")
+      .mockReturnValueOnce("nova-despedida");
     const bait = card({ id: "conversa-falsa", protocol: "protocolo-falso" });
     const first = card();
     const second = card({
@@ -317,6 +316,9 @@ describe("workspace de atendimento", () => {
       reason: "Lentidão",
       result: "resolved",
       synthesis: "Orientações de reinício foram suficientes.",
+      clientRequestId: "chave-encerramento",
+      farewellBody: "Vou encerrar por aqui.",
+      farewellRequestId: "chave-despedida",
     });
     expect(onFarewell).not.toHaveBeenCalled();
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
@@ -324,11 +326,13 @@ describe("workspace de atendimento", () => {
     );
 
     await user.click(within(dialog).getByRole("button", { name: /^Encerrar$/ }));
-    expect(onFarewell).toHaveBeenCalledWith("conversa-a", {
-      intentKey: "chave-despedida",
-      text: "Vou encerrar por aqui.",
-    });
-    expect(await within(dialog).findByText("Enviando. O conector ainda não confirmou.")).toBeInTheDocument();
+    expect(onClose).toHaveBeenCalledTimes(2);
+    expect(onClose).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      clientRequestId: "novo-encerramento",
+      farewellRequestId: "nova-despedida",
+    }));
+    expect(onFarewell).not.toHaveBeenCalled();
+    expect(await within(dialog).findByText("Atendimento encerrado, mas a despedida não foi enfileirada.")).toBeInTheDocument();
     const closedCard = card({ assigneeLabel: "Ana da fixture", phase: "closed" });
     rerender(
       <ConversationWorkspace
@@ -342,25 +346,9 @@ describe("workspace de atendimento", () => {
     expect(screen.getByText("Atendimento encerrado.")).toBeInTheDocument();
     expect(screen.getByText("O compositor fica indisponível após o encerramento.")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Mensagem" })).not.toBeInTheDocument();
-    farewellPending.resolve({
-      outcome: "uncertain",
-      detail: "O conector não confirmou a despedida.",
-    });
-    expect(await screen.findByText("O conector não confirmou a despedida.")).toBeInTheDocument();
     expect(screen.getByText("Atendimento encerrado neste painel.")).toBeInTheDocument();
     expect(screen.queryByText(/Entregue ao destinatário|Lida pelo destinatário/)).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Enviar despedida" }));
-    expect(onFarewell).toHaveBeenLastCalledWith("conversa-a", {
-      intentKey: "chave-despedida",
-      text: "Vou encerrar por aqui.",
-    });
-    expect(createIntentKey).toHaveBeenCalledTimes(2);
-    const farewellDialog = screen.getByRole("dialog", { name: "Encerrar com motivo" });
-    expect(await within(farewellDialog).findByText("Mensagem aceita pelo conector.")).toBeInTheDocument();
-    expect(
-      within(farewellDialog).queryByText(/Entregue ao destinatário|Lida pelo destinatário/),
-    ).not.toBeInTheDocument();
+    expect(createIntentKey).toHaveBeenCalledTimes(5);
 
     rerender(
       <ConversationWorkspace

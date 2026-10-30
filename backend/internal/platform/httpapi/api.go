@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -87,6 +88,15 @@ func New(deps Dependencies) *API {
 	})))
 
 	config := huma.DefaultConfig("Chat ISP", version.Version)
+	config.Components.Schemas = huma.NewMapRegistry("#/components/schemas/", func(t reflect.Type, hint string) string {
+		for t.Kind() == reflect.Pointer {
+			t = t.Elem()
+		}
+		if t.PkgPath() == "chatisp/internal/attendance/store" {
+			return "RealtimeStore" + t.Name()
+		}
+		return huma.DefaultSchemaNamer(t, hint)
+	})
 	// Keep the document limited to the operations below. The default hooks add
 	// schema links and a docs page that this skeleton does not expose.
 	config.CreateHooks = nil
@@ -139,6 +149,7 @@ func New(deps Dependencies) *API {
 		Channels:       deps.Channels,
 		TrustedOrigins: deps.TrustedOrigins,
 	})
+	registerRealtimeContract(api)
 
 	realtimeHandler := deps.Realtime
 	if realtimeHandler == nil {

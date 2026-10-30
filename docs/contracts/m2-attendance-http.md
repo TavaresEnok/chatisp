@@ -4,6 +4,8 @@ O módulo `internal/attendance/httpapi` exporta `Register(api huma.API, deps Dep
 
 A sessão é autenticada pelo cookie `__Host-session`; mutações exigem `Origin` em `TrustedOrigins` e `X-CSRF-Token`. A identidade e o tenant são derivados exclusivamente da sessão. Superadmin e sessões pendentes de inscrição MFA não acessam o atendimento. A autorização operacional é revalidada pelo serviço.
 
+`GET /api/panel/inboxes` lista caixas do tenant acessíveis ao atendimento, inclusive canais desconectados, sem credenciais. O usuário e a sessão são autenticados em cada pedido; o vínculo operacional e o tenant são revalidados antes da listagem.
+
 Prefixo `/api/panel/inboxes/{inbox_id}`:
 
 - `GET /conversations?conversation_id=UUID`: snapshot consistente com `next_cursor`, `conversations` e `messages` da seleção opcional.

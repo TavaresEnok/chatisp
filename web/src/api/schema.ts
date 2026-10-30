@@ -56,6 +56,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panel/inboxes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["attendance-inboxes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panel/inboxes/{inbox_id}/conversations": {
         parameters: {
             query?: never;
@@ -436,6 +452,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panel/ws": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Upgrade WebSocket de atendimento
+         * @description Requer sessão operacional ativa e Origin confiável. Após o upgrade, mensagens seguem ClientMessage e ServerMessage; o cursor de replay é next_cursor.
+         */
+        get: operations["attendance-websocket"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/platform/tenants": {
         parameters: {
             query?: never;
@@ -600,6 +636,17 @@ export interface components {
             version: number;
             waba_id: string;
         };
+        ClientMessage: {
+            action?: string;
+            /** Format: int64 */
+            after?: number;
+            conversation_id?: string;
+            inbox_id?: string;
+            /** Format: int64 */
+            since_seq?: number;
+            type?: string;
+            with_snapshot?: boolean;
+        };
         CloseBody: {
             client_request_id: string;
             /** Format: int64 */
@@ -725,6 +772,17 @@ export interface components {
             /** Format: int64 */
             next_cursor: number;
             timeline: components["schemas"]["Timeline"][] | null;
+        };
+        Inbox: {
+            channel_status: string;
+            connector_type: string;
+            enabled: boolean;
+            id: string;
+            name: string;
+            presented_number: string | null;
+        };
+        InboxesOutputBody: {
+            inboxes: components["schemas"]["Inbox"][] | null;
         };
         InspectionOutputBody: {
             discarded: components["schemas"]["Job"][] | null;
@@ -912,6 +970,53 @@ export interface components {
              */
             status: "ready";
         };
+        RealtimeStoreEvent: {
+            AggregateID: string;
+            AggregateType: string;
+            ID: string;
+            Payload: unknown;
+            /** Format: int64 */
+            Seq: number;
+            Type: string;
+            /** Format: int64 */
+            Version: number;
+        };
+        RealtimeStoreHead: {
+            AssigneeID: string;
+            ContactID: string;
+            Controller: string;
+            /** Format: int64 */
+            ControllerEpoch: number;
+            /** Format: date-time */
+            CreatedAt: string;
+            /** Format: int32 */
+            CycleNumber: number;
+            ID: string;
+            /** Format: date-time */
+            LastCustomerMessageAt: string;
+            Protocol: string;
+            Status: string;
+            Summary: string;
+            /** Format: int64 */
+            Version: number;
+            /** Format: date-time */
+            WaitingSince: string;
+        };
+        RealtimeStoreMessage: {
+            Body: string;
+            ConversationID: string;
+            Direction: string;
+            ExternalMessageID: string;
+            Historical: boolean;
+            ID: string;
+            /** Format: date-time */
+            IngestedAt: string;
+            LocalState: string;
+            Origin: string;
+            /** Format: date-time */
+            TrustedAt: string;
+            Visibility: string;
+        };
         ReopenBody: {
             client_request_id: string;
             /** Format: int64 */
@@ -936,6 +1041,18 @@ export interface components {
             client_request_id: string;
             /** Format: int64 */
             expected_version: number;
+        };
+        ServerMessage: {
+            code?: string;
+            conversations?: components["schemas"]["RealtimeStoreHead"][] | null;
+            events?: components["schemas"]["RealtimeStoreEvent"][] | null;
+            inbox_id?: string;
+            message?: string;
+            messages?: components["schemas"]["RealtimeStoreMessage"][] | null;
+            /** Format: int64 */
+            next_cursor?: number;
+            reason?: string;
+            type: string;
         };
         SessionBody: {
             /** @description Token de CSRF desta sessão. Também vai no cookie legível pelo painel. */
@@ -1342,6 +1459,94 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InspectionOutputBody"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "attendance-inboxes": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path?: never;
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxesOutputBody"];
                 };
             };
             /** @description Não autenticado */
@@ -3211,6 +3416,45 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
+            };
+        };
+    };
+    "attendance-websocket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Upgrade WebSocket concluído */
+            101: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sessão ausente ou inválida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Origem ou acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
