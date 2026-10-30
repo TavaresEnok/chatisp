@@ -66,6 +66,24 @@ describe("workspace de atendimento", () => {
     restore = () => undefined;
   });
 
+  it("atalho de próxima conversa move foco e mantém navegação por setas", async () => {
+    const user = userEvent.setup();
+    const conversations = [card(), card({ id: "b", protocol: "b" }), card({ id: "c", protocol: "c" })];
+    const onSelect = vi.fn();
+    render(<ConversationWorkspace scope={scope} listStatus="ready" conversations={conversations} detailConversationId={null} detailStatus="ready" entries={[]} onSelect={onSelect} onAssume={vi.fn()} onSend={vi.fn()} onClose={vi.fn()} onFarewell={vi.fn()} />);
+    const options = screen.getAllByRole("option");
+    await user.click(options[0]!);
+    await user.keyboard("{Control>}{Alt>}j{/Alt}{/Control}");
+    expect(options[1]).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(options[2]).toHaveFocus();
+    expect(onSelect).toHaveBeenLastCalledWith("c");
+    screen.getByRole("button", { name: "Negrito" }).focus();
+    await user.keyboard("{Control>}{Alt>}j{/Alt}{/Control}");
+    expect(options[0]).toHaveFocus();
+    expect(onSelect).toHaveBeenLastCalledWith("conversa-a");
+  });
+
   it("seleciona, assume, envia com status local e encerra com os campos obrigatórios", async () => {
     restore = mockViewport();
     const user = userEvent.setup();

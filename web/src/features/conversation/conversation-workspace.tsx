@@ -31,6 +31,8 @@ export type ConversationWorkspaceProps = {
   ) => Promise<SendTextResult> | SendTextResult;
   onClose: (command: CloseAttendanceCommand) => Promise<unknown> | unknown;
   onReopen?: (conversationId: string) => Promise<unknown> | unknown;
+  onSearch?: () => void;
+  onNote?: (conversationId: string) => void;
   onFarewell: (
     conversationId: string,
     command: SendTextCommand,
@@ -110,6 +112,8 @@ function WorkspaceSession({
   onClose,
   onReopen,
   onFarewell,
+  onSearch,
+  onNote,
 }: ConversationWorkspaceProps) {
   const [session, setSession] = useState<Session>({
     selectedId: null,
@@ -119,6 +123,7 @@ function WorkspaceSession({
   const [assumeStates, setAssumeStates] = useState<Record<string, AssumeState>>({});
   const [closeOpen, setCloseOpen] = useState(false);
   const alive = useRef(true);
+  const workspace = useRef<HTMLDivElement>(null);
   const assumingIds = useRef(new Set<string>());
   const synced = syncSession(session, listStatus, conversations);
   if (synced !== session) setSession(synced);
@@ -152,6 +157,25 @@ function WorkspaceSession({
     onSelect(next.id);
   }
 
+  function handleShortcut(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (closeOpen || event.defaultPrevented || event.nativeEvent.isComposing || !(event.ctrlKey || event.metaKey) || !event.altKey) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
+    if (event.key.toLowerCase() === "j" && conversations.length && listStatus === "ready") {
+      event.preventDefault();
+      const index = conversations.findIndex((item) => item.id === card?.id);
+      const next = conversations[(index + 1) % conversations.length];
+      if (next) {
+        selectConversation(next.id);
+        workspace.current?.querySelectorAll<HTMLElement>('[role="option"]')[(index + 1) % conversations.length]?.focus();
+      }
+    } else if (event.key.toLowerCase() === "f" && onSearch) {
+      event.preventDefault(); onSearch();
+    } else if (event.key.toLowerCase() === "n" && onNote && card) {
+      event.preventDefault(); onNote(card.id);
+    }
+  }
+
   async function assume() {
     if (!card || card.phase === "closed") return;
     const conversationId = card.id;
@@ -177,7 +201,7 @@ function WorkspaceSession({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
+    <div ref={workspace} className="grid gap-4 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]" onKeyDown={handleShortcut}>
       <ConversationList
         status={listStatus}
         conversations={conversations}
@@ -210,12 +234,13 @@ function WorkspaceSession({
             ) : null}
             {synced.opened.map((item) => (
               <div key={item.id} hidden={item.id !== card.id || card.phase === "closed"}>
-                {localQueue ? <QueueComposer onSend={(command) => onSend(item.id, command)} /> : <MessageComposer
+                <MessageComposer
                   scope={{ ...scope, conversationId: item.id }}
                   offline={offline}
+                  localQueue={localQueue}
                   createIntentKey={createIntentKey}
                   onSend={(command) => onSend(item.id, command)}
-                />}
+                />
               </div>
             ))}
           </>
@@ -236,26 +261,4 @@ function WorkspaceSession({
       ) : null}
     </div>
   );
-}
-
-function QueueComposer({ onSend }: { onSend: (command: SendTextCommand) => Promise<SendTextResult> | SendTextResult }) {
-  const [text, setText] = useState("");
-  const [notice, setNotice] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [pendingCommand, setPendingCommand] = useState<SendTextCommand | null>(null);
-  const pending = useRef<SendTextCommand | null>(null);
-  const sending = useRef(false);
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!text.trim() || sending.current) return;
-    const command = pending.current?.text === text ? pending.current : { intentKey: crypto.randomUUID(), text };
-    pending.current = command; setPendingCommand(command); sending.current = true; setBusy(true);
-    let result: SendTextResult;
-    try { result = await onSend(command); } catch { result = { outcome: "lost" }; }
-    sending.current = false; setBusy(false);
-    if (result.outcome === "accepted") { pending.current = null; setPendingCommand(null); setText((current) => current === command.text ? "" : current); setNotice("Mensagem enfileirada localmente; a entrega ainda não foi confirmada."); }
-    else if (result.outcome === "lost" || result.outcome === "uncertain") setNotice("A resposta do envio não chegou ou é incerta. A mesma intenção pode ser consultada novamente.");
-    else { pending.current = null; setPendingCommand(null); setNotice(result.detail); }
-  }
-  return <form aria-label="Compositor de mensagem" onSubmit={submit}><label>Mensagem<textarea value={text} disabled={busy || !!pendingCommand} onChange={(event) => setText(event.target.value)} /></label><button type="submit" disabled={busy || !text.trim()}>Enviar</button>{notice && <p role="status">{notice}</p>}</form>;
 }
