@@ -21,6 +21,7 @@ export type ConversationWorkspaceProps = {
   detailStatus: TimelineViewStatus;
   entries: readonly TimelineEntry[];
   offline?: boolean;
+  localQueue?: boolean;
   createIntentKey?: () => string;
   onSelect: (conversationId: string) => void;
   onAssume: (conversationId: string) => Promise<unknown> | unknown;
@@ -29,6 +30,7 @@ export type ConversationWorkspaceProps = {
     command: SendTextCommand,
   ) => Promise<SendTextResult> | SendTextResult;
   onClose: (command: CloseAttendanceCommand) => Promise<unknown> | unknown;
+  onReopen?: (conversationId: string) => Promise<unknown> | unknown;
   onFarewell: (
     conversationId: string,
     command: SendTextCommand,
@@ -100,11 +102,13 @@ function WorkspaceSession({
   detailStatus,
   entries,
   offline = false,
+  localQueue = false,
   createIntentKey,
   onSelect,
   onAssume,
   onSend,
   onClose,
+  onReopen,
   onFarewell,
 }: ConversationWorkspaceProps) {
   const [session, setSession] = useState<Session>({
@@ -207,18 +211,18 @@ function WorkspaceSession({
               entries={timelineEntries}
             />
             {card.phase === "closed" ? (
-              <p className="text-sm text-muted-foreground">
+              <div><p className="text-sm text-muted-foreground">
                 O compositor fica indisponível após o encerramento.
-              </p>
+              </p>{onReopen ? <button type="button" onClick={async () => { const result = readAttendanceResult(await onReopen(card.id)); if (result.outcome !== "done") setAssumeState({ conversationId: card.id, pending: false, notice: result.detail }); }}>Reabrir</button> : null}</div>
             ) : null}
             {synced.opened.map((item) => (
               <div key={item.id} hidden={item.id !== card.id || card.phase === "closed"}>
-                <MessageComposer
+                {localQueue ? <QueueComposer onSend={(command) => onSend(item.id, command)} /> : <MessageComposer
                   scope={{ ...scope, conversationId: item.id }}
                   offline={offline}
                   createIntentKey={createIntentKey}
                   onSend={(command) => onSend(item.id, command)}
-                />
+                />}
               </div>
             ))}
           </>
@@ -239,4 +243,24 @@ function WorkspaceSession({
       ) : null}
     </div>
   );
+}
+
+function QueueComposer({ onSend }: { onSend: (command: SendTextCommand) => Promise<SendTextResult> | SendTextResult }) {
+  const [text, setText] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const pending = useRef<SendTextCommand | null>(null);
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!text.trim() || busy) return;
+    const command = pending.current?.text === text ? pending.current : { intentKey: crypto.randomUUID(), text };
+    pending.current = command; setBusy(true);
+    let result: SendTextResult;
+    try { result = await onSend(command); } catch { result = { outcome: "lost" }; }
+    setBusy(false);
+    if (result.outcome === "accepted") { pending.current = null; setText((current) => current === command.text ? "" : current); setNotice("Mensagem enfileirada localmente; a entrega ainda não foi confirmada."); }
+    else if (result.outcome === "lost" || result.outcome === "uncertain") setNotice("A resposta do envio não chegou ou é incerta. A mesma intenção pode ser consultada novamente.");
+    else { pending.current = null; setNotice(result.detail); }
+  }
+  return <form aria-label="Compositor de mensagem" onSubmit={submit}><label>Mensagem<textarea value={text} disabled={busy || !!pending.current} onChange={(event) => setText(event.target.value)} /></label><button type="submit" disabled={busy || !text.trim()}>Enviar</button>{notice && <p role="status">{notice}</p>}</form>;
 }

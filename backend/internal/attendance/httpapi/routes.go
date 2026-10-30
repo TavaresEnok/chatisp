@@ -29,6 +29,7 @@ func Register(api huma.API, deps Dependencies) {
 	}
 	base := "/api/panel/inboxes/{inbox_id}/conversations"
 	item := base + "/{conversation_id}"
+	huma.Register(api, op("attendance-inboxes", http.MethodGet, "/api/panel/inboxes", 200), h.inboxes)
 	huma.Register(api, op("attendance-snapshot", http.MethodGet, base, 200), h.snapshot)
 	huma.Register(api, op("attendance-history", http.MethodGet, item+"/history", 200), h.history)
 	huma.Register(api, op("attendance-events", http.MethodGet, "/api/panel/inboxes/{inbox_id}/events", 200), h.events)

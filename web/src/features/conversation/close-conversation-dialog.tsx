@@ -1,16 +1,10 @@
-import { useEffect, useId, useReducer, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  createComposerState,
-  createIntentKey,
-  reduceComposer,
-  selectClientRequestId,
-} from "@/features/conversation/send-intent";
-import type { IntentSubmitMode } from "@/features/conversation/send-intent";
-import type { SendTextCommand, SendTextResult } from "@/features/conversation/types";
+import { createIntentKey } from "@/features/conversation/send-intent";
+import type { SendTextCommand } from "@/features/conversation/types";
 import {
   CLOSE_RESULT_LABEL,
   CLOSE_RESULTS,
@@ -34,26 +28,10 @@ function isCloseResult(value: string): value is CloseResult {
   return CLOSE_RESULTS.some((result) => result === value);
 }
 
-function isSendTextResult(value: unknown): value is SendTextResult {
-  if (!value || typeof value !== "object" || !("outcome" in value)) return false;
-  const outcome = value.outcome;
-  return (
-    outcome === "accepted" ||
-    outcome === "failed" ||
-    outcome === "uncertain" ||
-    outcome === "lost"
-  );
-}
-
-/**
- * A despedida usa a mesma decisão de chave do compositor:
- * perda ou incerteza repetem a intenção; não viram entrega nem leitura.
- */
 export function CloseConversationDialog({
   protocol,
   createIntentKey: createKey = createIntentKey,
   onClose,
-  onFarewell,
   onDismiss,
 }: CloseConversationDialogProps) {
   const titleId = useId();
@@ -66,10 +44,12 @@ export function CloseConversationDialog({
   const [reason, setReason] = useState("");
   const [result, setResult] = useState<CloseResult | "">("");
   const [synthesis, setSynthesis] = useState("");
-  const [farewell, dispatchFarewell] = useReducer(reduceComposer, undefined, createComposerState);
+  const [farewell, setFarewell] = useState("");
+  const intent = useRef<{ fingerprint: string; close: string; farewell: string } | null>(null);
   const [closeNotice, setCloseNotice] = useState<string | null>(null);
   const [closed, setClosed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [uncertain, setUncertain] = useState(false);
 
   useEffect(() => {
     alive.current = true;
@@ -80,29 +60,7 @@ export function CloseConversationDialog({
 
   const canClose =
     !closed && !busy && reason.trim().length > 0 && result !== "" && synthesis.trim().length > 0;
-  const canSendFarewell =
-    closed &&
-    farewell.draft.trim().length > 0 &&
-    farewell.phase !== "submitting" &&
-    farewell.phase !== "accepted" &&
-    !busy;
   const protocolLabel = presentationText(protocol, "indisponível");
-
-  async function sendFarewell(mode: IntentSubmitMode) {
-    const intentKey = selectClientRequestId(farewell, mode, createKey);
-    if (!intentKey) return;
-    const text = farewell.draft;
-    dispatchFarewell({ type: "submit", offline: false, intentKey, text });
-    let response: SendTextResult;
-    try {
-      const value = await Promise.resolve(onFarewell({ intentKey, text }));
-      response = isSendTextResult(value) ? value : { outcome: "lost" };
-    } catch {
-      response = { outcome: "lost" };
-    }
-    if (!alive.current) return;
-    dispatchFarewell({ type: "result", intentKey, result: response });
-  }
 
   async function submitClose() {
     if (result === "" || reason.trim().length === 0 || synthesis.trim().length === 0 || busy || closed) {
@@ -110,6 +68,10 @@ export function CloseConversationDialog({
     }
     setBusy(true);
     setCloseNotice(null);
+    const fingerprint = JSON.stringify([reason.trim(), result, synthesis.trim(), farewell.trim()]);
+    if (!intent.current || intent.current.fingerprint !== fingerprint) {
+      intent.current = { fingerprint, close: createKey(), farewell: farewell.trim() ? createKey() : "" };
+    }
     let response: unknown;
     try {
       response = await Promise.resolve(
@@ -117,6 +79,8 @@ export function CloseConversationDialog({
           reason: reason.trim(),
           result,
           synthesis: synthesis.trim(),
+          clientRequestId: intent.current.close,
+          ...(farewell.trim() ? { farewellBody: farewell.trim(), farewellRequestId: intent.current.farewell } : {}),
         }),
       );
     } catch {
@@ -125,30 +89,25 @@ export function CloseConversationDialog({
     if (!alive.current) return;
     const action = readAttendanceResult(response);
     if (action.outcome !== "done") {
+      if (action.outcome === "conflict") intent.current = null;
+      setUncertain(action.outcome === "lost");
       setCloseNotice(action.detail);
       setBusy(false);
       return;
     }
     setClosed(true);
     setBusy(false);
-    if (farewell.draft.trim().length === 0) {
-      onDismiss();
-      return;
-    }
-    await sendFarewell("reuse-if-pending");
+    if (action.farewellFailed) setCloseNotice("Atendimento encerrado, mas a despedida não foi enfileirada.");
+    else onDismiss();
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (closed) {
-      void sendFarewell("reuse-if-pending");
-      return;
-    }
     void submitClose();
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Escape" && !busy && farewell.phase !== "submitting") {
+    if (event.key === "Escape" && !busy) {
       event.preventDefault();
       onDismiss();
       return;
@@ -177,7 +136,7 @@ export function CloseConversationDialog({
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={helpId}
-      aria-busy={busy || farewell.phase === "submitting" ? true : undefined}
+      aria-busy={busy ? true : undefined}
       className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 p-4 sm:items-center"
       onKeyDown={onKeyDown}
     >
@@ -192,8 +151,8 @@ export function CloseConversationDialog({
           </h2>
           <p className="text-sm text-muted-foreground">{`Protocolo ${protocolLabel}`}</p>
           <p id={helpId} className="text-sm text-muted-foreground">
-            Motivo, resultado e síntese são obrigatórios. A despedida é opcional e segue como
-            outro envio: se ela falhar, o encerramento local permanece.
+            Motivo, resultado e síntese são obrigatórios. A despedida é opcional; se falhar,
+            o encerramento permanece.
           </p>
         </div>
         <div className="flex flex-col gap-2">
@@ -203,7 +162,7 @@ export function CloseConversationDialog({
             value={reason}
             autoFocus
             autoComplete="off"
-            disabled={closed || busy}
+            disabled={closed || busy || uncertain}
             aria-required="true"
             onChange={(event) => setReason(event.target.value)}
           />
@@ -213,7 +172,7 @@ export function CloseConversationDialog({
           <select
             id={resultId}
             value={result}
-            disabled={closed || busy}
+            disabled={closed || busy || uncertain}
             aria-required="true"
             className="h-11 w-full rounded-lg border border-input bg-transparent px-2.5 text-base text-foreground outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground disabled:pointer-events-none disabled:opacity-50 md:text-sm dark:bg-input/30"
             onChange={(event) => {
@@ -240,7 +199,7 @@ export function CloseConversationDialog({
             id={synthesisId}
             value={synthesis}
             rows={3}
-            disabled={closed || busy}
+            disabled={closed || busy || uncertain}
             aria-required="true"
             className={fieldClass}
             onChange={(event) => setSynthesis(event.target.value)}
@@ -250,13 +209,13 @@ export function CloseConversationDialog({
           <Label htmlFor={farewellId}>Despedida</Label>
           <textarea
             id={farewellId}
-            value={farewell.draft}
+            value={farewell}
             rows={3}
-            disabled={farewell.phase === "submitting" || busy}
+            disabled={closed || busy || uncertain}
             aria-required="false"
             placeholder="Opcional"
             className={fieldClass}
-            onChange={(event) => dispatchFarewell({ type: "edit", draft: event.target.value })}
+            onChange={(event) => setFarewell(event.target.value)}
           />
         </div>
         {closeNotice ? (
@@ -269,26 +228,21 @@ export function CloseConversationDialog({
             Atendimento encerrado neste painel.
           </p>
         ) : null}
-        {farewell.notice ? (
-          <p role="status" className="text-sm text-foreground">
-            {farewell.notice}
-          </p>
-        ) : null}
         <div className="flex flex-wrap gap-2">
-          {farewell.phase !== "accepted" ? (
+          {!closed ? (
             <Button
               type="submit"
               className="h-11 w-fit px-3"
-              disabled={closed ? !canSendFarewell : !canClose}
+              disabled={!canClose}
             >
-              {closed ? "Enviar despedida" : "Encerrar"}
+              Encerrar
             </Button>
           ) : null}
           <Button
             type="button"
             variant="outline"
             className="h-11 w-fit px-3"
-            disabled={busy || farewell.phase === "submitting"}
+            disabled={busy}
             onClick={onDismiss}
           >
             {closed ? "Fechar" : "Cancelar"}

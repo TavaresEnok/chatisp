@@ -144,6 +144,10 @@ Prefixo base: `/api/panel/channels/meta`
 ## 4. Realtime WebSocket (`/api/panel/realtime` e `/api/panel/ws`)
 
 Montado diretamente no Chi para suporte completo a upgrade WebSocket RFC 6455.
+O OpenAPI documenta o upgrade de `/api/panel/ws` como `attendance-websocket`;
+os componentes `ClientMessage`, `ServerMessage`, `RealtimeStoreHead`,
+`RealtimeStoreMessage` e `RealtimeStoreEvent` são derivados dos tipos Go reais.
+O registro documenta o protocolo e não instala um handler HTTP adicional.
 
 - **Handshake e Autenticação**:
   - Valida o cookie `__Host-session` presente na requisição de upgrade.

@@ -13,7 +13,35 @@ import (
 )
 
 func (s Service) authorize(ctx context.Context, tx pgx.Tx, p Principal, inboxID uuid.UUID, sending bool) error {
-	if s.DB == nil || tx == nil || p.TenantID == uuid.Nil || p.UserID == uuid.Nil || p.MembershipID == uuid.Nil {
+	if err := s.authorizePrincipal(ctx, tx, p); err != nil {
+		return err
+	}
+	if inboxID == uuid.Nil {
+		return ErrInboxForbidden
+	}
+	var status, kind string
+	var enabled bool
+	err := tx.QueryRow(ctx, `
+		SELECT c.status, c.enabled, c.connector_type
+		FROM inboxes AS i
+		JOIN channel_connectors AS c
+		  ON c.tenant_id = i.tenant_id AND c.id = i.connector_id
+		WHERE i.tenant_id = $1 AND i.id = $2
+	`, p.TenantID, inboxID).Scan(&status, &enabled, &kind)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrInboxForbidden
+	}
+	if err != nil {
+		return err
+	}
+	if sending && (!enabled || status != "connected" || kind != "meta_cloud") {
+		return ErrChannelUnavailable
+	}
+	return nil
+}
+
+func (s Service) authorizePrincipal(ctx context.Context, tx pgx.Tx, p Principal) error {
+	if s.DB == nil || tx == nil || p.IsSuperadmin || p.TenantID == uuid.Nil || p.UserID == uuid.Nil || p.MembershipID == uuid.Nil {
 		return ErrForbidden
 	}
 	membership, err := s.DB.FindMembership(ctx, p.MembershipID)
@@ -40,27 +68,6 @@ func (s Service) authorize(ctx context.Context, tx pgx.Tx, p Principal, inboxID 
 	}
 	if tenant.Status != "active" {
 		return ErrTenantInactive
-	}
-	if inboxID == uuid.Nil {
-		return ErrInboxForbidden
-	}
-	var status, kind string
-	var enabled bool
-	err = tx.QueryRow(ctx, `
-		SELECT c.status, c.enabled, c.connector_type
-		FROM inboxes AS i
-		JOIN channel_connectors AS c
-		  ON c.tenant_id = i.tenant_id AND c.id = i.connector_id
-		WHERE i.tenant_id = $1 AND i.id = $2
-	`, p.TenantID, inboxID).Scan(&status, &enabled, &kind)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrInboxForbidden
-	}
-	if err != nil {
-		return err
-	}
-	if sending && (!enabled || status != "connected" || kind != "meta_cloud") {
-		return ErrChannelUnavailable
 	}
 	return nil
 }
