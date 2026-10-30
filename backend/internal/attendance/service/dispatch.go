@@ -22,6 +22,11 @@ func (s Service) ReserveDispatch(ctx context.Context, in ReserveInput) (Reservat
 	var stale bool
 	var revoked bool
 	err := s.tx(ctx, in.TenantID, func(ctx context.Context, tx pgx.Tx) error {
+		// Match the dispatch boundary and sector policy: acquire the tenant
+		// gate before the lease and attendance rows, and hold it through commit.
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(hashtext('chatisp-tenant'), hashtext($1::text))`, in.TenantID.String()); err != nil {
+			return err
+		}
 		if err := s.tenantActive(ctx); err != nil {
 			return err
 		}

@@ -24,9 +24,13 @@ func (Repo) Snapshot(ctx context.Context, tx pgx.Tx, in SnapshotInput) (Snapshot
 	if err != nil {
 		return Snapshot{}, err
 	}
+	if in.CursorCeiling != nil && cursor.Seq > *in.CursorCeiling {
+		cursor.Seq = *in.CursorCeiling
+	}
 	rows, err := q.ListInboxConversations(ctx, dbgen.ListInboxConversationsParams{
-		TenantID: in.TenantID,
-		InboxID:  uuidPtr(in.InboxID),
+		TenantID:      in.TenantID,
+		InboxID:       uuidPtr(in.InboxID),
+		AuthorizedIds: in.AuthorizedIDs,
 	})
 	if err != nil {
 		return Snapshot{}, err
@@ -68,6 +72,14 @@ func (Repo) Snapshot(ctx context.Context, tx pgx.Tx, in SnapshotInput) (Snapshot
 // ReadEvents returns events with sequence in (after, cursor]. A cursor older
 // than the retention floor returns ErrResync instead of a partial page.
 func (Repo) ReadEvents(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, after int64) (EventPage, error) {
+	return readEvents(ctx, tx, tenantID, after, nil, nil)
+}
+
+func (Repo) ReadAuthorizedEvents(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, after int64, ids []uuid.UUID, ceiling int64) (EventPage, error) {
+	return readEvents(ctx, tx, tenantID, after, ids, &ceiling)
+}
+
+func readEvents(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, after int64, ids []uuid.UUID, ceiling *int64) (EventPage, error) {
 	if err := requireTenant(ctx, tx, tenantID); err != nil {
 		return EventPage{}, err
 	}
@@ -82,10 +94,14 @@ func (Repo) ReadEvents(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, after
 	if after < cursor.RetainAfter {
 		return EventPage{}, ErrResync
 	}
+	if ceiling != nil && cursor.Seq > *ceiling {
+		cursor.Seq = *ceiling
+	}
 	rows, err := q.ListRealtimeEvents(ctx, dbgen.ListRealtimeEventsParams{
-		TenantID:   tenantID,
-		AfterSeq:   after,
-		ThroughSeq: cursor.Seq,
+		TenantID:      tenantID,
+		AfterSeq:      after,
+		ThroughSeq:    cursor.Seq,
+		AuthorizedIds: ids,
 	})
 	if err != nil {
 		return EventPage{}, err
@@ -103,6 +119,16 @@ func (Repo) ReadEvents(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, after
 		})
 	}
 	return page, nil
+}
+
+// CursorCeiling captures the committed sequence before authorizing the list.
+func CursorCeiling(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) (int64, error) {
+	if err := queries(tx).EnsureRealtimeCursor(ctx, tenantID); err != nil {
+		return 0, err
+	}
+	var seq int64
+	err := tx.QueryRow(ctx, `SELECT seq FROM realtime_tenant_cursors WHERE tenant_id=$1`, tenantID).Scan(&seq)
+	return seq, err
 }
 
 // Compact drops events at or below retainAfter and moves the retention floor.

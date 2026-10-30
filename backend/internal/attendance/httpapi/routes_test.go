@@ -58,6 +58,9 @@ func seed(t *testing.T) fixture {
 				return e
 			}
 		}
+		if _, err := tx.Exec(ctx, `WITH s AS (INSERT INTO sectors (tenant_id,id,name,legacy_default) VALUES ($1,$2,'Padrão',true)), i AS (INSERT INTO sector_inboxes VALUES ($1,$2,$3)), m AS (INSERT INTO sector_memberships VALUES ($1,$2,$4)) INSERT INTO inbox_sector_defaults VALUES ($1,$3,$2)`, w.tenant, uuid.New(), w.inbox, w.member); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {

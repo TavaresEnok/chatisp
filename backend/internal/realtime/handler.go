@@ -14,6 +14,7 @@ import (
 
 	attendanceService "chatisp/internal/attendance/service"
 	"chatisp/internal/platform/auth"
+	"chatisp/internal/platform/db"
 )
 
 // Handler implements http.Handler for the panel realtime websocket endpoint.
@@ -24,6 +25,21 @@ type Handler struct {
 
 // NewHandler creates a new realtime WebSocket HTTP handler.
 func NewHandler(opts Options) *Handler {
+	if opts.DB == nil {
+		if provider, ok := opts.Authenticator.(interface{ DB() *db.Store }); ok {
+			opts.DB = provider.DB()
+		}
+		if opts.DB == nil {
+			if svc, ok := opts.Attendance.(attendanceService.Service); ok {
+				opts.DB = svc.DB
+			}
+		}
+		if opts.DB == nil {
+			if provider, ok := opts.InboxResolver.(interface{ DB() *db.Store }); ok {
+				opts.DB = provider.DB()
+			}
+		}
+	}
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.Default()

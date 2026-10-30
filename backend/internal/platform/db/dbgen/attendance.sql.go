@@ -1559,12 +1559,14 @@ FROM conversations
 WHERE tenant_id = $1
   AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
   AND inbox_id = $2
+  AND ($3::uuid[] IS NULL OR id = ANY($3::uuid[]))
 ORDER BY created_at, id
 `
 
 type ListInboxConversationsParams struct {
-	TenantID uuid.UUID
-	InboxID  *uuid.UUID
+	TenantID      uuid.UUID
+	InboxID       *uuid.UUID
+	AuthorizedIds []uuid.UUID
 }
 
 type ListInboxConversationsRow struct {
@@ -1584,7 +1586,7 @@ type ListInboxConversationsRow struct {
 }
 
 func (q *Queries) ListInboxConversations(ctx context.Context, arg ListInboxConversationsParams) ([]ListInboxConversationsRow, error) {
-	rows, err := q.db.Query(ctx, listInboxConversations, arg.TenantID, arg.InboxID)
+	rows, err := q.db.Query(ctx, listInboxConversations, arg.TenantID, arg.InboxID, arg.AuthorizedIds)
 	if err != nil {
 		return nil, err
 	}
@@ -1685,13 +1687,15 @@ WHERE tenant_id = $1
   AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
   AND seq > $2
   AND seq <= $3
+  AND ($4::uuid[] IS NULL OR (aggregate_type = 'conversation' AND aggregate_id = ANY($4::uuid[])))
 ORDER BY seq
 `
 
 type ListRealtimeEventsParams struct {
-	TenantID   uuid.UUID
-	AfterSeq   int64
-	ThroughSeq int64
+	TenantID      uuid.UUID
+	AfterSeq      int64
+	ThroughSeq    int64
+	AuthorizedIds []uuid.UUID
 }
 
 type ListRealtimeEventsRow struct {
@@ -1705,7 +1709,7 @@ type ListRealtimeEventsRow struct {
 }
 
 func (q *Queries) ListRealtimeEvents(ctx context.Context, arg ListRealtimeEventsParams) ([]ListRealtimeEventsRow, error) {
-	rows, err := q.db.Query(ctx, listRealtimeEvents, arg.TenantID, arg.AfterSeq, arg.ThroughSeq)
+	rows, err := q.db.Query(ctx, listRealtimeEvents, arg.TenantID, arg.AfterSeq, arg.ThroughSeq, arg.AuthorizedIds)
 	if err != nil {
 		return nil, err
 	}

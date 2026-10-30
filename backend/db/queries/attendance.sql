@@ -237,6 +237,7 @@ FROM conversations
 WHERE tenant_id = sqlc.arg('tenant_id')
   AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
   AND inbox_id = sqlc.arg('inbox_id')
+  AND (sqlc.narg('authorized_ids')::uuid[] IS NULL OR id = ANY(sqlc.narg('authorized_ids')::uuid[]))
 ORDER BY created_at, id;
 
 -- name: InsertOutbound :one
@@ -409,6 +410,7 @@ WHERE tenant_id = sqlc.arg('tenant_id')
   AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
   AND seq > sqlc.arg('after_seq')
   AND seq <= sqlc.arg('through_seq')
+  AND (sqlc.narg('authorized_ids')::uuid[] IS NULL OR (aggregate_type = 'conversation' AND aggregate_id = ANY(sqlc.narg('authorized_ids')::uuid[])))
 ORDER BY seq;
 
 -- name: CompactRealtime :one

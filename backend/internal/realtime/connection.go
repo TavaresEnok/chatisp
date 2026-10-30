@@ -10,9 +10,11 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	attendanceService "chatisp/internal/attendance/service"
 	"chatisp/internal/attendance/store"
+	"chatisp/internal/sectors"
 )
 
 const (
@@ -96,26 +98,72 @@ func (c *boundedCache) get(k uuid.UUID) (uuid.UUID, bool) {
 	return v, ok
 }
 
-func (c *boundedCache) put(k, v uuid.UUID) {
+func (c *boundedCache) put(k, v uuid.UUID) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if _, ok := c.m[k]; ok {
 		c.m[k] = v
-		return
+		return true
 	}
+	retained := true
 	if len(c.seq) >= c.cap {
+		retained = false
 		oldest := c.seq[0]
 		c.seq = c.seq[1:]
 		delete(c.m, oldest)
 	}
 	c.m[k] = v
 	c.seq = append(c.seq, k)
+	return retained
 }
 
 func (c *boundedCache) len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.m)
+}
+
+func (c *boundedCache) entries() map[uuid.UUID]uuid.UUID {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make(map[uuid.UUID]uuid.UUID, len(c.m))
+	for id, inbox := range c.m {
+		out[id] = inbox
+	}
+	return out
+}
+
+// checkDelivery pins the same policy used by reads before consuming a queued
+// payload. Network writes happen only after the transaction has ended.
+func (c *conn) checkDelivery(ctx context.Context, msg ServerMessage) error {
+	if c.handler.opts.DB == nil {
+		return ErrForbidden
+	}
+	return c.handler.opts.DB.WithTenantTx(ctx, c.principal.TenantID, func(ctx context.Context, tx pgx.Tx) error {
+		p := sectorPrincipal(c.principal.AttendancePrincipal())
+		if err := sectors.RequireInbox(ctx, tx, p, msg.InboxID); err != nil {
+			return err
+		}
+		ids := make(map[uuid.UUID]struct{})
+		for _, h := range msg.Conversations {
+			ids[h.ID] = struct{}{}
+		}
+		for _, m := range msg.Messages {
+			ids[m.ConversationID] = struct{}{}
+		}
+		for _, e := range msg.Events {
+			if e.AggregateType != "conversation" {
+				return ErrForbidden
+			}
+			ids[e.AggregateID] = struct{}{}
+		}
+		for id := range ids {
+			if err := sectors.RequireConversation(ctx, tx, p, msg.InboxID, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 type conn struct {
@@ -236,6 +284,13 @@ func (c *conn) writePump(ctx context.Context) {
 						return
 					}
 				}
+				checkCtx, checkCancel := context.WithTimeout(ctx, c.writeTimeout)
+				err := c.checkDelivery(checkCtx, msg)
+				checkCancel()
+				if err != nil {
+					c.closeWithCode(websocket.StatusPolicyViolation, "authorization_revoked")
+					return
+				}
 			}
 
 			writeCtx, cancel := context.WithTimeout(ctx, c.writeTimeout)
@@ -344,7 +399,10 @@ func (c *conn) handleClientMessage(ctx context.Context, msg ClientMessage) {
 			c.cursor = snap.NextCursor
 			c.dedup.reset()
 			for _, conv := range snap.Conversations {
-				c.convInbox.put(conv.ID, msg.InboxID)
+				if !c.convInbox.put(conv.ID, msg.InboxID) {
+					c.closeWithCode(websocket.StatusPolicyViolation, "resync_required")
+					return
+				}
 			}
 
 			_ = c.send(ServerMessage{
@@ -471,7 +529,10 @@ func (c *conn) loadSnapshot(ctx context.Context, inboxID, conversationID uuid.UU
 	c.cursor = snap.NextCursor
 	c.dedup.reset()
 	for _, conv := range snap.Conversations {
-		c.convInbox.put(conv.ID, inboxID)
+		if !c.convInbox.put(conv.ID, inboxID) {
+			c.closeWithCode(websocket.StatusPolicyViolation, "resync_required")
+			return
+		}
 	}
 
 	_ = c.send(ServerMessage{
@@ -506,6 +567,12 @@ func (c *conn) streamPump(ctx context.Context) {
 		case <-revalTicker.C:
 			if c.handler.opts.Authenticator != nil {
 				if err := c.handler.opts.Authenticator.RevalidatePrincipal(ctx, c.principal, c.sessionToken); err != nil {
+					c.closeWithCode(websocket.StatusPolicyViolation, "authorization_revoked")
+					return
+				}
+			}
+			for id, inbox := range c.convInbox.entries() {
+				if err := c.checkDelivery(ctx, ServerMessage{InboxID: inbox, Conversations: []store.Head{{ID: id}}}); err != nil {
 					c.closeWithCode(websocket.StatusPolicyViolation, "authorization_revoked")
 					return
 				}
@@ -662,7 +729,10 @@ func (c *conn) isEventForInbox(ctx context.Context, ev store.Event, targetInbox 
 			if resolved == uuid.Nil {
 				return false, nil
 			}
-			c.convInbox.put(convID, resolved)
+			if !c.convInbox.put(convID, resolved) {
+				c.closeWithCode(websocket.StatusPolicyViolation, "resync_required")
+				return false, ErrConnectionClosed
+			}
 			return resolved == targetInbox, nil
 		}
 		// When InboxResolver is nil and conversation is not in cache, we cannot determine the inbox.
@@ -696,10 +766,10 @@ func (c *conn) closeWithCode(code websocket.StatusCode, reason string) {
 	c.closeOnce.Do(func() {
 		close(c.closed)
 		c.drainOutbox()
+		_ = c.ws.Close(code, reason)
 		if c.cancel != nil {
 			c.cancel()
 		}
-		_ = c.ws.Close(code, reason)
 	})
 }
 

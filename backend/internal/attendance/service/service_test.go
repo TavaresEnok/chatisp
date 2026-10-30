@@ -13,6 +13,98 @@ import (
 	"chatisp/internal/attendance/store"
 )
 
+func TestReserveDispatchTenantGateOrder(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	w := seedWorld(t)
+	svc := live(nil)
+	got := mustReceive(t, svc, w, "gate-order", "oi", at(1))
+	owned := mustAssume(t, svc, principal(w), got.Conversation)
+	sent := mustSend(t, svc, principal(w), owned, "resposta", "gate-order-send")
+	oldOwner, newOwner := uuid.New(), uuid.New()
+	var oldLease store.Lease
+	if err := testStore.WithTenantTx(ctx, w.tenant, func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		oldLease, err = svc.Repo.AcquireLease(ctx, tx, w.tenant, w.inbox, oldOwner, time.Now().Add(-time.Minute))
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	admin, err := pgx.Connect(ctx, testEnv.AdminURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Close(context.Background())
+	blocker, err := admin.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blocker.Rollback(context.Background())
+	if _, err := blocker.Exec(ctx, `SELECT id FROM memberships WHERE tenant_id=$1 AND id=$2 FOR UPDATE`, w.tenant, w.membership); err != nil {
+		t.Fatal(err)
+	}
+	observer, err := pgx.Connect(ctx, testEnv.AdminURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer observer.Close(context.Background())
+	waitFor := func(pattern string) {
+		t.Helper()
+		for {
+			var n int
+			if err := observer.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE $1`, pattern).Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			if n > 0 {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	}
+	type result struct {
+		reservation Reservation
+		err         error
+	}
+	reserved := make(chan result, 1)
+	go func() {
+		r, err := svc.ReserveDispatch(ctx, ReserveInput{TenantID: w.tenant, InboxID: w.inbox, AttemptID: sent.AttemptID, OwnerID: newOwner, ExpiresAt: time.Now().Add(time.Minute), At: time.Now()})
+		reserved <- result{r, err}
+	}()
+	waitFor("%SELECT role, status, user_id%")
+	boundary := make(chan error, 1)
+	go func() {
+		boundary <- testStore.WithTenantTx(ctx, w.tenant, func(ctx context.Context, tx pgx.Tx) error {
+			if err := testStore.LockTenant(ctx); err != nil {
+				return err
+			}
+			var owner uuid.UUID
+			var version int64
+			if err := tx.QueryRow(ctx, `SELECT owner_id, lease_version FROM inbox_send_leases WHERE tenant_id=$1 AND inbox_id=$2 FOR UPDATE`, w.tenant, w.inbox).Scan(&owner, &version); err != nil {
+				return err
+			}
+			if owner != newOwner || version <= oldLease.LeaseVersion || (owner == oldOwner && version == oldLease.LeaseVersion) {
+				return errors.New("old dispatch fence was not replaced")
+			}
+			return nil
+		})
+	}()
+	waitFor("SELECT pg_advisory_xact_lock(%")
+	if err := blocker.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	r, boundaryErr := <-reserved, <-boundary
+	if r.err != nil || boundaryErr != nil {
+		t.Fatalf("reservation=%v; dispatch boundary=%v", r.err, boundaryErr)
+	}
+	if r.reservation.OwnerID != newOwner || r.reservation.LeaseVersion <= oldLease.LeaseVersion {
+		t.Fatalf("new fence: %+v; old lease: %+v", r.reservation, oldLease)
+	}
+}
+
 func TestAuthorizationRevalidatesReplay(t *testing.T) {
 	ctx := context.Background()
 	w := seedWorld(t)
@@ -228,6 +320,42 @@ func TestConcurrentFirstMessagesAndAssume(t *testing.T) {
 	if !assumed {
 		t.Fatalf("timeline: %+v", history.Timeline)
 	}
+}
+
+func TestConcurrentActionReplays(t *testing.T) {
+	ctx := context.Background()
+	w := seedWorld(t)
+	svc := live(nil)
+	p := principal(w)
+	opened := mustReceive(t, svc, w, "concurrent-actions", "oi", at(1))
+	owned := mustAssume(t, svc, p, opened.Conversation)
+	run := func(name string, action func() error) {
+		t.Helper()
+		var wg sync.WaitGroup
+		gate := make(chan struct{})
+		errs := make([]error, 2)
+		for i := range errs {
+			wg.Add(1)
+			go func(i int) { defer wg.Done(); <-gate; errs[i] = action() }(i)
+		}
+		close(gate)
+		wg.Wait()
+		for _, err := range errs {
+			if err != nil {
+				t.Fatalf("%s concorrente: %v", name, err)
+			}
+		}
+	}
+	send := SendInput{InboxID: w.inbox, ConversationID: owned.ID, ExpectedVersion: owned.Version, Body: "resposta", ClientRequestID: "concurrent-send", At: at(3)}
+	run("send", func() error { _, err := svc.Send(ctx, p, send); return err })
+	closeIn := CloseInput{InboxID: w.inbox, ConversationID: owned.ID, ExpectedVersion: owned.Version, ClientRequestID: "concurrent-close", Reason: "resolvido", Result: "resolved", Summary: "ok", At: at(4)}
+	run("close", func() error { _, err := svc.Close(ctx, p, closeIn); return err })
+	closed, err := svc.Close(ctx, p, closeIn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopen := ReopenInput{InboxID: w.inbox, ConversationID: owned.ID, ExpectedVersion: closed.Conversation.Version, ClientRequestID: "concurrent-reopen", At: at(5)}
+	run("reopen", func() error { _, err := svc.Reopen(ctx, p, reopen); return err })
 }
 
 func TestCloseFarewellReopen(t *testing.T) {
@@ -571,6 +699,25 @@ func TestStaleLeaseDoesNotReplaceFence(t *testing.T) {
 	}
 	if countQuery(t, ctx, w.tenant, `SELECT count(*) FROM outbound_attempts WHERE tenant_id = $1 AND id = $2 AND state = 'accepted' AND lease_version = $3`, w.tenant, sent.AttemptID, second.LeaseVersion) != 1 {
 		t.Fatal("observação trocou a lease")
+	}
+}
+
+func TestSectorRevocationCancelsQueuedAuthor(t *testing.T) {
+	ctx := context.Background()
+	w := seedWorld(t)
+	svc := live(nil)
+	got := mustReceive(t, svc, w, "sector-revoke", "oi", at(1))
+	assumed := mustAssume(t, svc, principal(w), got.Conversation)
+	sent := mustSend(t, svc, principal(w), assumed, "resposta", "sector-revoke-send")
+	if err := testStore.WithTenantTx(ctx, w.tenant, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `DELETE FROM sector_memberships WHERE tenant_id=$1 AND membership_id=$2`, w.tenant, w.membership)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := svc.ReserveDispatch(ctx, ReserveInput{TenantID: w.tenant, InboxID: w.inbox, AttemptID: sent.AttemptID, OwnerID: uuid.New(), ExpiresAt: time.Now().Add(time.Minute), At: at(4)})
+	if !errors.Is(err, ErrForbidden) || res.State != "cancelled" {
+		t.Fatalf("reserva após revogação de setor: %v %+v", err, res)
 	}
 }
 

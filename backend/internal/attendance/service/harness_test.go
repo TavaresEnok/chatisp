@@ -145,6 +145,9 @@ func seedWorld(t *testing.T) world {
 		`, w.inbox, w.tenant, w.connector); err != nil {
 			return err
 		}
+		if _, err := tx.Exec(ctx, `WITH s AS (INSERT INTO sectors (tenant_id,id,name,legacy_default) VALUES ($1,$2,'Padrão',true)), i AS (INSERT INTO sector_inboxes VALUES ($1,$2,$3)), m AS (INSERT INTO sector_memberships VALUES ($1,$2,$4)) INSERT INTO inbox_sector_defaults VALUES ($1,$3,$2)`, w.tenant, uuid.New(), w.inbox, w.membership); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `INSERT INTO contacts (id, tenant_id, name) VALUES ($1, $2, 'Contato')`, w.contact, w.tenant); err != nil {
 			return err
 		}
@@ -172,6 +175,12 @@ func seedMember(t *testing.T, tenant uuid.UUID, role string) (uuid.UUID, uuid.UU
 	}
 	if err := testStore.WithTenant(ctx, tenant, func(ctx context.Context) error {
 		_, err := testStore.CreateMembership(ctx, db.NewMembership{ID: membership, UserID: user, Role: role, Status: "active"})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := testStore.WithTenantTx(ctx, tenant, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO sector_memberships SELECT tenant_id,id,$2 FROM sectors WHERE tenant_id=$1 AND legacy_default`, tenant, membership)
 		return err
 	}); err != nil {
 		t.Fatal(err)
