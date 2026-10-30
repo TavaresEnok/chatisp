@@ -115,16 +115,20 @@ func (d *Driver) SendText(ctx context.Context, req whatsapp.TextRequest) (whatsa
 		httpReq.Header.Set("User-Agent", userAgentOfficial)
 	}
 
-	var wrote atomic.Bool
+	var gotConn, getConn atomic.Bool
 	httpReq = httpReq.WithContext(httptrace.WithClientTrace(httpReq.Context(), &httptrace.ClientTrace{
-		WroteRequest: func(httptrace.WroteRequestInfo) {
-			wrote.Store(true)
-		},
+		GetConn: func(string) { getConn.Store(true) },
+		GotConn: func(httptrace.GotConnInfo) { gotConn.Store(true) },
 	}))
 
 	resp, err := d.endpoint.client.Do(httpReq)
 	if err != nil {
-		if !wrote.Load() {
+		// Only the standard transport's connection acquisition trace establishes
+		// that no connection was available for any request bytes. Once a
+		// connection is acquired, even a failed or absent WroteRequest callback
+		// cannot rule out a partial write. Custom transports need not trace at all.
+		_, standardTransport := d.endpoint.client.Transport.(*http.Transport)
+		if standardTransport && getConn.Load() && !gotConn.Load() {
 			obs := whatsapp.Observation{NotDispatched: true, Detail: "despacho não iniciado"}
 			if errors.Is(ctx.Err(), context.Canceled) {
 				obs.CancelBeforeDispatch = true

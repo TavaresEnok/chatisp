@@ -4,7 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptrace"
 	"strings"
+	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -202,13 +207,54 @@ func TestSendTextCancelAndRefusedBeforeDispatch(t *testing.T) {
 	if res.Local != whatsapp.StateCancelled || len(server.AcceptedRequests()) != 0 {
 		t.Fatalf("cancelamento: %#v aceitos=%d", res, len(server.AcceptedRequests()))
 	}
-	server.Close()
-	refused, err := driver.SendText(context.Background(), testRequest())
+	var dials atomic.Int32
+	transport := &http.Transport{DialContext: func(context.Context, string, string) (net.Conn, error) {
+		dials.Add(1)
+		return nil, &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}
+	}}
+	refusedDriver, err := Activate(Config{
+		Mode: ModeSimulation, GraphVersion: testVersion, PhoneNumberID: testPhone,
+		AccessToken: testToken, BaseURL: server.URL(), HTTPClient: &http.Client{Transport: transport},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if refused.Local != whatsapp.StateRetrying || refused.ProviderMessageID != "" {
+	refused, err := refusedDriver.SendText(context.Background(), testRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refused.Local != whatsapp.StateRetrying || refused.ProviderMessageID != "" || dials.Load() != 1 || len(server.AcceptedRequests()) != 0 {
 		t.Fatalf("não despachado: %#v", refused)
+	}
+}
+
+type partialWriteTransport struct{ calls atomic.Int32 }
+
+func (t *partialWriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.calls.Add(1)
+	// Simulate a partial write: the callback's error does not prove that no
+	// bytes reached the peer. The transport must not automatically retry.
+	if trace := httptrace.ContextClientTrace(req.Context()); trace != nil && trace.WroteRequest != nil {
+		trace.WroteRequest(httptrace.WroteRequestInfo{Err: syscall.EPIPE})
+	}
+	return nil, syscall.EPIPE
+}
+
+func TestSendTextPartialWriteStaysUncertain(t *testing.T) {
+	transport := &partialWriteTransport{}
+	driver, err := Activate(Config{
+		Mode: ModeSimulation, GraphVersion: testVersion, PhoneNumberID: testPhone,
+		AccessToken: testToken, BaseURL: "http://127.0.0.1:1", HTTPClient: &http.Client{Transport: transport},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := driver.SendText(context.Background(), testRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Local != whatsapp.StateUncertain || res.ProviderMessageID != "" || transport.calls.Load() != 1 {
+		t.Fatalf("escrita parcial: chamadas=%d %#v", transport.calls.Load(), res)
 	}
 }
 
