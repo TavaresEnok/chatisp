@@ -560,17 +560,6 @@ WHERE tenant_id = sqlc.arg('tenant_id')
   AND entity_id = sqlc.arg('entity_id')
   AND field = sqlc.arg('field');
 
--- name: InsertMetaApp :exec
-INSERT INTO meta_apps (tenant_id, id, app_id, status)
-VALUES (sqlc.arg('tenant_id'), sqlc.arg('id'), sqlc.arg('app_id'), 'active');
-
--- name: InsertMetaSecret :exec
-INSERT INTO meta_app_secrets (tenant_id, meta_app_id, key_version, ciphertext, aad)
-VALUES (
-    sqlc.arg('tenant_id'), sqlc.arg('meta_app_id'), sqlc.arg('key_version'),
-    sqlc.arg('ciphertext'), sqlc.arg('aad')
-);
-
 -- name: InsertMetaWaba :exec
 INSERT INTO meta_wabas (tenant_id, id, meta_app_id, waba_id, status)
 VALUES (sqlc.arg('tenant_id'), sqlc.arg('id'), sqlc.arg('meta_app_id'), sqlc.arg('waba_id'), 'active');
@@ -599,9 +588,8 @@ WHERE app.app_id = sqlc.arg('app_id')
 
 -- name: ReadMetaAppSecret :one
 SELECT secret.key_version, secret.ciphertext, secret.aad
-FROM meta_app_secrets AS secret
-JOIN meta_apps AS app
-  ON app.tenant_id = secret.tenant_id AND app.id = secret.meta_app_id
+FROM meta_app_registry_secrets AS secret
+JOIN meta_app_registry AS app ON app.id = secret.registry_id
 WHERE app.app_id = sqlc.arg('app_id')
   AND current_setting('app.access_scope', true) = 'ingress';
 

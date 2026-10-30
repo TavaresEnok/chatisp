@@ -1135,22 +1135,6 @@ func (q *Queries) InsertMessage(ctx context.Context, arg InsertMessageParams) (I
 	return i, err
 }
 
-const insertMetaApp = `-- name: InsertMetaApp :exec
-INSERT INTO meta_apps (tenant_id, id, app_id, status)
-VALUES ($1, $2, $3, 'active')
-`
-
-type InsertMetaAppParams struct {
-	TenantID uuid.UUID
-	ID       uuid.UUID
-	AppID    string
-}
-
-func (q *Queries) InsertMetaApp(ctx context.Context, arg InsertMetaAppParams) error {
-	_, err := q.db.Exec(ctx, insertMetaApp, arg.TenantID, arg.ID, arg.AppID)
-	return err
-}
-
 const insertMetaPhone = `-- name: InsertMetaPhone :exec
 INSERT INTO meta_phone_numbers (
     tenant_id, id, meta_waba_id, phone_number_id, display_number, status, connector_id, inbox_id
@@ -1179,33 +1163,6 @@ func (q *Queries) InsertMetaPhone(ctx context.Context, arg InsertMetaPhoneParams
 		arg.DisplayNumber,
 		arg.ConnectorID,
 		arg.InboxID,
-	)
-	return err
-}
-
-const insertMetaSecret = `-- name: InsertMetaSecret :exec
-INSERT INTO meta_app_secrets (tenant_id, meta_app_id, key_version, ciphertext, aad)
-VALUES (
-    $1, $2, $3,
-    $4, $5
-)
-`
-
-type InsertMetaSecretParams struct {
-	TenantID   uuid.UUID
-	MetaAppID  uuid.UUID
-	KeyVersion string
-	Ciphertext []byte
-	Aad        string
-}
-
-func (q *Queries) InsertMetaSecret(ctx context.Context, arg InsertMetaSecretParams) error {
-	_, err := q.db.Exec(ctx, insertMetaSecret,
-		arg.TenantID,
-		arg.MetaAppID,
-		arg.KeyVersion,
-		arg.Ciphertext,
-		arg.Aad,
 	)
 	return err
 }
@@ -2207,9 +2164,8 @@ func (q *Queries) PeekOutbound(ctx context.Context, arg PeekOutboundParams) (Pee
 
 const readMetaAppSecret = `-- name: ReadMetaAppSecret :one
 SELECT secret.key_version, secret.ciphertext, secret.aad
-FROM meta_app_secrets AS secret
-JOIN meta_apps AS app
-  ON app.tenant_id = secret.tenant_id AND app.id = secret.meta_app_id
+FROM meta_app_registry_secrets AS secret
+JOIN meta_app_registry AS app ON app.id = secret.registry_id
 WHERE app.app_id = $1
   AND current_setting('app.access_scope', true) = 'ingress'
 `

@@ -240,11 +240,12 @@ type MessageStatusEvent struct {
 }
 
 type MetaApp struct {
-	TenantID  uuid.UUID
-	ID        uuid.UUID
-	AppID     string
-	Status    string
-	CreatedAt pgtype.Timestamptz
+	TenantID   uuid.UUID
+	ID         uuid.UUID
+	AppID      string
+	Status     string
+	CreatedAt  pgtype.Timestamptz
+	RegistryID uuid.UUID
 }
 
 type MetaAppRegistry struct {
@@ -255,15 +256,16 @@ type MetaAppRegistry struct {
 }
 
 type MetaAppRegistrySecret struct {
-	RegistryID  uuid.UUID
-	KeyVersion  string
-	Ciphertext  []byte
-	AadScope    string
-	AadTenantID *uuid.UUID
-	AadEntity   string
-	AadEntityID uuid.UUID
-	AadField    string
-	Aad         string
+	RegistryID        uuid.UUID
+	KeyVersion        string
+	Ciphertext        []byte
+	AadScope          string
+	AadTenantID       *uuid.UUID
+	AadEntity         string
+	AadEntityID       uuid.UUID
+	AadField          string
+	Aad               string
+	BindingCapability uuid.UUID
 }
 
 type MetaAppSecret struct {

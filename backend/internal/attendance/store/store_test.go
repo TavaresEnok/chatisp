@@ -628,10 +628,12 @@ func TestIngressRouteSecretsAndPrivileges(t *testing.T) {
 	secret := Secret{KeyVersion: "v1", Ciphertext: []byte{1, 2, 3, 4}, AAD: "meta-app"}
 	binding := MetaBinding{
 		TenantID: w.tenant, AppRowID: uuid.New(), AppID: "app-" + w.tenant.String()[:8],
-		Secret: secret, WabaRowID: uuid.New(), WabaID: "waba-" + w.inbox.String()[:8],
+		Secret: secret, AADScope: "ingress_registry", AADEntity: "meta_app_registry", AADField: "app_secret", WabaRowID: uuid.New(), WabaID: "waba-" + w.inbox.String()[:8],
 		PhoneRowID: uuid.New(), PhoneNumberID: "phone-" + w.inbox.String()[:8],
 		ConnectorID: w.connector, InboxID: w.inbox,
 	}
+	binding.AADEntityID = binding.AppRowID
+	binding.Secret.AAD = "ingress_registry\x1fmeta_app_registry\x1f" + binding.AppRowID.String() + "\x1fapp_secret"
 	if err := testStore.WithTenantTx(ctx, w.tenant, func(ctx context.Context, tx pgx.Tx) error {
 		if err := (Repo{}).RegisterMeta(ctx, tx, binding); err != nil {
 			return err
@@ -1245,9 +1247,8 @@ func TestDatabaseRejectsIncompatibleBinding(t *testing.T) {
 	appID := uuid.New()
 	wabaID := uuid.New()
 	if err := testStore.WithTenantTx(ctx, w.tenant, func(ctx context.Context, tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO meta_apps (tenant_id, id, app_id, status) VALUES ($1, $2, $3, 'active')
-		`, w.tenant, appID, "app-"+appID.String()[:8]); err != nil {
+		if _, err := tx.Exec(ctx, `SELECT bind_meta_app($1,$2,$2,'v1',$3,'ingress_registry',NULL,'meta_app_registry',$2,'app_secret',$4,true,NULL)`,
+			"app-"+appID.String()[:8], appID, []byte{1}, "ingress_registry\x1fmeta_app_registry\x1f"+appID.String()+"\x1fapp_secret"); err != nil {
 			return err
 		}
 		_, err := tx.Exec(ctx, `

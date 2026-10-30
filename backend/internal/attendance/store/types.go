@@ -289,10 +289,19 @@ type Delivery struct {
 
 // MetaBinding is the registry written by the tenant, read by ingress.
 type MetaBinding struct {
-	TenantID      uuid.UUID
-	AppRowID      uuid.UUID
-	AppID         string
-	Secret        Secret
+	TenantID uuid.UUID
+	AppRowID uuid.UUID
+	AppID    string
+	Secret   Secret
+	// RegistryID and Capability are provided by a trusted ingress reader after
+	// authenticating an existing canonical secret. Zero values create a registry.
+	RegistryID    uuid.UUID
+	Capability    uuid.UUID
+	AADScope      string
+	AADTenantID   *uuid.UUID
+	AADEntity     string
+	AADEntityID   uuid.UUID
+	AADField      string
 	WabaRowID     uuid.UUID
 	WabaID        string
 	PhoneRowID    uuid.UUID
