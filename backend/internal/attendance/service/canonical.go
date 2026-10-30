@@ -1,0 +1,58 @@
+package service
+
+import (
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/json"
+	"strconv"
+	"strings"
+)
+
+// textPayload is the canonical send body. Field order is the hash order.
+type textPayload struct {
+	V              int    `json:"v"`
+	ConversationID string `json:"conversation_id"`
+	ConnectorID    string `json:"connector_id"`
+	Body           string `json:"body"`
+	Visibility     string `json:"visibility"`
+}
+
+func canonicalSend(conversationID, connectorID, body string) ([]byte, error) {
+	return json.Marshal(textPayload{
+		V:              payloadVersion,
+		ConversationID: conversationID,
+		ConnectorID:    connectorID,
+		Body:           body,
+		Visibility:     "public",
+	})
+}
+
+func commandHash(parts ...string) []byte {
+	mac := sha256.New()
+	var n [8]byte
+	for _, part := range parts {
+		binary.BigEndian.PutUint64(n[:], uint64(len(part)))
+		_, _ = mac.Write(n[:])
+		_, _ = mac.Write([]byte(part))
+	}
+	return mac.Sum(nil)
+}
+
+func closeHash(in CloseInput) []byte {
+	return commandHash(
+		in.ConversationID.String(),
+		strconv.FormatInt(in.ExpectedVersion, 10),
+		strings.TrimSpace(in.Reason),
+		strings.TrimSpace(in.Result),
+		strings.TrimSpace(in.Summary),
+		strings.TrimSpace(in.FarewellBody),
+		strings.TrimSpace(in.FarewellRequestID),
+	)
+}
+
+func reopenHash(in ReopenInput) []byte {
+	return commandHash(
+		in.ConversationID.String(),
+		strconv.FormatInt(in.ExpectedVersion, 10),
+	)
+}
