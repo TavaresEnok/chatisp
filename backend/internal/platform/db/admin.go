@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // ErrTenantUnchanged is returned when a provider is already in the requested status.
@@ -69,6 +70,9 @@ func (s *Store) SetTenantStatus(ctx context.Context, id uuid.UUID, status string
 	if id == uuid.Nil || (status != "active" && status != "suspended") {
 		return Tenant{}, ErrInvalidTenantStatus
 	}
+	if err := lockTenant(ctx, scope.tx, id); err != nil {
+		return Tenant{}, err
+	}
 	current, err := scanTenant(scope.tx.QueryRow(ctx, `
 		SELECT id, timezone, status, limits, created_at, updated_at
 		FROM tenants
@@ -100,7 +104,13 @@ func (s *Store) LockTenant(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := scope.tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('chatisp-tenant'), hashtext($1::text))`, scope.id.String()); err != nil {
+	return lockTenant(ctx, scope.tx, scope.id)
+}
+
+func lockTenant(ctx context.Context, tx interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}, id uuid.UUID) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('chatisp-tenant'), hashtext($1::text))`, id.String()); err != nil {
 		return mapErr(err)
 	}
 	return nil
