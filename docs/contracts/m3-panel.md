@@ -1,0 +1,5 @@
+# Painel M3A
+
+As páginas de setores e contatos usam os endpoints M3 gerados e a sessão operacional; escritas passam pelo cliente CSRF existente. Consultas são isoladas por tenant, usuário e sessão. O histórico lateral parte do contato da conversa selecionada e consulta o histórico autorizado pelo servidor, com paginação. Erros apresentados não reproduzem detalhes do servidor.
+
+As preferências são persistidas por vínculo. Configurações e conversas compartilham uma chave por tenant, usuário, sessão e membershipId; trocar somente o vínculo consulta suas próprias preferências mesmo com cache fresco. O formulário remonta nessa troca, leituras abandonadas são canceladas e salvamentos do escopo anterior não atualizam o cache após a transição. O socket assina com snapshot ao abrir e reconectar, evitando tratar recuperação como evento ao vivo. Eventos posteriores autorizados alimentam as notificações, por caixa e sessão, com IDs e cursores reais. Na perda de autorização o socket encerra a sessão e limpa cache e armazenamento local. A revisão independente e o aceite integrado permanecem etapas posteriores.

@@ -1,6 +1,10 @@
 import type { AreaId } from "@/lib/areas";
+import type { PanelPrincipal } from "@/stores/session-store";
 
 export const queryKeys = {
+  notificationPreferences: (principal: Pick<PanelPrincipal, "tenantId" | "userId" | "sessionId" | "membershipId">) =>
+    ["m3", JSON.stringify([principal.tenantId, principal.userId, principal.sessionId, principal.membershipId]), "notifications"] as const,
+  contactHistory: (principalScope: readonly string[]) => ["m3", JSON.stringify(principalScope), "contact-history"] as const,
   tenant: (tenantId: string) => [tenantId] as const,
   dashboard: (tenantId: string) => [tenantId, "dashboard"] as const,
   conversations: (tenantId: string) => [tenantId, "conversations"] as const,

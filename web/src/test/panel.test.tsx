@@ -1,9 +1,26 @@
-import { cleanup, screen, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { areas } from "@/lib/areas";
 import { resetSessionStore, useSessionStore } from "@/stores/session-store";
 import { renderPanel } from "@/test/render-panel";
+import { queryKeys } from "@/lib/query-keys";
+
+const notificationPrincipal = {
+  tenantId: "t", userId: "u", sessionId: "s", membershipId: "m1", role: "agent",
+  email: "operador@example.test", expiresAt: "2099-01-01", mfaEnrollmentRequired: false,
+};
+const m1Preferences = { sound: true, browser: false, silent: false };
+const m2Preferences = { sound: false, browser: false, silent: true };
+const jsonResponse = (data: unknown) => new Response(JSON.stringify(data), { headers: { "content-type": "application/json" } });
+function deferredResponse() {
+  let resolve!: (response: Response) => void;
+  const promise = new Promise<Response>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+function switchNotificationMembership(membershipId: string) {
+  act(() => useSessionStore.getState().applySession({ ...notificationPrincipal, membershipId }, "csrf"));
+}
 
 const areaLabels = [
   "Painel",
@@ -39,6 +56,136 @@ describe("painel", () => {
     resetSessionStore();
     vi.unstubAllGlobals();
   });
+  it("troca preferências por vínculo com cache fresco e descarta salvamento antigo", async () => {
+    switchNotificationMembership("m1");
+    const reads: string[] = [];
+    const writes: { membershipId: string; body: unknown }[] = [];
+    const oldSave = deferredResponse();
+    let oldSignal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
+      if (!request.url.endsWith("/preferences/notifications")) return jsonResponse({});
+      const membershipId = useSessionStore.getState().principal!.membershipId;
+      if (request.method === "GET") {
+        reads.push(membershipId);
+        return jsonResponse(membershipId === "m1" ? m1Preferences : m2Preferences);
+      }
+      const body = await request.json();
+      writes.push({ membershipId, body });
+      expect(request.headers.get("X-CSRF-Token")).toBe("csrf");
+      if (membershipId === "m1") { oldSignal = request.signal; return oldSave.promise; }
+      return jsonResponse(body);
+    }));
+    const user = userEvent.setup();
+    const { queryClient } = renderPanel("/configuracoes");
+    expect(queryClient.getDefaultOptions().queries?.staleTime).toBe(30000);
+    expect(await screen.findByLabelText("Som")).toBeChecked();
+    expect(screen.getByLabelText("Modo silencioso")).not.toBeChecked();
+    await user.click(screen.getByLabelText("Notificações do navegador"));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    switchNotificationMembership("m2");
+    expect(screen.queryByLabelText("Som")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Modo silencioso")).toBeChecked());
+    expect(screen.getByLabelText("Som")).not.toBeChecked();
+    expect(reads).toEqual(["m1", "m2"]);
+    expect(oldSignal?.aborted).toBe(true);
+    await user.click(screen.getByLabelText("Notificações do navegador"));
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1]).toEqual({ membershipId: "m2", body: { ...m2Preferences, browser: true } });
+    const currentKey = queryKeys.notificationPreferences({ ...notificationPrincipal, membershipId: "m2" });
+    await waitFor(() => expect(queryClient.getQueryData(currentKey)).toEqual({ ...m2Preferences, browser: true }));
+    await act(async () => { oldSave.resolve(jsonResponse({ ...m1Preferences, browser: true })); await oldSave.promise; });
+    expect(screen.getByLabelText("Som")).not.toBeChecked();
+    expect(screen.getByLabelText("Modo silencioso")).toBeChecked();
+    expect(queryClient.getQueryData(currentKey)).toEqual({ ...m2Preferences, browser: true });
+    expect(queryClient.getQueryData(queryKeys.notificationPreferences(notificationPrincipal))).toEqual(m1Preferences);
+    // Navegação comum reutiliza a consulta fresca do mesmo vínculo nas duas páginas.
+    await user.click(screen.getByRole("link", { name: "Conversas" }));
+    await user.click(screen.getByRole("link", { name: "Configurações" }));
+    expect(await screen.findByLabelText("Modo silencioso")).toBeChecked();
+    expect(reads).toEqual(["m1", "m2"]);
+  });
+
+  it.each(["/configuracoes", "/conversas"])("descarta GET atrasado do vínculo anterior em %s", async (path) => {
+    switchNotificationMembership("m1");
+    vi.stubGlobal("WebSocket", undefined);
+    const oldRead = deferredResponse();
+    const reads: string[] = [];
+    let oldSignal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
+      if (!request.url.endsWith("/preferences/notifications")) return jsonResponse({ inboxes: [] });
+      const membershipId = useSessionStore.getState().principal!.membershipId;
+      reads.push(membershipId);
+      if (membershipId === "m1") { oldSignal = request.signal; return oldRead.promise; }
+      return jsonResponse(m2Preferences);
+    }));
+    const { queryClient } = renderPanel(path);
+    await waitFor(() => expect(reads).toEqual(["m1"]));
+    switchNotificationMembership("m2");
+    const currentKey = queryKeys.notificationPreferences({ ...notificationPrincipal, membershipId: "m2" });
+    await waitFor(() => expect(queryClient.getQueryData(currentKey)).toEqual(m2Preferences));
+    expect(reads).toEqual(["m1", "m2"]);
+    expect(oldSignal?.aborted).toBe(true);
+    await act(async () => { oldRead.resolve(jsonResponse(m1Preferences)); await oldRead.promise; });
+    expect(queryClient.getQueryData(currentKey)).toEqual(m2Preferences);
+    expect(queryClient.getQueryData(queryKeys.notificationPreferences(notificationPrincipal))).toBeUndefined();
+    if (path === "/configuracoes") {
+      expect(screen.getByLabelText("Som")).not.toBeChecked();
+      expect(screen.getByLabelText("Modo silencioso")).toBeChecked();
+    }
+  });
+
+  it("conversas consome preferências do vínculo atual e mantém dedup e replay", async () => {
+    const sockets: PreferenceSocket[] = [];
+    class PreferenceSocket {
+      static OPEN = 1;
+      readyState = 1;
+      onopen: (() => void) | null = null;
+      onmessage: ((event: { data: string }) => void) | null = null;
+      onclose: (() => void) | null = null;
+      send = vi.fn();
+      close = vi.fn();
+      constructor() { sockets.push(this); }
+    }
+    const audio = vi.fn(function () { throw new Error("Áudio simulado"); });
+    vi.stubGlobal("AudioContext", audio);
+    vi.stubGlobal("WebSocket", PreferenceSocket);
+    const reads: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
+      if (request.url.endsWith("/preferences/notifications")) {
+        const membershipId = useSessionStore.getState().principal!.membershipId;
+        reads.push(membershipId);
+        return jsonResponse(membershipId === "m1" ? m1Preferences : m2Preferences);
+      }
+      return jsonResponse(request.url.endsWith("/inboxes") ? { inboxes: [{ id: "i1", name: "Caixa", channel_status: "connected" }] } : { conversations: [] });
+    }));
+    switchNotificationMembership("m1");
+    const user = userEvent.setup();
+    const { queryClient } = renderPanel("/conversas");
+    await waitFor(() => expect(queryClient.getQueryData(queryKeys.notificationPreferences(notificationPrincipal))).toEqual(m1Preferences));
+    await user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
+    const first = sockets[0]!;
+    const emit = (socket: PreferenceSocket, message: unknown) => act(() => socket.onmessage?.({ data: JSON.stringify(message) }));
+    const event = (id: string, cursor: number) => ({ type: "events", inbox_id: "i1", events: [{ ID: id, Seq: cursor, Type: "conversation.opened" }] });
+    act(() => first.onopen?.());
+    emit(first, event("replay", 1));
+    expect(audio).not.toHaveBeenCalled();
+    emit(first, { type: "snapshot", inbox_id: "i1" });
+    emit(first, event("live", 2));
+    expect(audio).toHaveBeenCalledTimes(1);
+    emit(first, event("live", 2));
+    expect(audio).toHaveBeenCalledTimes(1);
+    switchNotificationMembership("m2");
+    await waitFor(() => expect(queryClient.getQueryData(queryKeys.notificationPreferences({ ...notificationPrincipal, membershipId: "m2" }))).toEqual(m2Preferences));
+    await user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
+    const second = sockets[1]!;
+    act(() => second.onopen?.());
+    emit(second, { type: "snapshot", inbox_id: "i1" });
+    emit(second, event("m2-live", 3));
+    emit(first, event("atrasado", 4));
+    expect(audio).toHaveBeenCalledTimes(1);
+    expect(reads).toEqual(["m1", "m2"]);
+    expect(first.close).toHaveBeenCalledOnce();
+  });
   it("abre o Painel a partir da raiz", async () => {
     renderPanel("/");
     expect(
@@ -60,6 +207,9 @@ describe("painel", () => {
           status: 200, headers: { "content-type": "application/json" },
         });
       }
+      if (new URL(request.url).pathname.endsWith("/contacts")) return new Response(JSON.stringify({ items: [], next_offset: null }), { headers: { "content-type": "application/json" } });
+      if (new URL(request.url).pathname.endsWith("/sectors")) return new Response(JSON.stringify({ sectors: [] }), { headers: { "content-type": "application/json" } });
+      if (new URL(request.url).pathname.endsWith("/preferences/notifications")) return new Response(JSON.stringify({ sound: true, browser: false, silent: false }), { headers: { "content-type": "application/json" } });
       throw new Error(`Requisição inesperada: ${request.url}`);
     }));
     const user = userEvent.setup();
@@ -110,7 +260,7 @@ describe("painel", () => {
   });
 
   it("mostra estado vazio honesto nas áreas genéricas", () => {
-    for (const area of areas.filter((item) => item.id !== "conversations")) {
+    for (const area of areas.filter((item) => !["conversations", "contacts", "teams"].includes(item.id))) {
       renderPanel(area.path);
       expect(
         screen.getByRole("heading", { level: 1, name: area.label }),
@@ -126,6 +276,11 @@ describe("painel", () => {
       expectPortugueseUi();
       cleanup();
     }
+  });
+
+  it.each(["/contatos", "/equipes"])("nega acesso anônimo a %s", async (path) => {
+    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch); renderPanel(path);
+    expect(await screen.findByRole("heading", { name: "Entrar" })).toBeInTheDocument(); expect(fetch).not.toHaveBeenCalled();
   });
 
   it("encaminha acesso anônimo às conversas para entrar", async () => {

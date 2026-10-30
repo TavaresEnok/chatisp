@@ -12,6 +12,8 @@ import { SettingsPage } from "@/pages/settings-page";
 import { ChannelSettingsPage } from "@/pages/channel-settings-page";
 import { ConversationsPage } from "@/pages/conversations-page";
 import { UnknownPage } from "@/pages/unknown-page";
+import { TeamsPage } from "@/pages/teams-page";
+import { ContactsPage } from "@/pages/contacts-page";
 
 export function AppRoutes() {
   return (
@@ -25,8 +27,8 @@ export function AppRoutes() {
         <Route index element={<Navigate to="/painel" replace />} />
         <Route path="painel" element={<AreaPage areaId="dashboard" />} />
         <Route path="conversas" element={<ConversationsPage />} />
-        <Route path="contatos" element={<AreaPage areaId="contacts" />} />
-        <Route path="equipes" element={<AreaPage areaId="teams" />} />
+        <Route path="contatos" element={<ContactsPage />} />
+        <Route path="equipes" element={<TeamsPage />} />
         <Route path="relatorios" element={<AreaPage areaId="reports" />} />
         <Route path="configuracoes" element={<SettingsPage />} />
         <Route path="configuracoes/canais" element={<ChannelSettingsPage />} />
