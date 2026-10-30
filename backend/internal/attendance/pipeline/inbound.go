@@ -13,6 +13,7 @@ import (
 
 	"chatisp/internal/attendance/service"
 	"chatisp/internal/attendance/store"
+	"chatisp/internal/contactdirectory"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/jobs"
 )
@@ -160,6 +161,20 @@ func (h *inboundHandler) ApplyInbound(ctx context.Context, tenantID, itemID uuid
 				return err
 			}
 
+			// Lock the contact until the item is stored or quarantined, serializing
+			// against a concurrent block operation.
+			var lockedID uuid.UUID
+			if err := tx.QueryRow(ctx, `SELECT id FROM contacts WHERE tenant_id=$1 AND id=$2 FOR SHARE`, tenantID, contactID).Scan(&lockedID); err != nil {
+				return err
+			}
+			blocked, err := contactdirectory.IsBlocked(ctx, tx, tenantID, contactID)
+			if err != nil {
+				return err
+			}
+			if blocked {
+				_, err = tx.Exec(ctx, `UPDATE webhook_items SET state='quarantined' WHERE tenant_id=$1 AND id=$2`, tenantID, itemID)
+				return err
+			}
 			trustedAt := p.OriginAt
 			if trustedAt.IsZero() {
 				trustedAt = time.Now()

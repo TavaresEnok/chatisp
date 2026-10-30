@@ -21,6 +21,8 @@ import (
 	"chatisp/internal/attendance/pipeline"
 	attendanceService "chatisp/internal/attendance/service"
 	channelConfig "chatisp/internal/channel/configuration"
+	"chatisp/internal/contactdirectory"
+	"chatisp/internal/notifications"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/config"
 	"chatisp/internal/platform/db"
@@ -31,6 +33,7 @@ import (
 	"chatisp/internal/platform/migrate"
 	"chatisp/internal/platform/runtime"
 	"chatisp/internal/realtime"
+	"chatisp/internal/sectors"
 )
 
 const usageText = `uso: chatisp <modo>
@@ -98,6 +101,9 @@ func run(ctx context.Context, args []string, environ []string, stdout, stderr io
 			Auth:           svcs.Auth,
 			Attendance:     svcs.Attendance,
 			Channels:       svcs.Channels,
+			Sectors:        svcs.Sectors,
+			Contacts:       svcs.Contacts,
+			Notifications:  svcs.Notifications,
 			Realtime:       svcs.Realtime,
 			Webhook:        svcs.Webhook,
 			JobsClient:     svcs.JobsClient,
@@ -131,14 +137,17 @@ func applyMigrations(ctx context.Context, cfg config.Config, log *slog.Logger) e
 }
 
 type runtimeServices struct {
-	Auth        *auth.Service
-	Attendance  attendanceService.Service
-	Channels    *channelConfig.Service
-	Realtime    http.Handler
-	Webhook     http.Handler
-	JobsClient  runtime.Worker
-	ReadyChecks []func(context.Context) error
-	Cleanup     func()
+	Auth          *auth.Service
+	Attendance    attendanceService.Service
+	Channels      *channelConfig.Service
+	Sectors       sectors.Service
+	Contacts      contactdirectory.Service
+	Notifications *notifications.Service
+	Realtime      http.Handler
+	Webhook       http.Handler
+	JobsClient    runtime.Worker
+	ReadyChecks   []func(context.Context) error
+	Cleanup       func()
 }
 
 func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mode, log *slog.Logger) (runtimeServices, error) {
@@ -382,14 +391,17 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 	}
 
 	return runtimeServices{
-		Auth:        identity,
-		Attendance:  attendanceSvc,
-		Channels:    channelSvc,
-		Realtime:    realtimeHandler,
-		Webhook:     webhookHandler,
-		JobsClient:  workerWorker,
-		ReadyChecks: readyChecks,
-		Cleanup:     cleanupAll,
+		Auth:          identity,
+		Attendance:    attendanceSvc,
+		Channels:      channelSvc,
+		Sectors:       sectors.Service{DB: store},
+		Contacts:      contactdirectory.Service{DB: store, Visibility: httpapi.ContactVisibility{}},
+		Notifications: notifications.New(store),
+		Realtime:      realtimeHandler,
+		Webhook:       webhookHandler,
+		JobsClient:    workerWorker,
+		ReadyChecks:   readyChecks,
+		Cleanup:       cleanupAll,
 	}, nil
 }
 
