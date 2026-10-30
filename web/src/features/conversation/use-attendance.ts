@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/api/attendance";
 import type { PanelPrincipal } from "@/stores/session-store";
@@ -8,7 +8,7 @@ import { card, timeline } from "@/features/conversation/attendance-adapter";
 import { useAttendanceEvents } from "@/features/conversation/use-attendance-events";
 
 export function useAttendance(principal: PanelPrincipal) {
-  const base = ["attendance", principal.tenantId, principal.userId, principal.sessionId];
+  const base = useMemo(() => ["attendance", principal.tenantId, principal.userId, principal.sessionId], [principal.tenantId, principal.userId, principal.sessionId]);
   const client = useQueryClient();
   const [inbox, setInbox] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -19,7 +19,7 @@ export function useAttendance(principal: PanelPrincipal) {
   const list = useQuery({ queryKey: [...base, inbox ?? "", "snapshot"], queryFn: () => api.snapshot(inbox!), enabled: !!inbox });
   const detail = useQuery({ queryKey: [...base, inbox ?? "", "history", selected ?? ""], queryFn: () => api.history(inbox!, selected!), enabled: !!inbox && !!selected });
   const realtime = useAttendanceEvents(inbox, [...base, inbox ?? ""]);
-  useEffect(() => () => { client.removeQueries({ queryKey: base }); }, [client, principal.tenantId, principal.userId, principal.sessionId]);
+  useEffect(() => () => { client.removeQueries({ queryKey: base }); }, [client, base]);
   function selectInbox(id: string) { setInbox(id || null); setSelected(null); intents.current.clear(); reopening.current.clear(); assuming.current.clear(); }
   function version(id: string) { return (detail.data?.head.id === id ? detail.data.head : list.data?.conversations?.find((h) => h.id === id))?.version; }
   function intentVersion(key: string, id: string) { const old = intents.current.get(key); if (old !== undefined) return old; const current = version(id); if (current !== undefined) intents.current.set(key, current); return current; }

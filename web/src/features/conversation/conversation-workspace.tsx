@@ -116,11 +116,10 @@ function WorkspaceSession({
     opened: [],
     card: null,
   });
-  const [assumeState, setAssumeState] = useState<AssumeState | null>(null);
+  const [assumeStates, setAssumeStates] = useState<Record<string, AssumeState>>({});
   const [closeOpen, setCloseOpen] = useState(false);
   const alive = useRef(true);
-  const assumeRef = useRef<AssumeState | null>(null);
-  assumeRef.current = assumeState;
+  const assumingIds = useRef(new Set<string>());
   const synced = syncSession(session, listStatus, conversations);
   if (synced !== session) setSession(synced);
 
@@ -132,10 +131,7 @@ function WorkspaceSession({
   }, []);
 
   const card = synced.card;
-  const assumeForCard =
-    card !== null && assumeState !== null && assumeState.conversationId === card.id
-      ? assumeState
-      : null;
+  const assumeForCard = card ? assumeStates[card.id] : null;
   const assuming = assumeForCard?.pending ?? false;
   const assumeNotice = assumeForCard && !assumeForCard.pending ? assumeForCard.notice : null;
   const detailMatches = card !== null && detailConversationId === card.id;
@@ -159,17 +155,17 @@ function WorkspaceSession({
   async function assume() {
     if (!card || card.phase === "closed") return;
     const conversationId = card.id;
-    const current = assumeRef.current;
-    if (current?.conversationId === conversationId && current.pending) return;
+    if (assumingIds.current.has(conversationId)) return;
     const pending = { conversationId, pending: true, notice: null };
-    assumeRef.current = pending;
-    setAssumeState(pending);
+    assumingIds.current.add(conversationId);
+    setAssumeStates((states) => ({ ...states, [conversationId]: pending }));
     let response: unknown;
     try {
       response = await Promise.resolve(onAssume(conversationId));
     } catch {
       response = null;
     }
+    assumingIds.current.delete(conversationId);
     if (!alive.current) return;
     const action = readAttendanceResult(response);
     const resolved = {
@@ -177,10 +173,7 @@ function WorkspaceSession({
       pending: false,
       notice: action.outcome === "done" ? null : action.detail,
     };
-    setAssumeState((state) => {
-      if (!state || state.conversationId !== conversationId) return state;
-      return resolved;
-    });
+    setAssumeStates((states) => ({ ...states, [conversationId]: resolved }));
   }
 
   return (
@@ -213,7 +206,7 @@ function WorkspaceSession({
             {card.phase === "closed" ? (
               <div><p className="text-sm text-muted-foreground">
                 O compositor fica indisponível após o encerramento.
-              </p>{onReopen ? <button type="button" onClick={async () => { const result = readAttendanceResult(await onReopen(card.id)); if (result.outcome !== "done") setAssumeState({ conversationId: card.id, pending: false, notice: result.detail }); }}>Reabrir</button> : null}</div>
+              </p>{onReopen ? <button type="button" onClick={async () => { const result = readAttendanceResult(await onReopen(card.id)); if (result.outcome !== "done") setAssumeStates((states) => ({ ...states, [card.id]: { conversationId: card.id, pending: false, notice: result.detail } })); }}>Reabrir</button> : null}</div>
             ) : null}
             {synced.opened.map((item) => (
               <div key={item.id} hidden={item.id !== card.id || card.phase === "closed"}>
@@ -249,18 +242,20 @@ function QueueComposer({ onSend }: { onSend: (command: SendTextCommand) => Promi
   const [text, setText] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pendingCommand, setPendingCommand] = useState<SendTextCommand | null>(null);
   const pending = useRef<SendTextCommand | null>(null);
+  const sending = useRef(false);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!text.trim() || busy) return;
+    if (!text.trim() || sending.current) return;
     const command = pending.current?.text === text ? pending.current : { intentKey: crypto.randomUUID(), text };
-    pending.current = command; setBusy(true);
+    pending.current = command; setPendingCommand(command); sending.current = true; setBusy(true);
     let result: SendTextResult;
     try { result = await onSend(command); } catch { result = { outcome: "lost" }; }
-    setBusy(false);
-    if (result.outcome === "accepted") { pending.current = null; setText((current) => current === command.text ? "" : current); setNotice("Mensagem enfileirada localmente; a entrega ainda não foi confirmada."); }
+    sending.current = false; setBusy(false);
+    if (result.outcome === "accepted") { pending.current = null; setPendingCommand(null); setText((current) => current === command.text ? "" : current); setNotice("Mensagem enfileirada localmente; a entrega ainda não foi confirmada."); }
     else if (result.outcome === "lost" || result.outcome === "uncertain") setNotice("A resposta do envio não chegou ou é incerta. A mesma intenção pode ser consultada novamente.");
-    else { pending.current = null; setNotice(result.detail); }
+    else { pending.current = null; setPendingCommand(null); setNotice(result.detail); }
   }
-  return <form aria-label="Compositor de mensagem" onSubmit={submit}><label>Mensagem<textarea value={text} disabled={busy || !!pending.current} onChange={(event) => setText(event.target.value)} /></label><button type="submit" disabled={busy || !text.trim()}>Enviar</button>{notice && <p role="status">{notice}</p>}</form>;
+  return <form aria-label="Compositor de mensagem" onSubmit={submit}><label>Mensagem<textarea value={text} disabled={busy || !!pendingCommand} onChange={(event) => setText(event.target.value)} /></label><button type="submit" disabled={busy || !text.trim()}>Enviar</button>{notice && <p role="status">{notice}</p>}</form>;
 }
