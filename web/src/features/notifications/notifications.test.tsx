@@ -36,6 +36,17 @@ it("deduplicates live events, suppresses replay and silent signals, and rejects 
   view.rerender(<Harness scope={null} batch={batch} />); view.unmount();
   expect(callback).toHaveBeenCalledTimes(2);
 });
+it("uses current preferences and callback without replaying a batch on rerender", () => {
+  const browser = vi.fn(); Object.assign(browser, { permission: "granted" }); vi.stubGlobal("Notification", browser);
+  const first = vi.fn(), second = vi.fn();
+  const batch: NotificationBatch = { scope: "a", events: [{ id: "1", cursor: 1, kind: "new_message", live: true }] };
+  function Harness({ callback, silent, events }: { callback: typeof first; silent: boolean; events: NotificationBatch }) { useNotificationEvents("a", { ...prefs, silent }, events, callback); return null; }
+  const view = render(<Harness callback={first} silent={false} events={batch} />);
+  view.rerender(<Harness callback={second} silent events={batch} />);
+  expect(first).toHaveBeenCalledOnce(); expect(second).not.toHaveBeenCalled();
+  view.rerender(<Harness callback={second} silent events={{ scope: "a", events: [...batch.events, { id: "2", cursor: 2, kind: "new_message", live: true }] }} />);
+  expect(second).toHaveBeenCalledOnce(); expect(browser).toHaveBeenCalledOnce();
+});
 it("uses distinct tones and tolerates blocked audio", () => {
   const frequencies: Array<{ value: number }> = [];
   class FakeAudio {

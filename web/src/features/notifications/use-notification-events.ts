@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import type { PreferenceValues } from "./notification-preferences";
 
 // Adapted by the integration from server-authorized live events, never raw DTOs.
@@ -27,33 +27,47 @@ function play(kind: NotificationEvent["kind"], active: Set<() => void>) {
 }
 
 export function useNotificationEvents(scope: string | null, prefs: PreferenceValues, batch: NotificationBatch | null, onEvent: (event: NotificationEvent) => void) {
-  const state = useRef<{ scope: string | null; cursor: number; seen: Set<string> }>({ scope: null, cursor: 0, seen: new Set() });
-  const active = useRef(new Set<() => void>());
-  const callbacks = useRef({ prefs, onEvent }); callbacks.current = { prefs, onEvent };
+  type Session = { scope: string | null; cursor: number; seen: Set<string>; active: Set<() => void>; timer: ReturnType<typeof setTimeout> | null };
+  const session = useRef<Session | null>(null);
+  const handleEvent = useEffectEvent((event: NotificationEvent, active: Set<() => void>) => {
+    onEvent(event);
+    if (prefs.silent) return;
+    if (prefs.sound) play(event.kind, active);
+    if (prefs.browser && typeof Notification !== "undefined" && Notification.permission === "granted") {
+      try { new Notification(event.kind === "new_conversation" ? "Nova conversa" : "Nova mensagem"); } catch { /* Browser notifications can fail independently. */ }
+    }
+  });
   useEffect(() => {
-    const current = state.current;
-    if (current.scope !== scope) { current.scope = scope; current.cursor = 0; current.seen.clear(); for (const d of [...active.current]) d(); }
-    if (!scope || !batch || batch.scope !== scope) return;
+    let current = session.current;
+    if (!current || current.scope !== scope) {
+      if (current) {
+        if (current.timer) clearTimeout(current.timer);
+        for (const dispose of [...current.active]) dispose();
+      }
+      current = { scope, cursor: 0, seen: new Set(), active: new Set(), timer: null };
+      session.current = current;
+    }
+    if (current.timer) { clearTimeout(current.timer); current.timer = null; }
+    const owned = current;
+    return () => {
+      owned.timer = setTimeout(() => {
+        owned.timer = null;
+        for (const dispose of [...owned.active]) dispose();
+        if (session.current === owned) session.current = null;
+      }, 0);
+    };
+  }, [scope]);
+  useEffect(() => {
+    const current = session.current;
+    if (!current || !scope || !batch || batch.scope !== scope) return;
     for (const event of batch.events) {
       if (!event.id || !Number.isSafeInteger(event.cursor) || event.cursor <= 0 || current.seen.has(event.id) || event.cursor <= current.cursor) continue;
       current.cursor = event.cursor; current.seen.add(event.id);
       if (!event.live) continue;
-      const { prefs: settings, onEvent: notify } = callbacks.current;
-      notify(event);
-      if (settings.silent) continue;
-      if (settings.sound) play(event.kind, active.current);
-      if (settings.browser && typeof Notification !== "undefined" && Notification.permission === "granted") {
-        try { new Notification(event.kind === "new_conversation" ? "Nova conversa" : "Nova mensagem"); } catch { /* Browser notifications can fail independently. */ }
-      }
+      handleEvent(event, current.active);
     }
   }, [scope, batch]);
   // Silent mode or sound off discards pending/active audio so a late autoplay release cannot play it.
   const muted = prefs.silent || !prefs.sound;
-  useEffect(() => { if (muted) for (const d of [...active.current]) d(); }, [muted]);
-  // Dedup state survives StrictMode effect replays; audio is released on real unmount (deferred so a replay can cancel it).
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
-    return () => { timer.current = setTimeout(() => { timer.current = null; for (const d of [...active.current]) d(); state.current.scope = null; }, 0); };
-  }, []);
+  useEffect(() => { if (muted && session.current) for (const d of [...session.current.active]) d(); }, [muted, scope]);
 }

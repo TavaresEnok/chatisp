@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { components } from "@/api/schema";
 import { useSessionStore } from "@/stores/session-store";
@@ -10,9 +10,11 @@ export function useAttendanceEvents(inbox: string | null, key: readonly string[]
   const client = useQueryClient();
   const [status, setStatus] = useState<"connected" | "disconnected" | "resync" | "degraded">("disconnected");
   const keyString = JSON.stringify(key);
+  const deliverBatch = useEffectEvent((batch: NotificationBatch) => { onBatch?.(batch); });
   useEffect(() => {
     if (!inbox || typeof WebSocket === "undefined") return;
     let stopped = false, recovering = false, ready = false, timer: ReturnType<typeof setTimeout> | undefined;
+    const key = JSON.parse(keyString) as string[];
     const scope = `${key.slice(1, 4).join(":")}:${inbox}`;
     let socket: WebSocket;
     const heartbeat = setInterval(() => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "ping" })); }, 30000);
@@ -20,7 +22,7 @@ export function useAttendanceEvents(inbox: string | null, key: readonly string[]
     const invalidate = () => { const currentKey = JSON.parse(keyString) as string[]; void client.invalidateQueries({ queryKey: currentKey }); void client.invalidateQueries({ queryKey: queryKeys.contactHistory(currentKey.slice(1, 6)) }); };
     function connect() {
       socket = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/api/panel/ws`);
-      socket.onopen = () => { ready = false; setStatus("connected"); const command: components["schemas"]["ClientMessage"] = { type: "subscribe", inbox_id: inbox!, with_snapshot: true }; socket.send(JSON.stringify(command)); };
+      socket.onopen = () => { if (stopped) return; ready = false; setStatus("connected"); const command: components["schemas"]["ClientMessage"] = { type: "subscribe", inbox_id: inbox!, with_snapshot: true }; socket.send(JSON.stringify(command)); };
       socket.onmessage = (event) => {
         if (stopped) return;
         let msg: components["schemas"]["ServerMessage"];
@@ -30,7 +32,7 @@ export function useAttendanceEvents(inbox: string | null, key: readonly string[]
         if (msg.type === "snapshot") { recovering = false; ready = true; setStatus("connected"); seen.clear(); invalidate(); return; }
         const fresh = (msg.events ?? []).filter((item) => { if (seen.has(item.ID)) return false; seen.add(item.ID); return true; });
         const events = fresh.flatMap(item => item.Type === "conversation.opened" || item.Type === "conversation.message" ? [{ id: item.ID, cursor: item.Seq, kind: item.Type === "conversation.opened" ? "new_conversation" as const : "new_message" as const, live: ready && !(item.Type === "conversation.message" && typeof item.Payload === "object" && item.Payload !== null && "historical" in item.Payload && item.Payload.historical === true) }] : []).sort((a, b) => a.cursor - b.cursor);
-        if (events.length) onBatch?.({ scope, events });
+        if (events.length) deliverBatch({ scope, events });
         if (fresh.length) invalidate();
         if (seen.size > 2000) seen.clear();
         if (msg.type === "error") invalidate();

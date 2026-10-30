@@ -77,6 +77,21 @@ it("solicita snapshot após ressincronização e fecha o socket", async () => {
   expect(sockets[0]?.close).toHaveBeenCalled();
 });
 
+it("mantém o socket e usa o callback atual após rerender com chave equivalente", () => {
+  const sockets: Socket[] = [];
+  class Socket { onopen?: () => void; onmessage?: (event: { data: string }) => void; onclose?: (event: { code: number; reason: string }) => void; send = vi.fn(); close = vi.fn(); constructor() { sockets.push(this); } }
+  vi.stubGlobal("WebSocket", Socket);
+  const first = vi.fn(), second = vi.fn(), qc = new QueryClient();
+  function Probe({ callback }: { callback: typeof first }) { useAttendanceEvents("i1", ["attendance", "t", "u", "s", "agent", "m", "i1"], callback); return null; }
+  const view = render(<QueryClientProvider client={qc}><Probe callback={first} /></QueryClientProvider>);
+  act(() => { sockets[0]?.onopen?.(); sockets[0]?.onmessage?.({ data: JSON.stringify({ type: "snapshot", inbox_id: "i1" }) }); });
+  view.rerender(<QueryClientProvider client={qc}><Probe callback={second} /></QueryClientProvider>);
+  act(() => sockets[0]?.onmessage?.({ data: JSON.stringify({ type: "events", inbox_id: "i1", events: [{ ID: "e1", Seq: 1, Type: "conversation.opened" }] }) }));
+  expect(sockets).toHaveLength(1); expect(sockets[0]?.send).toHaveBeenCalledTimes(1);
+  expect(first).not.toHaveBeenCalled(); expect(second).toHaveBeenCalledOnce();
+  view.unmount();
+});
+
 it("propaga perda de sessão em resposta HTTP 401", async () => {
   const handler = vi.fn(); setSessionLossHandler(handler);
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "sessão" }), { status: 401, headers: { "content-type": "application/problem+json" } })));
