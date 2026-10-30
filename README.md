@@ -63,6 +63,8 @@ Sem make, os mesmos comandos são `./scripts/dev.sh`, `./scripts/test.sh`, `./sc
 
 ## Testes
 
+Para experimentar o atendimento com banco descartável e Meta simulado, veja [o roteiro M2](docs/m2-entrega.md). O comando é `go -C backend run ./cmd/m2demo demo`, após instalar as dependências conforme o roteiro.
+
 ```sh
 ./scripts/test.sh
 ```
