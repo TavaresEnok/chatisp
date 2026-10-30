@@ -17,6 +17,7 @@ import (
 	"chatisp/internal/channel/configuration"
 	"chatisp/internal/channel/whatsapp"
 	"chatisp/internal/channel/whatsapp/metacloud"
+	"chatisp/internal/contactdirectory"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/jobs"
 )
@@ -241,12 +242,12 @@ func (h *outboundHandler) DispatchOutbound(ctx context.Context, tenantID, attemp
 		// Re-read mutable authorization and configuration under row locks at the
 		// same boundary as the lease fence. The farewell exception is bound to
 		// the exact conversation and epoch, as in ReserveDispatch.
-		var conversationID uuid.UUID
+		var conversationID, contactID uuid.UUID
 		var attemptEpoch, currentEpoch, attemptLeaseVersion int64
 		var convStatus, origin, attemptState, tenantStatus, channelStatus, channelKind, channelVersion string
 		var enabled bool
 		var author *uuid.UUID
-		err = tx.QueryRow(ctx, `SELECT c.id, o.controller_epoch, c.controller_epoch, c.status,
+		err = tx.QueryRow(ctx, `SELECT c.id, o.controller_epoch, c.controller_epoch, c.status, c.contact_id,
             m.origin, m.author_membership_id, o.state, COALESCE(o.lease_version, 0), t.status, cc.status, cc.enabled, cc.connector_type, cc.version
             FROM outbound_attempts o
             JOIN conversations c ON c.tenant_id=o.tenant_id AND c.id=o.conversation_id
@@ -256,13 +257,22 @@ func (h *outboundHandler) DispatchOutbound(ctx context.Context, tenantID, attemp
             JOIN tenants t ON t.id=o.tenant_id
             WHERE o.tenant_id=$1 AND o.id=$2 AND cc.id=$3
             FOR UPDATE OF c, m, cc, o`, tenantID, attemptID, connectorID).Scan(
-			&conversationID, &attemptEpoch, &currentEpoch, &convStatus, &origin, &author,
+			&conversationID, &attemptEpoch, &currentEpoch, &convStatus, &contactID, &origin, &author,
 			&attemptState, &attemptLeaseVersion, &tenantStatus, &channelStatus, &enabled, &channelKind, &channelVersion)
 		if err != nil {
 			return err
 		}
 		allowed := attemptState == "sending" && tenantStatus == "active" && enabled && channelStatus == "connected" && channelKind == "meta_cloud" && channelVersion == versionText
 		if origin == "human" {
+			var lockedID uuid.UUID
+			if err := tx.QueryRow(ctx, `SELECT id FROM contacts WHERE tenant_id=$1 AND id=$2 FOR SHARE`, tenantID, contactID).Scan(&lockedID); err != nil {
+				return err
+			}
+			blocked, err := contactdirectory.IsBlocked(ctx, tx, tenantID, contactID)
+			if err != nil {
+				return err
+			}
+			allowed = allowed && !blocked
 			if author == nil {
 				allowed = false
 			} else {

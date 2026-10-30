@@ -59,15 +59,18 @@ type ChannelConnector struct {
 }
 
 type Contact struct {
-	ID        uuid.UUID
-	TenantID  uuid.UUID
-	Name      string
-	Phone     *string
-	Email     *string
-	Notes     string
-	Blocked   bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID                    uuid.UUID
+	TenantID              uuid.UUID
+	Name                  string
+	Phone                 *string
+	Email                 *string
+	Notes                 string
+	Blocked               bool
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	CreatedByMembershipID *uuid.UUID
+	BlockReason           string
+	AvatarReference       *string
 }
 
 type ContactChannelIdentity struct {
@@ -102,6 +105,7 @@ type Conversation struct {
 	WaitingSince             pgtype.Timestamptz
 	CycleNumber              int32
 	UpdatedAt                pgtype.Timestamptz
+	SectorID                 *uuid.UUID
 }
 
 type ConversationCycle struct {
@@ -165,6 +169,12 @@ type Inbox struct {
 	Hours           json.RawMessage
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+}
+
+type InboxSectorDefault struct {
+	TenantID uuid.UUID
+	InboxID  uuid.UUID
+	SectorID uuid.UUID
 }
 
 type InboxSendLease struct {
@@ -303,6 +313,15 @@ type MfaRecoveryCode struct {
 	UsedAt    pgtype.Timestamptz
 }
 
+type NotificationPreference struct {
+	TenantID     uuid.UUID
+	MembershipID uuid.UUID
+	Sound        bool
+	Browser      bool
+	Silent       bool
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type OutboundAttempt struct {
 	TenantID          uuid.UUID
 	ID                uuid.UUID
@@ -357,6 +376,26 @@ type RealtimeTenantCursor struct {
 	TenantID    uuid.UUID
 	Seq         int64
 	RetainAfter int64
+}
+
+type Sector struct {
+	TenantID      uuid.UUID
+	ID            uuid.UUID
+	Name          string
+	Active        bool
+	LegacyDefault bool
+}
+
+type SectorInbox struct {
+	TenantID uuid.UUID
+	SectorID uuid.UUID
+	InboxID  uuid.UUID
+}
+
+type SectorMembership struct {
+	TenantID     uuid.UUID
+	SectorID     uuid.UUID
+	MembershipID uuid.UUID
 }
 
 type SendReservation struct {

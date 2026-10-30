@@ -22,12 +22,12 @@ type Credentials struct {
 	Origin  string `header:"Origin"`
 }
 type input struct{ Credentials }
-type sectorInput struct {
+type SectorInput struct {
 	Credentials
 	SectorID uuid.UUID `path:"sector_id"`
 }
 type bindingInput struct {
-	sectorInput
+	SectorInput
 	TargetID uuid.UUID `path:"target_id"`
 }
 type createInput struct {
@@ -37,7 +37,7 @@ type createInput struct {
 	}
 }
 type updateInput struct {
-	sectorInput
+	SectorInput
 	Body struct {
 		Name   *string `json:"name,omitempty"`
 		Active *bool   `json:"active,omitempty"`
@@ -69,7 +69,7 @@ func Register(api huma.API, d Dependencies) {
 	huma.Register(api, op("sectors-inboxes-remove", http.MethodDelete, item+"/inboxes/{target_id}", 200), h.removeInbox)
 	huma.Register(api, op("sectors-inbox-default", http.MethodPut, item+"/inboxes/{target_id}/default", 200), h.setDefault)
 }
-func (h handler) details(ctx context.Context, in *sectorInput) (*detailsOutput, error) {
+func (h handler) details(ctx context.Context, in *SectorInput) (*detailsOutput, error) {
 	p, e := h.principal(ctx, in.Credentials, false)
 	if e != nil {
 		return nil, e

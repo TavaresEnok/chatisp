@@ -20,10 +20,16 @@ import (
 	attendanceService "chatisp/internal/attendance/service"
 	channelConfig "chatisp/internal/channel/configuration"
 	channelHttpAPI "chatisp/internal/channel/httpapi"
+	"chatisp/internal/contactdirectory"
+	contactHTTP "chatisp/internal/contactdirectory/httpapi"
+	"chatisp/internal/notifications"
+	notificationHTTP "chatisp/internal/notifications/httpapi"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/metrics"
 	"chatisp/internal/platform/version"
+	"chatisp/internal/sectors"
+	sectorHTTP "chatisp/internal/sectors/httpapi"
 )
 
 // ReadyFunc reports whether the process can accept traffic.
@@ -40,6 +46,9 @@ type Dependencies struct {
 	TrustedOrigins []string
 	Attendance     attendanceService.Service
 	Channels       *channelConfig.Service
+	Sectors        sectors.Service
+	Contacts       contactdirectory.Service
+	Notifications  *notifications.Service
 	Realtime       http.Handler
 	Webhook        http.Handler
 }
@@ -95,6 +104,9 @@ func New(deps Dependencies) *API {
 		if t.PkgPath() == "chatisp/internal/attendance/store" {
 			return "RealtimeStore" + t.Name()
 		}
+		if t.PkgPath() == "chatisp/internal/contactdirectory" && t.Name() != "" {
+			return "Directory" + t.Name()
+		}
 		return huma.DefaultSchemaNamer(t, hint)
 	})
 	// Keep the document limited to the operations below. The default hooks add
@@ -149,6 +161,9 @@ func New(deps Dependencies) *API {
 		Channels:       deps.Channels,
 		TrustedOrigins: deps.TrustedOrigins,
 	})
+	sectorHTTP.Register(api, sectorHTTP.Dependencies{Auth: deps.Auth, Sectors: deps.Sectors, TrustedOrigins: deps.TrustedOrigins})
+	contactHTTP.Register(api, contactHTTP.Dependencies{Auth: deps.Auth, Contacts: deps.Contacts, TrustedOrigins: deps.TrustedOrigins})
+	notificationHTTP.Register(api, notificationHTTP.Dependencies{Auth: deps.Auth, Notifications: deps.Notifications, TrustedOrigins: deps.TrustedOrigins})
 	registerRealtimeContract(api)
 
 	realtimeHandler := deps.Realtime

@@ -32,7 +32,7 @@ SELECT
     id, tenant_id, summary, created_at, inbox_id, contact_id, contact_identity_id,
     status, controller, controller_epoch, version, assignee_id, protocol, protocol_period,
     protocol_communicated, external_protocol, last_customer_message_at,
-    last_eligible_human_reply_at, waiting_since, cycle_number, updated_at
+    last_eligible_human_reply_at, waiting_since, cycle_number, updated_at, sector_id
 FROM conversations
 WHERE tenant_id = sqlc.arg('tenant_id')
   AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid

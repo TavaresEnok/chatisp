@@ -14,11 +14,14 @@ import (
 
 	attendanceService "chatisp/internal/attendance/service"
 	channelConfig "chatisp/internal/channel/configuration"
+	"chatisp/internal/contactdirectory"
+	"chatisp/internal/notifications"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/config"
 	"chatisp/internal/platform/httpapi"
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/metrics"
+	"chatisp/internal/sectors"
 )
 
 // Worker represents the lifecycle for background job execution.
@@ -40,6 +43,9 @@ type Options struct {
 	Auth            *auth.Service
 	Attendance      attendanceService.Service
 	Channels        *channelConfig.Service
+	Sectors         sectors.Service
+	Contacts        contactdirectory.Service
+	Notifications   *notifications.Service
 	Realtime        http.Handler
 	Webhook         http.Handler
 	JobsClient      Worker
@@ -84,6 +90,9 @@ func Run(parent context.Context, opts Options) error {
 			Auth:           opts.Auth,
 			Attendance:     opts.Attendance,
 			Channels:       opts.Channels,
+			Sectors:        opts.Sectors,
+			Contacts:       opts.Contacts,
+			Notifications:  opts.Notifications,
 			Realtime:       opts.Realtime,
 			Webhook:        opts.Webhook,
 			TrustedOrigins: opts.TrustedOrigins,

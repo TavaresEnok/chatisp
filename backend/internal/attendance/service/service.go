@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"chatisp/internal/attendance/store"
+	"chatisp/internal/contactdirectory"
 	"chatisp/internal/conversation"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/db/dbgen"
@@ -184,6 +185,17 @@ func (s Service) ReceiveText(ctx context.Context, p Principal, in ReceiveInput) 
 			}
 			out.InboundResult = got
 			return nil
+		}
+		var contactID uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT id FROM contacts WHERE tenant_id=$1 AND id=$2 FOR SHARE`, p.TenantID, in.ContactID).Scan(&contactID); err != nil {
+			return err
+		}
+		blocked, err := contactdirectory.IsBlocked(ctx, tx, p.TenantID, contactID)
+		if err != nil {
+			return err
+		}
+		if blocked {
+			return ErrForbidden
 		}
 		reopened, err := s.reopenForInbound(ctx, tx, p, in)
 		if err != nil {
