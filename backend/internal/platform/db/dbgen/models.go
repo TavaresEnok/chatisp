@@ -247,6 +247,25 @@ type MetaApp struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type MetaAppRegistry struct {
+	ID        uuid.UUID
+	AppID     string
+	Status    string
+	CreatedAt pgtype.Timestamptz
+}
+
+type MetaAppRegistrySecret struct {
+	RegistryID  uuid.UUID
+	KeyVersion  string
+	Ciphertext  []byte
+	AadScope    string
+	AadTenantID *uuid.UUID
+	AadEntity   string
+	AadEntityID uuid.UUID
+	AadField    string
+	Aad         string
+}
+
 type MetaAppSecret struct {
 	TenantID   uuid.UUID
 	MetaAppID  uuid.UUID
