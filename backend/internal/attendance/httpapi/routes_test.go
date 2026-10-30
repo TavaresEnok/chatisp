@@ -147,7 +147,12 @@ func TestHTTPFlow(t *testing.T) {
 	var closed struct {
 		Conversation conversation `json:"conversation"`
 	}
-	e = json.Unmarshal(request("POST", item+"/close", closeBody, w, origin, w.csrf, 200), &closed)
+	closeResponse := request("POST", item+"/close", closeBody, w, origin, w.csrf, 200)
+	var closeFields map[string]json.RawMessage
+	if err := json.Unmarshal(closeResponse, &closeFields); err != nil || string(closeFields["farewell"]) != "null" {
+		t.Fatalf("farewell ausente ou não nulo: %s (%v)", closeResponse, err)
+	}
+	e = json.Unmarshal(closeResponse, &closed)
 	if e != nil {
 		t.Fatal(e)
 	}

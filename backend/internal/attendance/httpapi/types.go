@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"time"
 )
@@ -174,11 +175,18 @@ type eventsOutput struct {
 }
 type conversationOutput struct{ Body conversation }
 type sendOutput struct{ Body outbound }
+type closeResponseBody struct {
+	Conversation   conversation `json:"conversation"`
+	Closure        closure      `json:"closure"`
+	Farewell       *outbound    `json:"farewell"`
+	FarewellFailed bool         `json:"farewell_failed"`
+}
+
+func (closeResponseBody) TransformSchema(_ huma.Registry, s *huma.Schema) *huma.Schema {
+	s.Properties["farewell"] = &huma.Schema{AnyOf: []*huma.Schema{s.Properties["farewell"], {Type: "null"}}}
+	return s
+}
+
 type closeOutput struct {
-	Body struct {
-		Conversation   conversation `json:"conversation"`
-		Closure        closure      `json:"closure"`
-		Farewell       *outbound    `json:"farewell"`
-		FarewellFailed bool         `json:"farewell_failed"`
-	}
+	Body closeResponseBody
 }

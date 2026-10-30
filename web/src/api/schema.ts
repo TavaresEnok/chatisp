@@ -4,6 +4,170 @@
  */
 
 export interface paths {
+    "/api/panel/channels/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar caixas e alertas Meta */
+        get: operations["meta-channel-status"];
+        put?: never;
+        /** Configurar caixa Meta */
+        post: operations["meta-channel-configure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/channels/meta/alerts/{alert_id}/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reconhecer alerta Meta */
+        post: operations["meta-channel-alert-ack"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/channels/meta/inspection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspecionar referências Meta */
+        get: operations["meta-channel-inspection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/inboxes/{inbox_id}/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["attendance-snapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/inboxes/{inbox_id}/conversations/{conversation_id}/assume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["attendance-assume"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/inboxes/{inbox_id}/conversations/{conversation_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["attendance-close"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/inboxes/{inbox_id}/conversations/{conversation_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["attendance-history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/inboxes/{inbox_id}/conversations/{conversation_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["attendance-send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/inboxes/{inbox_id}/conversations/{conversation_id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["attendance-reopen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/inboxes/{inbox_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["attendance-events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panel/invitations": {
         parameters: {
             query?: never;
@@ -414,9 +578,87 @@ export interface components {
              */
             status: "accepted";
         };
+        Alert: {
+            action: string;
+            connector_id: string;
+            created_at: string;
+            id: string;
+            result: string;
+        };
+        Box: {
+            app_id: string;
+            app_secret_key_version: string;
+            connector_id: string;
+            display_number: string;
+            enabled: boolean;
+            inbox_id: string;
+            name: string;
+            phone_number_id: string;
+            status: string;
+            token_key_version: string;
+            /** Format: int64 */
+            version: number;
+            waba_id: string;
+        };
+        CloseBody: {
+            client_request_id: string;
+            /** Format: int64 */
+            expected_version: number;
+            farewell_body?: string;
+            farewell_request_id?: string;
+            reason: string;
+            result: string;
+            summary: string;
+        };
+        CloseResponseBody: {
+            closure: components["schemas"]["Closure"];
+            conversation: components["schemas"]["Conversation"];
+            farewell: components["schemas"]["Outbound"] | null;
+            farewell_failed: boolean;
+        };
+        Closure: {
+            /** Format: date-time */
+            at: string;
+            author_id: string;
+            author_kind: string;
+            /** Format: int32 */
+            cycle_number: number;
+            external_reference: string;
+            reason: string;
+            result: string;
+            summary: string;
+        };
         ConfirmMFAInputBody: {
             /** @description Código TOTP de seis dígitos. */
             code: string;
+        };
+        Conversation: {
+            assignee_id: string;
+            contact_id: string;
+            controller: string;
+            /** Format: int64 */
+            controller_epoch: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int32 */
+            cycle_number: number;
+            external_protocol: string;
+            id: string;
+            identity_id: string;
+            inbox_id: string;
+            /** Format: date-time */
+            last_customer_message_at: string;
+            /** Format: date-time */
+            last_eligible_human_reply_at: string;
+            protocol: string;
+            protocol_communicated: boolean;
+            protocol_period: string;
+            status: string;
+            summary: string;
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            waiting_since: string;
         };
         EnrollmentOutputBody: {
             /** @description URL otpauth para o aplicativo autenticador. */
@@ -426,11 +668,48 @@ export interface components {
             /** @description Segredo base32, exibido uma vez. */
             secret: string;
         };
+        Event: {
+            aggregate_id: string;
+            aggregate_type: string;
+            id: string;
+            payload: unknown;
+            /** Format: int64 */
+            seq: number;
+            type: string;
+            /** Format: int64 */
+            version: number;
+        };
+        EventsOutputBody: {
+            events: components["schemas"]["Event"][] | null;
+            /** Format: int64 */
+            next_cursor: number;
+        };
         FieldError: {
             /** @description Local do erro, como body.nome ou query.pagina. */
             location?: string;
             /** @description Mensagem do erro de campo, sem o valor enviado. */
             message: string;
+        };
+        Head: {
+            assignee_id: string;
+            contact_id: string;
+            controller: string;
+            /** Format: int64 */
+            controller_epoch: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int32 */
+            cycle_number: number;
+            id: string;
+            /** Format: date-time */
+            last_customer_message_at: string;
+            protocol: string;
+            status: string;
+            summary: string;
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            waiting_since: string;
         };
         HealthBody: {
             /**
@@ -439,6 +718,18 @@ export interface components {
              * @enum {string}
              */
             status: "ok";
+        };
+        HistoryOutputBody: {
+            head: components["schemas"]["Head"];
+            messages: components["schemas"]["Message"][] | null;
+            /** Format: int64 */
+            next_cursor: number;
+            timeline: components["schemas"]["Timeline"][] | null;
+        };
+        InspectionOutputBody: {
+            discarded: components["schemas"]["Job"][] | null;
+            items: components["schemas"]["Item"][] | null;
+            quarantine: components["schemas"]["Quarantine"][] | null;
         };
         InviteBody: {
             /**
@@ -455,6 +746,22 @@ export interface components {
              * @enum {string}
              */
             role: "admin" | "supervisor" | "agent";
+        };
+        Item: {
+            external_key: string;
+            id: string;
+            inbox_id: string;
+            kind: string;
+            state: string;
+        };
+        Job: {
+            /** Format: int64 */
+            attempt: number;
+            /** Format: int64 */
+            id: number;
+            kind: string;
+            queue: string;
+            state: string;
         };
         LimitsBody: {
             /**
@@ -483,6 +790,17 @@ export interface components {
             /** @description Provedor, quando a conta participa de mais de um. */
             tenant_id?: string;
         };
+        ManualBody: {
+            /** @description Token somente para escrita. */
+            access_token: string;
+            app_id: string;
+            /** @description Segredo somente para escrita. */
+            app_secret: string;
+            display_number: string;
+            inbox_name: string;
+            phone_number_id: string;
+            waba_id: string;
+        };
         MembershipBody: {
             /**
              * Format: date-time
@@ -508,9 +826,31 @@ export interface components {
             /** @description Vínculos do provedor da sessão. */
             memberships: components["schemas"]["MembershipBody"][] | null;
         };
+        Message: {
+            body: string;
+            conversation_id: string;
+            direction: string;
+            external_message_id: string;
+            historical: boolean;
+            id: string;
+            /** Format: date-time */
+            ingested_at: string;
+            local_state: string;
+            origin: string;
+            /** Format: date-time */
+            trusted_at: string;
+            visibility: string;
+        };
         MfaStateOutputBody: {
             /** @description Verdadeiro enquanto o MFA obrigatório não foi confirmado. */
             mfa_enrollment_required: boolean;
+        };
+        Outbound: {
+            attempt_id: string;
+            idempotency_id: string;
+            message_id: string;
+            replayed: boolean;
+            state: string;
         };
         PrincipalBody: {
             /** @description E-mail da conta. */
@@ -558,6 +898,12 @@ export interface components {
              */
             type: string;
         };
+        Quarantine: {
+            created_at: string;
+            delivery_id: string;
+            id: string;
+            reason: string;
+        };
         ReadyBody: {
             /**
              * @description ready quando o processo pode receber tráfego.
@@ -565,6 +911,11 @@ export interface components {
              * @enum {string}
              */
             status: "ready";
+        };
+        ReopenBody: {
+            client_request_id: string;
+            /** Format: int64 */
+            expected_version: number;
         };
         ResetConfirmInputBody: {
             /** @description Nova senha. */
@@ -579,6 +930,12 @@ export interface components {
         ResetRequestInputBody: {
             /** @description E-mail da conta. */
             email?: string;
+        };
+        SendBody: {
+            body: string;
+            client_request_id: string;
+            /** Format: int64 */
+            expected_version: number;
         };
         SessionBody: {
             /** @description Token de CSRF desta sessão. Também vai no cookie legível pelo painel. */
@@ -625,6 +982,16 @@ export interface components {
             /** @description Sessões ainda válidas do provedor. */
             sessions: components["schemas"]["SessionInfoBody"][] | null;
         };
+        SnapshotOutputBody: {
+            conversations: components["schemas"]["Head"][] | null;
+            messages: components["schemas"]["Message"][] | null;
+            /** Format: int64 */
+            next_cursor: number;
+        };
+        StatusOutputBody: {
+            alerts: components["schemas"]["Alert"][] | null;
+            boxes: components["schemas"]["Box"][] | null;
+        };
         TenantBody: {
             /**
              * Format: date-time
@@ -658,6 +1025,25 @@ export interface components {
             /** @description Cadastro dos provedores. */
             tenants: components["schemas"]["TenantBody"][] | null;
         };
+        Timeline: {
+            actor_id: string;
+            assignee_id: string;
+            /** Format: date-time */
+            at: string;
+            controller: string;
+            /** Format: int64 */
+            controller_epoch: number;
+            /** Format: int32 */
+            cycle_number: number;
+            id: string;
+            kind: string;
+            /** Format: int64 */
+            version: number;
+        };
+        VersionBody: {
+            /** Format: int64 */
+            expected_version: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -667,6 +1053,1017 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "meta-channel-status": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path?: never;
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusOutputBody"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "meta-channel-configure": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path?: never;
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualBody"];
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Box"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "meta-channel-alert-ack": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                alert_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "meta-channel-inspection": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path?: never;
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InspectionOutputBody"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "attendance-snapshot": {
+        parameters: {
+            query?: {
+                conversation_id?: string;
+            };
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                inbox_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnapshotOutputBody"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "attendance-assume": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                inbox_id: string;
+                conversation_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionBody"];
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conversation"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "attendance-close": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                inbox_id: string;
+                conversation_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CloseBody"];
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloseResponseBody"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "attendance-history": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                inbox_id: string;
+                conversation_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryOutputBody"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "attendance-send": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                inbox_id: string;
+                conversation_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Outbound"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "attendance-reopen": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                inbox_id: string;
+                conversation_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReopenBody"];
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conversation"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "attendance-events": {
+        parameters: {
+            query?: {
+                after?: number;
+            };
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                inbox_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventsOutputBody"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     "create-panel-invitation": {
         parameters: {
             query?: never;

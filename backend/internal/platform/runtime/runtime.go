@@ -12,12 +12,22 @@ import (
 	"sync"
 	"time"
 
+	attendanceService "chatisp/internal/attendance/service"
+	channelConfig "chatisp/internal/channel/configuration"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/config"
 	"chatisp/internal/platform/httpapi"
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/metrics"
 )
+
+// Worker represents the lifecycle for background job execution.
+type Worker interface {
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
+	StopAndCancel(ctx context.Context) error
+	Stopped() <-chan struct{}
+}
 
 // Options selects listeners and the process mode. Nil listeners are opened from Config.
 type Options struct {
@@ -28,7 +38,14 @@ type Options struct {
 	HTTPListener    net.Listener
 	MetricsListener net.Listener
 	Auth            *auth.Service
+	Attendance      attendanceService.Service
+	Channels        *channelConfig.Service
+	Realtime        http.Handler
+	Webhook         http.Handler
+	JobsClient      Worker
+	Cleanup         func()
 	TrustedOrigins  []string
+	ReadyChecks     []func(context.Context) error
 }
 
 // Run serves until ctx is cancelled or a listener fails, then shuts down gracefully.
@@ -38,6 +55,12 @@ func Run(parent context.Context, opts Options) error {
 	default:
 		return errors.New("modo de execução inválido")
 	}
+	cleanupSafe := true
+	defer func() {
+		if cleanupSafe && opts.Cleanup != nil {
+			opts.Cleanup()
+		}
+	}()
 	if opts.Logger == nil {
 		opts.Logger = logging.New(opts.Config.LogLevel, nil)
 	}
@@ -48,7 +71,9 @@ func Run(parent context.Context, opts Options) error {
 	if meter == nil {
 		meter = metrics.New()
 	}
-	gate := &readyGate{}
+	gate := &readyGate{
+		checks: append([]func(context.Context) error(nil), opts.ReadyChecks...),
+	}
 
 	var httpServer *http.Server
 	if opts.Mode == config.ModeAPI || opts.Mode == config.ModeAll {
@@ -57,6 +82,10 @@ func Run(parent context.Context, opts Options) error {
 			Metrics:        meter,
 			Logger:         opts.Logger,
 			Auth:           opts.Auth,
+			Attendance:     opts.Attendance,
+			Channels:       opts.Channels,
+			Realtime:       opts.Realtime,
+			Webhook:        opts.Webhook,
 			TrustedOrigins: opts.TrustedOrigins,
 		})
 		httpServer = newServer(api.Handler, opts.Logger)
@@ -67,10 +96,82 @@ func Run(parent context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("não foi possível escutar o endereço HTTP %s", opts.Config.HTTPAddr)
 	}
-	metricsListener, _, err := listen(opts.MetricsListener, opts.Config.MetricsAddr, true)
+	metricsListener, metricsOwned, err := listen(opts.MetricsListener, opts.Config.MetricsAddr, true)
 	if err != nil {
 		closeOwned(httpListener, httpOwned)
 		return fmt.Errorf("não foi possível escutar o endereço de métricas %s", opts.Config.MetricsAddr)
+	}
+
+	workerDone := make(chan struct{})
+	var workerStopErr error
+	var workerStopped bool
+	if opts.Mode == config.ModeWorker || opts.Mode == config.ModeAll {
+		if opts.JobsClient != nil {
+			gate.AddCheck(func(context.Context) error {
+				select {
+				case <-workerDone:
+					return errors.New("trabalhador River não está em execução")
+				default:
+					return nil
+				}
+			})
+			if err := opts.JobsClient.Start(ctx); err != nil {
+				opts.Logger.Error("falha ao iniciar worker River", "component", "worker", "error", err.Error())
+				closeOwned(httpListener, httpOwned)
+				closeOwned(metricsListener, metricsOwned)
+				return fmt.Errorf("falha ao iniciar worker River: %w", err)
+			}
+			opts.Logger.Info("worker River iniciado", "component", "worker")
+		}
+		go func() {
+			defer close(workerDone)
+			opts.Logger.Info("worker aguardando tarefas", "component", "worker")
+			<-ctx.Done()
+			if opts.JobsClient != nil {
+				opts.Logger.Info("worker River encerrando", "component", "worker")
+				stopTimeout := opts.Config.ShutdownTimeout
+				if stopTimeout <= 0 {
+					stopTimeout = 15 * time.Second
+				}
+				stopCtx, stopCancel := context.WithTimeout(context.Background(), stopTimeout/2)
+				workerStopErr = opts.JobsClient.Stop(stopCtx)
+				stopCancel()
+				select {
+				case <-opts.JobsClient.Stopped():
+					workerStopped = true
+				default:
+					forceCtx, forceCancel := context.WithTimeout(context.Background(), stopTimeout/2)
+					forceErr := opts.JobsClient.StopAndCancel(forceCtx)
+					select {
+					case <-opts.JobsClient.Stopped():
+						workerStopped = true
+					case <-forceCtx.Done():
+					}
+					forceCancel()
+					workerStopErr = errors.Join(workerStopErr, forceErr)
+					if !workerStopped {
+						// Allow cancelled jobs a bounded final interval to persist their
+						// state before the process returns and closes their pools.
+						timer := time.NewTimer(stopTimeout)
+						select {
+						case <-opts.JobsClient.Stopped():
+							workerStopped = true
+						case <-timer.C:
+							workerStopErr = errors.Join(workerStopErr, errors.New("worker não confirmou parada; pools permanecem abertos"))
+						}
+						timer.Stop()
+					}
+				}
+			} else {
+				workerStopped = true
+			}
+			if workerStopped {
+				opts.Logger.Info("worker encerrado", "component", "worker")
+			}
+		}()
+	} else {
+		workerStopped = true
+		close(workerDone)
 	}
 
 	results := make(chan error, 2)
@@ -93,18 +194,6 @@ func Run(parent context.Context, opts Options) error {
 	started++
 	go serve(metricsServer, metricsListener)
 	opts.Logger.Info("métricas escutando", "component", "metrics", "metrics_addr", metricsListener.Addr().String())
-
-	workerDone := make(chan struct{})
-	if opts.Mode == config.ModeWorker || opts.Mode == config.ModeAll {
-		go func() {
-			defer close(workerDone)
-			opts.Logger.Info("worker aguardando tarefas", "component", "worker")
-			<-ctx.Done()
-			opts.Logger.Info("worker encerrado", "component", "worker")
-		}()
-	} else {
-		close(workerDone)
-	}
 	opts.Logger.Info("serviço iniciado", "component", string(opts.Mode))
 
 	var failure error
@@ -145,7 +234,12 @@ func Run(parent context.Context, opts Options) error {
 
 	select {
 	case <-workerDone:
-	case <-shutdownCtx.Done():
+		if workerStopErr != nil {
+			failure = errors.Join(failure, fmt.Errorf("falha ao encerrar worker: %w", workerStopErr))
+		}
+		cleanupSafe = workerStopped
+	case <-time.After(2*timeout + time.Second):
+		cleanupSafe = false
 		if failure == nil {
 			failure = errors.New("tempo esgotado ao encerrar o worker")
 		}
@@ -214,8 +308,9 @@ func closeOwned(listener net.Listener, owned bool) {
 }
 
 type readyGate struct {
-	mu    sync.RWMutex
-	ready bool
+	mu     sync.RWMutex
+	ready  bool
+	checks []func(context.Context) error
 }
 
 func (g *readyGate) Set(ready bool) {
@@ -224,11 +319,32 @@ func (g *readyGate) Set(ready bool) {
 	g.mu.Unlock()
 }
 
-func (g *readyGate) Check(context.Context) error {
+func (g *readyGate) AddCheck(check func(context.Context) error) {
+	if check == nil {
+		return
+	}
+	g.mu.Lock()
+	g.checks = append(g.checks, check)
+	g.mu.Unlock()
+}
+
+func (g *readyGate) Check(ctx context.Context) error {
 	g.mu.RLock()
-	defer g.mu.RUnlock()
-	if !g.ready {
+	ready := g.ready
+	checks := append([]func(context.Context) error(nil), g.checks...)
+	g.mu.RUnlock()
+
+	if !ready {
 		return errors.New("serviço indisponível")
+	}
+
+	for _, check := range checks {
+		checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		err := check(checkCtx)
+		cancel()
+		if err != nil {
+			return fmt.Errorf("dependência indisponível: %w", err)
+		}
 	}
 	return nil
 }

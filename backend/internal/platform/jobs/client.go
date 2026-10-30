@@ -151,6 +151,12 @@ func (c *Client) Stop(ctx context.Context) error {
 	return nil
 }
 
+// StopAndCancel cancels active jobs and waits within ctx for River to stop.
+func (c *Client) StopAndCancel(ctx context.Context) error { return c.inner.StopAndCancel(ctx) }
+
+// Stopped closes only after River has stopped its workers and services.
+func (c *Client) Stopped() <-chan struct{} { return c.inner.Stopped() }
+
 // EnqueueIngress inserts an ingress job on tx and does not commit tx.
 func (c *Client) EnqueueIngress(ctx context.Context, tx pgx.Tx, deliveryID uuid.UUID) (int64, error) {
 	args := IngressArgs{V: SchemaVersion, DeliveryID: deliveryID}

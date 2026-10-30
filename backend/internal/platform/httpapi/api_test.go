@@ -243,3 +243,52 @@ func TestReadyWhenAvailable(t *testing.T) {
 	}
 	assertStatusField(t, recorder.Body.Bytes(), "ready")
 }
+
+func TestWebhookAndRealtimeRouting(t *testing.T) {
+	var webhookCalled, realtimeCalled bool
+	webhookStub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		webhookCalled = true
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("webhook-ok"))
+	})
+	realtimeStub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		realtimeCalled = true
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("realtime-ok"))
+	})
+
+	api := New(Dependencies{
+		Webhook:  webhookStub,
+		Realtime: realtimeStub,
+	})
+
+	// Test webhook route
+	reqWh := httptest.NewRequest(http.MethodPost, "/api/webhooks/meta", strings.NewReader("test"))
+	recWh := httptest.NewRecorder()
+	api.Handler.ServeHTTP(recWh, reqWh)
+	if recWh.Code != http.StatusOK || !webhookCalled {
+		t.Fatalf("webhook status %d, called %v", recWh.Code, webhookCalled)
+	}
+
+	// Test realtime route
+	reqRt := httptest.NewRequest(http.MethodGet, "/api/panel/realtime", nil)
+	recRt := httptest.NewRecorder()
+	api.Handler.ServeHTTP(recRt, reqRt)
+	if recRt.Code != http.StatusOK || !realtimeCalled {
+		t.Fatalf("realtime status %d, called %v", recRt.Code, realtimeCalled)
+	}
+
+	// Test nil dependencies respond 503
+	apiNil := New(Dependencies{})
+	recNilWh := httptest.NewRecorder()
+	apiNil.Handler.ServeHTTP(recNilWh, reqWh)
+	if recNilWh.Code != http.StatusServiceUnavailable {
+		t.Fatalf("webhook nil code: %d", recNilWh.Code)
+	}
+
+	recNilRt := httptest.NewRecorder()
+	apiNil.Handler.ServeHTTP(recNilRt, reqRt)
+	if recNilRt.Code != http.StatusServiceUnavailable {
+		t.Fatalf("realtime nil code: %d", recNilRt.Code)
+	}
+}

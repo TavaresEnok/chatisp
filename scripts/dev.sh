@@ -475,7 +475,7 @@ else
 fi
 envfile=$(mktemp)
 chmod 600 "$envfile"
-go -C backend run -mod=vendor ./cmd/devdb prepare \
+go -C backend run -mod=vendor ./cmd/chatisp dev-prepare \
 	-url "postgresql://postgres@${pg_url_host}:${pg_port}/postgres?sslmode=disable" >"$envfile"
 while IFS= read -r line || [ -n "$line" ]; do
 	case "$line" in
@@ -488,7 +488,7 @@ rm -f -- "$envfile"
 envfile=""
 
 if [ -z "${CHATISP_DEV_EMAIL:-}" ]; then
-	die "devdb não informou CHATISP_DEV_EMAIL"
+	die "dev-prepare não informou CHATISP_DEV_EMAIL"
 fi
 echo "Usuário local: ${CHATISP_DEV_EMAIL}"
 if [ "${CHATISP_DEV_SEEDED:-0}" = "1" ]; then
@@ -497,6 +497,7 @@ else
 	echo "O usuário local já existia. A senha não foi alterada."
 fi
 unset CHATISP_DEV_PASSWORD || true
+unset CHATISP_DATABASE_URL || true
 
 export CHATISP_ENV=development
 export CHATISP_HTTP_ADDR="$http_addr"
@@ -507,6 +508,9 @@ export CHATISP_MIGRATIONS_DIR="$root/backend/db/migrations"
 export CHATISP_DEV_API_ORIGIN="$api_origin"
 export CHATISP_DEV_VITE_HOST="$vite_host"
 export CHATISP_DEV_VITE_PORT="$vite_port"
+export CHATISP_META_SIMULATION="${CHATISP_META_SIMULATION:-true}"
+export CHATISP_META_VERIFY_TOKEN="${CHATISP_META_VERIFY_TOKEN:-dev-meta-verify-token}"
+export CHATISP_META_APP_ID="${CHATISP_META_APP_ID:-dev-meta-app-id}"
 
 note "API em ${api_origin} e painel em ${panel_origin}"
 note "Métricas em ${metrics_addr}"
