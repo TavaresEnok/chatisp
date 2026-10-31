@@ -117,6 +117,7 @@ type event struct {
 type conversation struct {
 	ID                       uuid.UUID `json:"id"`
 	InboxID                  uuid.UUID `json:"inbox_id"`
+	SectorID                 uuid.UUID `json:"sector_id"`
 	ContactID                uuid.UUID `json:"contact_id"`
 	IdentityID               uuid.UUID `json:"identity_id"`
 	Status                   string    `json:"status"`

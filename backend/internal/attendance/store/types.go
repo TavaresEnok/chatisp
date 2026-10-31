@@ -35,6 +35,7 @@ type Conversation struct {
 	ID                       uuid.UUID
 	TenantID                 uuid.UUID
 	InboxID                  uuid.UUID
+	SectorID                 uuid.UUID
 	ContactID                uuid.UUID
 	IdentityID               uuid.UUID
 	Status                   string

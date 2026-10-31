@@ -37,6 +37,25 @@ func Register(api huma.API, deps Dependencies) {
 	registerBody(api, op("attendance-send", http.MethodPost, item+"/messages", 201), sendBody{}, h.send)
 	registerBody(api, op("attendance-close", http.MethodPost, item+"/close", 200), closeBody{}, h.close)
 	registerBody(api, op("attendance-reopen", http.MethodPost, item+"/reopen", 200), reopenBody{}, h.reopen)
+	RegisterAssignment(api, deps)
+	// candidatesOutput carries an interface at runtime; publish its concrete wire type.
+	registry := api.OpenAPI().Components.Schemas
+	candidateBody := api.OpenAPI().Paths[item+"/assignment-candidates"].Get.Responses["200"].Content["application/json"].Schema
+	if candidateBody.Ref != "" {
+		candidateBody = registry.SchemaFromRef(candidateBody.Ref)
+	}
+	candidateBody.Properties["candidates"] = registry.Schema(reflect.TypeOf([]service.AssignmentCandidate{}), true, "AssignmentCandidates")
+	RegisterAnnotations(api, deps)
+	// The shared tag input has RawBody for PATCH; DELETE does not need it.
+	// Huma retains this operation for request processing as well as OpenAPI.
+	api.OpenAPI().Paths["/api/panel/annotation-tags/{tag_id}"].Delete.RequestBody.Required = false
+	RegisterQueue(api, deps)
+	// QueueItem always serializes assignee_id, including null for unassigned items.
+	queueItem := registry.Schema(reflect.TypeOf(store.QueueItem{}), true, "RealtimeStoreQueueItem")
+	if queueItem.Ref != "" {
+		queueItem = registry.SchemaFromRef(queueItem.Ref)
+	}
+	queueItem.Properties["assignee_id"].Nullable = true
 }
 func registerBody[I, O any](api huma.API, op huma.Operation, body any, fn func(context.Context, *I) (*O, error)) {
 	op.SkipValidateBody = true
@@ -86,7 +105,7 @@ func messagesFrom(v []store.Message) []message {
 	return out
 }
 func conversationFrom(v store.Conversation) conversation {
-	return conversation{v.ID, v.InboxID, v.ContactID, v.IdentityID, v.Status, v.Controller, v.ControllerEpoch, v.Version, v.AssigneeID, v.Protocol, v.ProtocolPeriod, v.ProtocolCommunicated, v.ExternalProtocol, v.LastCustomerMessageAt, v.LastEligibleHumanReplyAt, v.WaitingSince, v.CycleNumber, v.Summary, v.CreatedAt}
+	return conversation{v.ID, v.InboxID, v.SectorID, v.ContactID, v.IdentityID, v.Status, v.Controller, v.ControllerEpoch, v.Version, v.AssigneeID, v.Protocol, v.ProtocolPeriod, v.ProtocolCommunicated, v.ExternalProtocol, v.LastCustomerMessageAt, v.LastEligibleHumanReplyAt, v.WaitingSince, v.CycleNumber, v.Summary, v.CreatedAt}
 }
 func outboundFrom(v store.OutboundResult) outbound {
 	return outbound{v.MessageID, v.AttemptID, v.IdempotencyID, v.State, v.Replayed}

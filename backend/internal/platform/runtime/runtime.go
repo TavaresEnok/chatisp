@@ -14,6 +14,7 @@ import (
 
 	attendanceService "chatisp/internal/attendance/service"
 	channelConfig "chatisp/internal/channel/configuration"
+	"chatisp/internal/collision"
 	"chatisp/internal/contactdirectory"
 	"chatisp/internal/notifications"
 	"chatisp/internal/platform/auth"
@@ -42,6 +43,7 @@ type Options struct {
 	MetricsListener net.Listener
 	Auth            *auth.Service
 	Attendance      attendanceService.Service
+	Collision       *collision.Service
 	Channels        *channelConfig.Service
 	Sectors         sectors.Service
 	Contacts        contactdirectory.Service
@@ -89,6 +91,7 @@ func Run(parent context.Context, opts Options) error {
 			Logger:         opts.Logger,
 			Auth:           opts.Auth,
 			Attendance:     opts.Attendance,
+			Collision:      opts.Collision,
 			Channels:       opts.Channels,
 			Sectors:        opts.Sectors,
 			Contacts:       opts.Contacts,
