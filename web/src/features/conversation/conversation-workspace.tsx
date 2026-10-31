@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { MessageComposer } from "@/features/conversation/message-composer";
 import { MessageTimeline } from "@/features/conversation/message-timeline";
 import { CloseConversationDialog } from "@/features/conversation/close-conversation-dialog";
@@ -33,6 +34,9 @@ export type ConversationWorkspaceProps = {
   onReopen?: (conversationId: string) => Promise<unknown> | unknown;
   onSearch?: () => void;
   onNote?: (conversationId: string) => void;
+  renderQueue?: (selectedId: string | null, select: (id: string) => void) => ReactNode;
+  renderActions?: (conversationId: string) => ReactNode;
+  onTyping?: (conversationId: string) => void;
   onFarewell: (
     conversationId: string,
     command: SendTextCommand,
@@ -114,6 +118,9 @@ function WorkspaceSession({
   onFarewell,
   onSearch,
   onNote,
+  renderQueue,
+  renderActions,
+  onTyping,
 }: ConversationWorkspaceProps) {
   const [session, setSession] = useState<Session>({
     selectedId: null,
@@ -169,10 +176,12 @@ function WorkspaceSession({
         selectConversation(next.id);
         workspace.current?.querySelectorAll<HTMLElement>('[role="option"]')[(index + 1) % conversations.length]?.focus();
       }
-    } else if (event.key.toLowerCase() === "f" && onSearch) {
-      event.preventDefault(); onSearch();
-    } else if (event.key.toLowerCase() === "n" && onNote && card) {
-      event.preventDefault(); onNote(card.id);
+    } else if (event.key.toLowerCase() === "f") {
+      const field = workspace.current?.querySelector<HTMLInputElement>('input[type="search"]');
+      if (onSearch || field) { event.preventDefault(); if (onSearch) onSearch(); else field?.focus(); }
+    } else if (event.key.toLowerCase() === "n" && card) {
+      const field = workspace.current?.querySelector<HTMLTextAreaElement>('[aria-label="Anotações privadas"] textarea');
+      if (onNote || field) { event.preventDefault(); if (onNote) onNote(card.id); else field?.focus(); }
     }
   }
 
@@ -202,12 +211,12 @@ function WorkspaceSession({
 
   return (
     <div ref={workspace} className="grid gap-4 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]" onKeyDown={handleShortcut}>
-      <ConversationList
+      {renderQueue ? renderQueue(card?.id ?? null, selectConversation) : <ConversationList
         status={listStatus}
         conversations={conversations}
         selectedId={card?.id ?? null}
         onSelect={selectConversation}
-      />
+      />}
       <div className="flex min-w-0 flex-col gap-4">
         {card ? (
           <>
@@ -221,6 +230,7 @@ function WorkspaceSession({
               onAssume={() => void assume()}
               onClose={() => setCloseOpen(true)}
             />
+            {renderActions?.(card.id)}
             <MessageTimeline
               scope={{ ...scope, conversationId: card.id }}
               protocol={card.protocol}
@@ -239,6 +249,7 @@ function WorkspaceSession({
                   offline={offline}
                   localQueue={localQueue}
                   createIntentKey={createIntentKey}
+                  onTyping={() => onTyping?.(item.id)}
                   onSend={(command) => onSend(item.id, command)}
                 />
               </div>
