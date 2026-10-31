@@ -376,6 +376,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panel/inboxes/{inbox_id}/conversations/{conversation_id}/transfer-sectors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["attendance-transfer-sectors"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panel/inboxes/{inbox_id}/conversations/{conversation_id}/unassign": {
         parameters: {
             query?: never;
@@ -386,6 +402,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["assignment-unassign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/inboxes/{inbox_id}/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["attendance-directory"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1372,6 +1404,10 @@ export interface components {
             tab_id: string;
             typing: boolean;
         };
+        OperatorDirectoryPage: {
+            items: components["schemas"]["RealtimeStoreDirectoryEntry"][] | null;
+            next_cursor: string | null;
+        };
         Outbound: {
             attempt_id: string;
             idempotency_id: string;
@@ -1484,6 +1520,11 @@ export interface components {
         RealtimeStoreAnnotationTag: {
             id: string;
             name: string;
+        };
+        RealtimeStoreDirectoryEntry: {
+            label: string;
+            membership_id: string;
+            role: string;
         };
         RealtimeStoreEvent: {
             AggregateID: string;
@@ -1715,6 +1756,10 @@ export interface components {
             kind: string;
             /** Format: int64 */
             version: number;
+        };
+        TransferSector: {
+            id: string;
+            name: string;
         };
         UpdateInputBody: {
             active?: boolean;
@@ -4425,6 +4470,88 @@ export interface operations {
             };
         };
     };
+    "attendance-transfer-sectors": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                inbox_id: string;
+                conversation_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferSector"][] | null;
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     "assignment-unassign": {
         parameters: {
             query?: never;
@@ -4484,6 +4611,92 @@ export interface operations {
             };
             /** @description Conflito */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "attendance-directory": {
+        parameters: {
+            query?: {
+                /** @description UUID do último vínculo da página anterior */
+                after?: string;
+                /** @description Itens por página (padrão 50, máximo 100) */
+                limit?: number;
+            };
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                inbox_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorDirectoryPage"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

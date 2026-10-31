@@ -50,6 +50,7 @@ func Register(api huma.API, deps Dependencies) {
 	// Huma retains this operation for request processing as well as OpenAPI.
 	api.OpenAPI().Paths["/api/panel/annotation-tags/{tag_id}"].Delete.RequestBody.Required = false
 	RegisterQueue(api, deps)
+	RegisterDirectory(api, deps)
 	// QueueItem always serializes assignee_id, including null for unassigned items.
 	queueItem := registry.Schema(reflect.TypeOf(store.QueueItem{}), true, "RealtimeStoreQueueItem")
 	if queueItem.Ref != "" {

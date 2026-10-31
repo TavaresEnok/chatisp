@@ -10,6 +10,7 @@ import { MessageComposer } from "@/features/conversation/message-composer";
 import { NotificationPreferences } from "@/features/notifications/notification-preferences";
 import { useNotificationEvents, type NotificationBatch } from "@/features/notifications/use-notification-events";
 import { useSessionStore, type PanelPrincipal } from "@/stores/session-store";
+import type { components } from "@/api/schema";
 
 afterEach(() => vi.unstubAllGlobals());
 const principal: PanelPrincipal = { tenantId: "tenant", userId: "user", sessionId: "session", membershipId: "member", role: "admin", email: "a@example.test", expiresAt: "2099-01-01", mfaEnrollmentRequired: false };
@@ -101,7 +102,7 @@ it("solicita permissão por gesto explícito e descarta lote da sessão anterior
   expect(shown).toHaveBeenCalledTimes(2);
 });
 
-it("revogação operacional pelo socket limpa conversa, histórico, cache e rascunho", async () => {
+it("revogação pelo socket confirmada pela sessão limpa conversa, histórico, cache e rascunho", async () => {
   class Socket {
     static current: Socket;
     onopen: (() => void) | null = null;
@@ -112,9 +113,23 @@ it("revogação operacional pelo socket limpa conversa, histórico, cache e rasc
   }
   vi.stubGlobal("WebSocket", Socket);
   const head = { id: "c1", protocol: "M3A-SUPORTE", contact_id: "p1", assignee_id: "", summary: "Atendimento", status: "open", version: 2 };
+  const queue: components["schemas"]["RealtimeStoreQueuePage"] = {
+    items: [{ id: head.id, protocol: head.protocol, contact_id: head.contact_id, assignee_id: null, status: head.status, inbox_id: "i1", sector_id: "s1", contact_label: "Contato autorizado", priority: "normal", unread: false, unread_count: 0, last_message_at: "2026-10-31T12:00:00Z", wait_since: "2026-10-31T12:00:00Z" }],
+    counts: { mine: 1, all: 1, unassigned: 1 }, event_next_cursor: 1, page_cursor: "",
+  };
+  const directory: components["schemas"]["OperatorDirectoryPage"] = { items: [{ membership_id: "member", label: principal.email, role: "agent" }], next_cursor: null };
+  const annotations: components["schemas"]["RealtimeStoreAnnotationState"] = { priority: "normal", tags: [], notes: [], events: [], watermark: 0, read_version: 0, unread: false, unread_count: 0, version: 2 };
+  const sessionConfirmation = vi.fn();
   vi.stubGlobal("fetch", vi.fn(async (req: Request) => {
     const path = new URL(req.url).pathname;
+    if (path === "/api/panel/session") { sessionConfirmation(); return json({ detail: "Sessão revogada" }, 401); }
     if (path.endsWith("/inboxes")) return json({ inboxes: [{ id: "i1", name: "Caixa", channel_status: "connected" }] });
+    if (path.endsWith("/queue")) return json(queue);
+    if (path.endsWith("/directory")) return json(directory);
+    if (path.endsWith("/sectors")) return json({ sectors: [] });
+    if (path.endsWith("/annotation-tags")) return json([]);
+    if (path.endsWith("/annotations")) return json(annotations);
+    if (path.endsWith("/collision")) return json({ indicators: [] });
     if (path.endsWith("/preferences/notifications")) return json({ sound: false, browser: false, silent: true });
     if (path.endsWith("/contacts/p1/history")) return json({ items: [{ id: "old", protocol: "M3A-ANTERIOR", status: "closed" }], next_offset: null });
     if (path.endsWith("/history")) return json({ head, messages: [], timeline: [], next_cursor: 1 });
@@ -123,12 +138,15 @@ it("revogação operacional pelo socket limpa conversa, histórico, cache e rasc
   session({ ...principal, role: "agent" }); const user = userEvent.setup();
   const view = mount(<ConversationsPage />);
   await user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
-  await user.click(await screen.findByRole("option", { name: /M3A-SUPORTE/ }));
+  await user.click(await screen.findByRole("button", { name: /Protocolo M3A-SUPORTE/ }));
   expect(await screen.findByText(/M3A-ANTERIOR/)).toBeInTheDocument();
   await user.type(screen.getByLabelText("Mensagem"), "Privado");
   expect(localStorage.length).toBeGreaterThan(0);
+  expect(sessionConfirmation).not.toHaveBeenCalled();
   act(() => Socket.current.onclose?.({ code: 1008, reason: "authorization_revoked" }));
   expect(await screen.findByText("Sessão encerrada")).toBeInTheDocument();
+  expect(sessionConfirmation).toHaveBeenCalledTimes(1);
+  expect(useSessionStore.getState().principal).toBeNull();
   expect(screen.queryByText(/M3A-ANTERIOR/)).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Mensagem")).not.toBeInTheDocument();
   expect(localStorage.length).toBe(0);
