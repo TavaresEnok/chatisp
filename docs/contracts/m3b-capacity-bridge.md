@@ -1,0 +1,7 @@
+# Capacidade manual e transições M2
+
+Ocupação é a contagem de conversas `open` ou `waiting_customer` atribuídas à matrícula em todas as caixas. Assume e transferência para membro usam `store.LockAssignmentCapacity` antes de aumentar essa contagem; o lock advisory transacional por tenant e matrícula também coordena a configuração do limite. A consulta exclui a própria conversa. A tomada de uma conversa já contabilizada para o mesmo membro não aumenta a ocupação e não exige vaga adicional. A transação reverte estado, eventos e lock em caso de erro; não existe contador ou reserva paralela.
+
+A ordem é gate do tenant e autorização, lock exclusivo da conversa antes do lock compartilhado da política, locks das linhas de autorização, lock de capacidade, alteração de estado, cancelamento de pendências e cursor. Não há rede sob esses locks. Close, devolução e transferência para outro setor reduzem a contagem pelo estado confirmado; não há liberação explícita. Uma redução concorrente pode fazer uma tentativa receber capacidade cheia antes de seu commit, sem criar sobrecarga ou vaga presa.
+
+Reopen manual e inbound abrem novo ciclo em `open`, com controller `menu` e responsável nulo, preservando protocolo; portanto não consomem capacidade, mesmo que a conversa fechada tenha responsável histórico. A decisão de produto mantém esse contrato M2: a atribuição subsequente por Assume ou transferência usa `LockAssignmentCapacity` e disputa a última vaga com outras atribuições. A reabertura não retém vaga e pode ocorrer com capacidade cheia.
