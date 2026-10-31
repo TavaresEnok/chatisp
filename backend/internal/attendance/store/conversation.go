@@ -143,6 +143,13 @@ func (Repo) Assume(ctx context.Context, tx pgx.Tx, in AssumeInput) (Conversation
 	if err != nil {
 		return Conversation{}, err
 	}
+	// The conversation is already locked. Serialize every increase in this
+	// member's active assignments with transfers and capacity changes.
+	if current.AssigneeID != in.MembershipID || (current.Status != StatusOpen && current.Status != StatusWaitingCustomer) {
+		if err := LockAssignmentCapacity(ctx, tx, in.TenantID, in.MembershipID, in.ConversationID); err != nil {
+			return Conversation{}, err
+		}
+	}
 	prevEpoch := current.ControllerEpoch
 	row, err := q.AssumeConversation(ctx, dbgen.AssumeConversationParams{
 		AssigneeID:      uuidPtr(in.MembershipID),
