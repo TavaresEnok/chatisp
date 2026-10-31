@@ -20,6 +20,8 @@ import (
 	attendanceService "chatisp/internal/attendance/service"
 	channelConfig "chatisp/internal/channel/configuration"
 	channelHttpAPI "chatisp/internal/channel/httpapi"
+	"chatisp/internal/collision"
+	collisionHTTP "chatisp/internal/collision/httpapi"
 	"chatisp/internal/contactdirectory"
 	contactHTTP "chatisp/internal/contactdirectory/httpapi"
 	"chatisp/internal/notifications"
@@ -45,6 +47,7 @@ type Dependencies struct {
 	Auth           *auth.Service
 	TrustedOrigins []string
 	Attendance     attendanceService.Service
+	Collision      *collision.Service
 	Channels       *channelConfig.Service
 	Sectors        sectors.Service
 	Contacts       contactdirectory.Service
@@ -156,6 +159,7 @@ func New(deps Dependencies) *API {
 		Attendance:     deps.Attendance,
 		TrustedOrigins: deps.TrustedOrigins,
 	})
+	collisionHTTP.Register(api, collisionHTTP.Dependencies{Auth: deps.Auth, Collision: deps.Collision, TrustedOrigins: deps.TrustedOrigins})
 	channelHttpAPI.Register(api, channelHttpAPI.Dependencies{
 		Auth:           deps.Auth,
 		Channels:       deps.Channels,

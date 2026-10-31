@@ -11,6 +11,44 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AnnotationMessageCursor struct {
+	TenantID       uuid.UUID
+	ConversationID uuid.UUID
+	MessageID      uuid.UUID
+	Seq            int64
+}
+
+type AnnotationTag struct {
+	TenantID uuid.UUID
+	ID       uuid.UUID
+	Name     string
+}
+
+type AssignmentCapacity struct {
+	TenantID     uuid.UUID
+	MembershipID uuid.UUID
+	Capacity     int32
+}
+
+type AssignmentQueueInterval struct {
+	TenantID           uuid.UUID
+	ID                 uuid.UUID
+	ConversationID     uuid.UUID
+	SectorID           uuid.UUID
+	StartedAt          pgtype.Timestamptz
+	EndedAt            pgtype.Timestamptz
+	HistoricalEstimate bool
+}
+
+type AssignmentRequest struct {
+	TenantID        uuid.UUID
+	ConversationID  uuid.UUID
+	PrincipalID     uuid.UUID
+	ClientRequestID string
+	Payload         json.RawMessage
+	Result          json.RawMessage
+}
+
 type AuditLog struct {
 	ID            uuid.UUID
 	TenantID      uuid.UUID
@@ -56,6 +94,16 @@ type ChannelConnector struct {
 	Channel       string
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+}
+
+type CollisionIndicator struct {
+	TenantID       uuid.UUID
+	ConversationID uuid.UUID
+	MembershipID   uuid.UUID
+	SessionID      uuid.UUID
+	TabID          uuid.UUID
+	Typing         bool
+	ExpiresAt      pgtype.Timestamptz
 }
 
 type Contact struct {
@@ -108,6 +156,30 @@ type Conversation struct {
 	SectorID                 *uuid.UUID
 }
 
+type ConversationAnnotation struct {
+	TenantID       uuid.UUID
+	ConversationID uuid.UUID
+	Priority       string
+	Version        int64
+}
+
+type ConversationAnnotationEvent struct {
+	TenantID       uuid.UUID
+	ID             uuid.UUID
+	ConversationID uuid.UUID
+	ActorID        uuid.UUID
+	Kind           string
+	SubjectID      *uuid.UUID
+	Version        int64
+	CreatedAt      pgtype.Timestamptz
+}
+
+type ConversationAnnotationTag struct {
+	TenantID       uuid.UUID
+	ConversationID uuid.UUID
+	TagID          uuid.UUID
+}
+
 type ConversationCycle struct {
 	TenantID          uuid.UUID
 	ID                uuid.UUID
@@ -136,6 +208,25 @@ type ConversationEvent struct {
 	ControllerEpoch int64
 	Controller      string
 	AssigneeID      *uuid.UUID
+}
+
+type ConversationNote struct {
+	TenantID       uuid.UUID
+	ID             uuid.UUID
+	ConversationID uuid.UUID
+	AuthorID       uuid.UUID
+	RequestID      string
+	Body           string
+	CreatedAt      pgtype.Timestamptz
+}
+
+type ConversationReadMarker struct {
+	TenantID       uuid.UUID
+	UserID         uuid.UUID
+	ConversationID uuid.UUID
+	Watermark      int64
+	Unread         bool
+	Version        int64
 }
 
 type CredentialSecret struct {

@@ -18,7 +18,7 @@ func problem(err error) error {
 		return huma.Error404NotFound("registro não encontrado")
 	case errors.Is(err, store.ErrResync):
 		return huma.Error409Conflict("ressincronização necessária")
-	case errors.Is(err, store.ErrStaleVersion), errors.Is(err, store.ErrIdempotencyConflict), errors.Is(err, store.ErrClosed), errors.Is(err, service.ErrStaleEpoch), errors.Is(err, service.ErrActiveConversation), errors.Is(err, service.ErrChannelUnavailable):
+	case errors.Is(err, store.ErrStaleVersion), errors.Is(err, store.ErrIdempotencyConflict), errors.Is(err, store.ErrClosed), errors.Is(err, store.ErrCapacityFull), errors.Is(err, service.ErrStaleEpoch), errors.Is(err, service.ErrActiveConversation), errors.Is(err, service.ErrChannelUnavailable):
 		return huma.Error409Conflict("conflito de atendimento")
 	case errors.Is(err, store.ErrInvalid):
 		return huma.Error422UnprocessableEntity("comando inválido")

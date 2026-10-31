@@ -18,6 +18,7 @@ func conversationFrom(row dbgen.Conversation) Conversation {
 		ID:                       row.ID,
 		TenantID:                 row.TenantID,
 		InboxID:                  uuidVal(row.InboxID),
+		SectorID:                 uuidVal(row.SectorID),
 		ContactID:                uuidVal(row.ContactID),
 		IdentityID:               uuidVal(row.ContactIdentityID),
 		Status:                   row.Status,

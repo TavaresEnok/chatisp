@@ -21,6 +21,7 @@ import (
 	"chatisp/internal/attendance/pipeline"
 	attendanceService "chatisp/internal/attendance/service"
 	channelConfig "chatisp/internal/channel/configuration"
+	"chatisp/internal/collision"
 	"chatisp/internal/contactdirectory"
 	"chatisp/internal/notifications"
 	"chatisp/internal/platform/auth"
@@ -100,6 +101,7 @@ func run(ctx context.Context, args []string, environ []string, stdout, stderr io
 			Logger:         log,
 			Auth:           svcs.Auth,
 			Attendance:     svcs.Attendance,
+			Collision:      svcs.Collision,
 			Channels:       svcs.Channels,
 			Sectors:        svcs.Sectors,
 			Contacts:       svcs.Contacts,
@@ -139,6 +141,7 @@ func applyMigrations(ctx context.Context, cfg config.Config, log *slog.Logger) e
 type runtimeServices struct {
 	Auth          *auth.Service
 	Attendance    attendanceService.Service
+	Collision     *collision.Service
 	Channels      *channelConfig.Service
 	Sectors       sectors.Service
 	Contacts      contactdirectory.Service
@@ -393,6 +396,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 	return runtimeServices{
 		Auth:          identity,
 		Attendance:    attendanceSvc,
+		Collision:     &collision.Service{DB: store},
 		Channels:      channelSvc,
 		Sectors:       sectors.Service{DB: store},
 		Contacts:      contactdirectory.Service{DB: store, Visibility: httpapi.ContactVisibility{}},
