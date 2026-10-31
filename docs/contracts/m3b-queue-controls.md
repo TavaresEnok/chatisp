@@ -1,0 +1,11 @@
+# Controles de fila M3B
+
+`QueueControls` e `QueueSearch` são componentes controlados de apresentação. Não fazem consultas, não inferem permissões e não contêm dados de exemplo. A integração deve obter opções e resultados autorizados para a sessão e converter os contratos da API gerada para estes viewmodels camelCase; eles não são DTOs HTTP.
+
+`QueueControlsProps` recebe `tab` (`mine`, `unassigned`, `all`) e `onTabChange`; `search` e `onSearchChange`; `filters`, `filterOptions` e `onFiltersChange`; `order` (`wait`, `lastMessage`) e `onOrderChange`; `resultState` (`loading`, `error`, `ready`), `items`, `selectedId` e `onSelect`. Cada callback entrega o novo valor completo, ou o identificador da conversa selecionada. `QueueSearch` também pode ser usado isoladamente com `value` e `onChange`.
+
+`QueueFilters` contém `status`, `sector`, `assignee`, `inbox`, `tag`, `from` e `to`; string vazia significa sem filtro. Datas são strings de data do controle nativo. `QueueFilterOptions` contém listas `{ value, label }` para os cinco primeiros campos; valores devem ser únicos e não vazios em cada lista. O chamador define a semântica de período, ordenação e busca por nome, telefone, protocolo ou conteúdo, e coordena paginação e respostas obsoletas. Limpar filtros preserva busca, aba e ordenação; limpar busca devolve foco ao campo.
+
+Cada `QueueItem` contém `id`, `contactLabel`, `protocol`, `priorityLabel` (string ou null) e `unreadCount`. Prioridade e contagem vêm dos dados autorizados do servidor, sem cálculo local. Resultados antigos ficam ocultos durante carregamento e erro. O chamador deve fornecer apenas resultados correspondentes ao estado atual, respeitar autorização, tenant e setor, e manter a seleção consistente. A aba Todas indica apenas conversas disponíveis no acesso do usuário, sem prometer acesso ao tenant inteiro.
+
+As abas oferecem setas, Home e End com seleção automática; campos nativos, botões e resultados são operáveis por teclado. Estados de carregamento, erro e vazio são anunciados ou exibidos. A integração futura deve conectar estes callbacks à API gerada e testar o fluxo completo, incluindo cursor e permissões; os componentes isolados não estabelecem esse contrato de transporte.
