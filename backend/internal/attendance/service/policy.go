@@ -91,7 +91,16 @@ func mapDecision(d channelpolicy.Decision, err error) error {
 	case "channel_unavailable", "web_capability_requires_driver_policy":
 		return ErrChannelUnavailable
 	case "contact_blocked":
-		return ErrForbidden
+		// Callers are the two mapDecision returns inside admit. Sector and
+		// principal failures still return ErrForbidden above, and every other
+		// refusal, including consent_required, still returns PolicyDenied.
+		// Nil here only keeps the M3A acceptance at HTTP 201: the row is an
+		// intent. Returning ErrForbidden would roll the outbox back and make
+		// that POST a 403, which TestM3AIntegrated rejects. EvaluateAttemptPolicy
+		// does not cancel this reason; pipeline.DispatchOutbound re-reads
+		// contacts.blocked for a human origin and fails the sending attempt
+		// before SendText or SendTemplate.
+		return nil
 	default:
 		return &PolicyDenied{Reason: d.Reason}
 	}

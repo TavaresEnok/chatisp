@@ -14,6 +14,7 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "test:e2e:m3b": "node scripts/m3b-e2e.mjs",
+    "test:e2e:m4a": "node scripts/m4a-e2e.mjs",
     "generate:api": "openapi-typescript ../backend/api/openapi.json -o src/api/schema.ts"
   },
   "dependencies": {

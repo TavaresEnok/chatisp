@@ -113,6 +113,10 @@ func m3bDemo(args []string) error {
 	if len(args) != 0 {
 		return errors.New("uso: m2demo m3b (fixture descartável loopback)")
 	}
+	return m3bDemoWith(false)
+}
+
+func m3bDemoWith(m4a bool) error {
 	cert, err := m3bCertificate()
 	if err != nil {
 		return err
@@ -140,7 +144,7 @@ func m3bDemo(args []string) error {
 	go proxy.ServeTLS(listeners[3], "", "")
 	defer proxy.Close()
 	ready, done := make(chan demoInfo, 1), make(chan error, 1)
-	go func() { done <- runDemoMode(ctx, listeners[0], listeners[1], listeners[2], ready, true) }()
+	go func() { done <- runDemoMode(ctx, listeners[0], listeners[1], listeners[2], ready, true, m4a) }()
 	select {
 	case info := <-ready:
 		if err = json.NewEncoder(os.Stdout).Encode(info); err != nil {

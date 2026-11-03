@@ -17,9 +17,13 @@ import (
 	"syscall"
 	"time"
 
+	"chatisp/internal/attachments"
 	"chatisp/internal/attendance/pipeline"
 	"chatisp/internal/attendance/service"
+	"chatisp/internal/businesshours"
+	"chatisp/internal/cannedreplies"
 	"chatisp/internal/channel/configuration"
+	"chatisp/internal/channelpolicy"
 	"chatisp/internal/contactdirectory"
 	"chatisp/internal/notifications"
 	"chatisp/internal/platform/auth"
@@ -42,14 +46,15 @@ import (
 type demoInfo struct {
 	Email, Password, App, Secret, Waba, Phone string
 	M3B                                       *m3bInfo `json:",omitempty"`
+	M4A                                       *m4aInfo `json:",omitempty"`
 }
 
 // runDemo owns a fresh embedded cluster and stops the runtime before removing it.
 func runDemo(ctx context.Context, apiListener, metricsListener, fakeListener net.Listener, ready chan<- demoInfo) error {
-	return runDemoMode(ctx, apiListener, metricsListener, fakeListener, ready, false)
+	return runDemoMode(ctx, apiListener, metricsListener, fakeListener, ready, false, false)
 }
 
-func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener net.Listener, ready chan<- demoInfo, m3b bool) error {
+func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener net.Listener, ready chan<- demoInfo, m3b, m4a bool) error {
 	for _, key := range []string{"CHATISP_TEST_DATABASE_URL", "CHATISP_DATABASE_URL", "CHATISP_APP_DATABASE_URL", "CHATISP_PLATFORM_DATABASE_URL", "CHATISP_INGRESS_DATABASE_URL", "CHATISP_JOBS_DATABASE_URL"} {
 		if _, ok := os.LookupEnv(key); ok {
 			return fmt.Errorf("%s definido: demo recusa DSNs preexistentes", key)
@@ -150,9 +155,15 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 	}
 	info := demoInfo{Email: "agente-" + uuid.NewString() + "@example.test", Password: uuid.NewString(), App: "sim-app-" + uuid.NewString(), Secret: uuid.NewString(), Waba: "sim-waba-" + uuid.NewString(), Phone: "5511999990001"}
 	adminEmail, adminPassword := uuid.NewString()+"@example.test", uuid.NewString()
+	timezone, limits := "UTC", json.RawMessage(`{}`)
+	if m4a {
+		// The tenant timezone is the only clock the hours module reads.
+		timezone = "America/Sao_Paulo"
+		limits = json.RawMessage(`{"attachment_plan_bytes":1048576,"attachment_reserve_bytes":65536,"attachment_file_bytes":1048576}`)
+	}
 	tenant, agent, admin, member, adminMember := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	if err = store.WithPlatform(ctx, func(c context.Context) error {
-		if _, e := store.CreateTenant(c, db.NewTenant{ID: tenant, Timezone: "UTC", Status: "active", Limits: json.RawMessage(`{}`)}); e != nil {
+		if _, e := store.CreateTenant(c, db.NewTenant{ID: tenant, Timezone: timezone, Status: "active", Limits: limits}); e != nil {
 			return e
 		}
 		for _, user := range []db.NewUser{{ID: agent, Email: info.Email, Status: "active"}, {ID: admin, Email: adminEmail, Status: "active"}} {
@@ -228,11 +239,26 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 	if err = sectorService.SetDefault(ctx, principal, sector.ID, configured.InboxID); err != nil {
 		return err
 	}
-	if m3b {
+	if m3b || m4a {
 		info.M3B, err = seedM3B(ctx, store, ring, sectorService, principal, sector.ID, configured.InboxID, member)
 		if err != nil {
 			return err
 		}
+	}
+	var (
+		cannedSvc     cannedreplies.Service
+		policySvc     *channelpolicy.Service
+		attachmentSvc *attachments.Service
+		hoursSvc      businesshours.Service
+		fakeHandler   http.Handler = handler()
+		stopM4A       func()
+	)
+	if m4a {
+		cannedSvc, policySvc, attachmentSvc, hoursSvc, fakeHandler, info.M4A, stopM4A, err = prepareM4A(ctx, store, ring, tenant, admin, adminMember, configured.InboxID, adminEmail)
+		if err != nil {
+			return err
+		}
+		defer stopM4A()
 	}
 	inserts, err := jobs.New(nil, jobs.Handlers{})
 	if err != nil {
@@ -260,17 +286,17 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 	defer notifier.Close()
 	adapter := realtime.NewAuthAdapter(identity, store)
 	origins := []string{"http://localhost:5174", "http://127.0.0.1:5174"}
-	if m3b {
+	if m3b || m4a {
 		origins = append(origins, "https://localhost:5174")
 	}
 	rt := realtime.NewHandler(realtime.Options{TrustedOrigins: origins, Authenticator: adapter, Attendance: attendance, InboxResolver: adapter, Notifier: notifier, DB: store})
-	fake := &http.Server{Handler: handler(), ReadHeaderTimeout: 5 * time.Second}
+	fake := &http.Server{Handler: fakeHandler, ReadHeaderTimeout: 5 * time.Second}
 	go fake.Serve(fakeListener)
 	defer fake.Shutdown(context.Background())
 	if ready != nil {
 		ready <- info
 	}
-	return runtime.Run(ctx, runtime.Options{Mode: config.ModeAll, Config: config.Config{LogLevel: "info", ShutdownTimeout: 15 * time.Second}, HTTPListener: apiListener, MetricsListener: metricsListener, Auth: identity, Attendance: attendance, Channels: channels, Sectors: sectorService, Contacts: contactdirectory.Service{DB: store, Visibility: panelapi.ContactVisibility{}}, Notifications: notifications.New(store), Realtime: rt, Webhook: wh, JobsClient: worker, TrustedOrigins: origins, ReadyChecks: []func(context.Context) error{pools.App.Ping, pools.Platform.Ping, pools.Ingress.Ping, wp.Ping}})
+	return runtime.Run(ctx, runtime.Options{Mode: config.ModeAll, Config: config.Config{LogLevel: "info", ShutdownTimeout: 15 * time.Second}, HTTPListener: apiListener, MetricsListener: metricsListener, Auth: identity, Attendance: attendance, Channels: channels, Sectors: sectorService, Contacts: contactdirectory.Service{DB: store, Visibility: panelapi.ContactVisibility{}}, Notifications: notifications.New(store), Realtime: rt, Webhook: wh, CannedReplies: cannedSvc, ChannelPolicy: policySvc, Attachments: attachmentSvc, BusinessHours: hoursSvc, JobsClient: worker, TrustedOrigins: origins, ReadyChecks: []func(context.Context) error{pools.App.Ping, pools.Platform.Ping, pools.Ingress.Ping, wp.Ping}})
 }
 
 // panelProxy forwards API upgrades directly to the real server, and assets to Vite.

@@ -69,6 +69,8 @@ O demo inclui setor padrão e vínculo setor/caixa do agente para o recorte M3A.
 
 O [roteiro M3B](docs/m3b-entrega.md) acrescenta fixture opt-in `m2demo m3b` e `npm --prefix web run test:e2e:m3b`, com PostgreSQL descartável, workers, Meta falso e navegador Playwright. O runner aceita `M3B_CHROMIUM_EXECUTABLE` ou detecta `.paseo-build-tmp/browser/chromium-launcher` relativo ao repositório. Em 03/11/2026 o cenário passou no Chromium 140.0.7339.186 provisionado: receber, assumir, transferir, responder, encerrar e revogação entre setores. M3 completo (incluindo auto-reabertura X e CPF/CNPJ autorizado com cifra/HMAC), revisão independente e gate amplo final permanecem pendentes.
 
+O [roteiro M4A](docs/m4a-entrega.md) acrescenta `m2demo m4a` e `npm --prefix web run test:e2e:m4a`, reutilizando o mesmo PostgreSQL embutido e o mesmo Chromium. O runner usa o launcher local, o cache do Playwright ou o Chromium 1193 da conta, e falha sem baixar browser. Em 03/11/2026 o cenário passou no Chromium 140.0.7339.186: respostas, atalho, assinatura, horário por caixa, janela expirada no despacho, template driver aceito na fila com a janela já fechada, recusa `template_not_authorized` do catálogo fake com consentimento ainda válido, opt-out `consent_required` num passo separado e anexo autorizado. M4B, M5 e os marcos M3/M4/M5 inteiros continuam pendentes. Auto-reabertura X e documentos autorizados do M3, o pipeline de mídia e áudio do M4B, round-robin, presença e triagem do M5, e as integrações, relatórios e M8 seguem no backlog.
+
 ```sh
 ./scripts/test.sh
 ```

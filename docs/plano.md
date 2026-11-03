@@ -3,9 +3,7 @@
 Fonte normativa: `docs/especificacao.md`, revisão V4.1, de 28/10/2026.
 Este arquivo relaciona requisitos, marcos, riscos e testes. Ele não substitui a especificação e não declara marco concluído.
 
-Estado verdadeiro de cada marco, inclusive o M0: **pendente**.
-Estado verdadeiro de cada requisito listado: **pendente**.
-Nada além da preparação documental foi implementado. A conclusão de um marco só muda quando o critério correspondente tiver evidência e este arquivo for atualizado de propósito.
+Estado dos marcos M0–M8: nenhum marco está concluído. O topo que marcava toda linha como pendente ficou desatualizado: há evidência dirigida de recortes M1–M3B e do recorte M4A descrito em docs/m4a-entrega.md. Linhas sem essa evidência continuam pendentes. Revisão independente e o gate amplo final não foram executados nesta entrega.
 
 Escopo implementável: as 257 linhas V1 e V1 simples das seções 01 a 14 (196 V1 e 61 V1 simples). A seção 10 não tem linha V1 nem V1 simples. A seção 15 é índice e não soma requisito novo. V2 fica de fora, salvo os pontos de extensão citados no fim deste plano. Itens “Não fazer” permanecem fora do produto.
 
@@ -329,13 +327,14 @@ O aceite integral das linhas permanece pendente. O recorte M3A e suas evidência
 ## M4 — Canal e produtividade completos
 
 - Estado: pendente
+- Recorte M4A: em 03/11/2026, `go -C backend test -count=1 ./internal/acceptance ./cmd/m2demo` passou (`acceptance` 17.918s, `m2demo` 16.581s), com HTTP real, PostgreSQL embutido, lease, relógio da fixture e stand-in Meta em zero chamadas. Com consentimento ainda concedido e a janela já fechada, o template driver responde 201 (`approved_template` na decisão `enqueue`) e o template fake responde 422 com detalhe `template_not_authorized`. A revogação é outro passo: `consent_revoked` na tentativa que estava na fila e `consent_required` num POST seguinte. `mapDecision` só é chamado por `admit`. Nil em `contact_blocked` mantém o POST 201; autorização de setor segue `ErrForbidden` e opt-out segue `PolicyDenied`, relido no despacho. `DispatchOutbound` falha a tentativa humana bloqueada antes de qualquer driver. 403 na aceitação quebraria `TestM3AIntegrated` e não é o contrato. `npm --prefix web run test:e2e:m4a` passou no Chromium 140.0.7339.186 pelo launcher local; a evidência está em `.paseo-build-tmp/m4a-browser/m4a-jornada.json` e no roteiro [m4a-entrega.md](m4a-entrega.md). Isso não conclui o marco. M4B (mídia outbound, áudio gravado, ffmpeg) e Meta/ERP reais continuam de fora.
 - Entrega (C.1): mídias da V1, gravação de áudio, templates e WABA, janela oficial, consentimento, respostas prontas, saúde do canal e uso reportado.
 - Critério: uploads e URLs seguros, conversão limitada, janela revalidada no envio e estados remotos corretos.
 - Dependências: M2 para o driver e a outbox. M3 para o compositor já usado pelo atendente. ffmpeg ainda não está neste host; a evidência da conversão espera o binário. D2-05 impede qualquer valor monetário.
 
 ### Requisitos V1 e V1 simples
 
-Estado de todas as linhas: pendente.
+O aceite integral das linhas permanece pendente. O parágrafo do recorte M4A acima é a única evidência nova desta entrega; as células sem esse recorte continuam sem prova.
 
 | ID | Prioridade | Requisito | Evidência |
 | --- | --- | --- | --- |
@@ -349,37 +348,37 @@ Estado de todas as linhas: pendente.
 | 02-receber-video | V1 | Receber vídeo | Preview e download seguro. Enviar vídeo continua V2. |
 | 02-receber-localizacao | V1 | Receber localização | A mensagem mostra a localização recebida. Sem motor de rede. |
 | 02-citacao | V1 | Responder mensagem específica | Campo de contexto do driver. A citação aponta para mensagem do mesmo tenant. |
-| 02-janela | V1 | Indicador da janela de 24 horas | Só na Cloud API. A conversa Web, quando existir, não mostra indicador oficial. |
-| 02-biblioteca-templates | V1 | Biblioteca de templates aprovados | Somente Meta, por WABA. Caixa acessa os templates autorizados daquela WABA. |
-| 02-sync-templates | V1 | Sincronização de templates | Consulta à WABA pelo driver oficial. Web não simula essa sincronização. |
-| 02-envio-template | V1 | Envio individual de template | Mesma idempotência e autorização do compositor. Fora da janela, mensagem livre é recusada. |
+| 02-janela | V1 | Indicador da janela de 24 horas | Só na Cloud API. Recorte M4A: o painel mostra que o prazo não é calculado no navegador. O texto livre ficou na fila, a fixture recuou a âncora 25 horas e o despacho gravou `cancelled`/`window_closed` sem chamar o stand-in. |
+| 02-biblioteca-templates | V1 | Biblioteca de templates aprovados | Recorte M4A: com consentimento `cobranca` ainda concedido e a âncora inbound já recuada 25h, o template `sync_source=driver` entrou na fila (HTTP 201; no Go, decisão `enqueue`/`approved_template`). Depois do `FakeCatalog` explícito, o POST de `sim-fake-aviso` respondeu 422 com detalhe `política de canal recusou o envio: template_not_authorized`. Não é consulta à Graph. |
+| 02-sync-templates | V1 | Sincronização de templates | Recorte M4A: o botão do admin substitui o snapshot pelo catálogo simulado explícito. Não há driver oficial nem WABA real. |
+| 02-envio-template | V1 | Envio individual de template | Recorte M4A: a fila do template driver no painel e no HTTP nasce com a janela já fechada e o consentimento válido, e depois é cancelada pelo opt-out com `consent_revoked` antes de qualquer chamada. Não é envio Meta. |
 | 02-download-midia | V1 | Download e guarda da mídia recebida | A URL da Meta não é a cópia durável. O objeto fica no storage do tenant. |
-| 02-consentimento | V1 | Consentimento e opt-in | Finalidade, canal, origem, evidência, data e revogação. Opt-out cancela proativas pendentes. Contato criado não implica consentimento. |
+| 02-consentimento | V1 | Consentimento e opt-in | Recorte M4A: concessão e revogação `cobranca` são passos separados no formulário e no HTTP. A revogação cancelou a tentativa proativa (`consent_revoked` no Go) e deixou o texto livre na fila até a janela fechar. Um POST de template depois da revogação respondeu 422 com detalhe `consent_required`. Contato criado não virou consentimento. |
 | 02-vcard | V1 simples | Receber contato (vCard) | Exibe nome e número. Não cria mescla automática com o ERP. |
 | 02-figurinhas | V1 simples | Figurinhas recebidas | Exibe a figurinha. Enviar figurinha fica fora. |
 | 02-reacoes | V1 simples | Reações recebidas | Exibe na mensagem citada. Enviar reação fica V2. |
 | 02-interativos | V1 simples | Botões e listas interativas | Capacidade do driver oficial, com fallback em texto numerado. O menu do M5 consome esta capacidade. Sem editor visual. |
 | 02-saude-numero | V1 simples | Saúde e qualidade do número | Qualidade e erros essenciais visíveis ao admin. Sem painel de tarifa. |
 | 02-limites-numero | V1 simples | Limites de mensagens do número | Tier atual para diagnóstico. O limite local de envio continua sendo o lease do M2. |
-| 04-compositor | V1 | Compositor de mensagem | Texto, anexos, emoji e indicador de janela na Cloud API. Rascunho continua local até a aceitação. |
+| 04-compositor | V1 | Compositor de mensagem | Recorte M4A: texto aceito no compositor e anexo validado no painel. Emoji e arrastar arquivo não foram exercitados. O indicador da janela foi o texto de que o prazo fica no servidor. |
 | 04-drag-colar | V1 | Arrastar arquivo e colar imagem | O anexo entra na mesma validação de upload. |
 | 04-preview | V1 | Pré-visualização de anexos | Imagem, PDF, áudio e vídeo recebidos, sem executar HTML ou SVG no contexto do painel. |
-| 04-download-seguro | V1 | Download seguro de anexos | Autorização antes da URL assinada. A URL expira e não fica pública. |
-| 04-respostas-prontas | V1 | Respostas prontas compartilhadas | Admin e supervisor gerem. Atendente insere. Não há resposta privada neste lançamento. |
-| 04-atalho-barra | V1 | Atalho / para respostas prontas | Exemplo: /reiniciar abre a lista e insere o texto no rascunho. |
-| 04-assinatura | V1 simples | Assinatura do atendente | Prefixo configurável Nome: por provedor. Desligada, a mensagem sai sem o prefixo. |
-| 04-variaveis | V1 simples | Variáveis simples nas respostas prontas | Nome do cliente, nome do atendente e protocolo. Sem variável arbitrária nem lógica. |
+| 04-download-seguro | V1 | Download seguro de anexos | Recorte M4A: download só depois da validação; no browser o agente sem setor recebe 403 e no HTTP o outro tenant também; a URL local simulada expira. Não é storage público. |
+| 04-respostas-prontas | V1 | Respostas prontas compartilhadas | Recorte M4A: criar, atualizar e excluir na tela do admin e no HTTP; o agente renderiza pelo atalho e não altera o catálogo. |
+| 04-atalho-barra | V1 | Atalho / para respostas prontas | Recorte M4A: a lista do compositor mostrou `/reiniciar` e o Enter preencheu o rascunho. O POST `/render` do teste Go devolve o mesmo texto. |
+| 04-assinatura | V1 simples | Assinatura do atendente | Recorte M4A: prefixo ligado na tela, com o e-mail autenticado, aplicado uma vez na aceitação do texto humano. O template não recebe prefixo. |
+| 04-variaveis | V1 simples | Variáveis simples nas respostas prontas | Recorte M4A: `nome_cliente` e `protocolo` substituídos no painel a partir do webhook simulado. Sem variável arbitrária. |
 | 07-iniciar-template | V1 | Iniciar conversa com contato por template | Só Cloud API, com janela e consentimento revalidados no despacho. Cria conversa e protocolo novos quando não há conversa ativa. |
 | 14-download-midia | V1 | Download da mídia no worker | Mesma obrigação de 02-download-midia, com timeout, limite de bytes e falha visível. |
-| 14-s3 | V1 | Anexos em storage S3 compatível, por tenant | aws-sdk-go-v2. Chave com namespace opaco do tenant. Neste host o teste usa double identificado; produção usa destino S3 validado. |
-| 14-url-assinada | V1 | Acesso a anexos com URL assinada e expirável | Sem link público permanente. A autorização é revista na emissão. |
-| 14-upload | V1 | Validação de upload | Tipo real, tamanho, duração e nome seguro. |
+| 14-s3 | V1 | Anexos em storage S3 compatível, por tenant | Recorte M4A usa objeto local simulado, com cabeçalho `X-ChatISP-Simulation: local-attachment`. Não há S3. |
+| 14-url-assinada | V1 | Acesso a anexos com URL assinada e expirável | Recorte M4A: a URL da simulação respondeu 200 no browser e, depois do relógio local avançar 25 horas, 410. A autorização continua na emissão. |
+| 14-upload | V1 | Validação de upload | Recorte M4A: HTML nomeado `foto.jpg` ficou `failed` com 422 `anexo inválido`, também visível no painel. PDF mínimo validou. Duração não foi medida. |
 | 14-ffmpeg | V1 | Conversão de áudio com limites | ffmpeg em arquivo local, com teto de duração, tamanho, CPU, memória e tempo. Sem URL arbitrária na conversão. ffmpeg ainda ausente neste host: o marco registra a evidência onde o binário existir. |
 | 14-uso-meta | V1 simples | Contabilização de uso reportado pela Meta | Categoria, indicador de cobrança ou desconhecido. Sem valor em dinheiro. Agregado reconstruível, sem dupla contagem. |
 
 ### Testes de aceite
 
-- B8-13. A janela que vence com a mensagem ainda na fila impede o envio livre. Template permitido continua sendo outra operação, também revalidada.
+- B8-13. A janela que vence com a mensagem ainda na fila impede o envio livre. No recorte M4A o texto livre saiu da fila como `cancelled`/`window_closed`, com decisão de despacho e zero chamadas ao stand-in. Template permitido continua sendo outra operação, também revalidada; o opt-out cancelou o template antes dessa etapa.
 - Upload com tipo disfarçado é recusado. URL assinada expira e exige autorização. HTML e SVG recebidos não executam no painel.
 - Uso reportado guarda desconhecido quando a Meta não manda categoria ou indicador. O agregado não conta o mesmo evento duas vezes.
 - Conversão de áudio recusa entrada acima do limite e não recebe URL para o ffmpeg buscar na rede.
@@ -387,13 +386,14 @@ Estado de todas as linhas: pendente.
 ## M5 — Distribuição, automações e bot
 
 - Estado: pendente
+- Recorte de horário reutilizado pelo M4A: a configuração por caixa e a decisão absoluta no fuso `America/Sao_Paulo` foram provadas no HTTP e na tela (segunda 10:00 local aberta no setor padrão; domingo fechada no plantão), depois do refetch da versão gravada. O formulário ainda remonta ao mudar a versão e apaga instante/decisão; isso permanece pendência de produto e não foi corrigido neste recorte. Os textos de boas-vindas, fora do expediente e ninguém disponível foram gravados e não são enviados. Round-robin, presença e triagem continuam pendentes.
 - Entrega (C.1): round-robin, vagas atômicas, presença, horários, plantão, triagem, adiamento, inatividade e gancho de IA com handoff.
 - Critério: o cliente não fica preso no menu nem no bot; a tomada humana invalida envios pendentes; job antigo não fecha a conversa atual.
 - Dependências: M3 para setores, prioridade e etiquetas. M4 para botões interativos, quando o driver oficial os tiver; o texto numerado é o fallback e não espera mídia. Endpoint real de IA só com autorização. Até lá o gancho de teste é identificado como simulação.
 
 ### Requisitos V1 e V1 simples
 
-Estado de todas as linhas: pendente.
+O marco continua pendente. Só as linhas de horário citadas no recorte M4A têm evidência parcial de configuração; round-robin, presença e triagem não.
 
 | ID | Prioridade | Requisito | Evidência |
 | --- | --- | --- | --- |
@@ -414,16 +414,16 @@ Estado de todas as linhas: pendente.
 | 05-apos-transferencia | V1 simples | Comportamento após transferência | Para atendente: valida acesso e capacidade. Para setor: remove responsável e volta à fila. |
 | 05-desatribuir-offline | V1 simples | Desatribuir quem fica offline | Só depois da tolerância configurável. Queda curta não tira conversas. |
 | 05-ocupacao | V1 simples | Indicador de ocupação | Vagas usadas e limite. Abertas, aguardando e adiadas aparecem separadas. |
-| 06-horario | V1 | Horário de atendimento por dia da semana | Por caixa. Não há escala por atendente. |
-| 06-fora-expediente | V1 | Resposta fora do expediente | Texto por caixa, com orientação de plantão quando houver. |
+| 06-horario | V1 | Horário de atendimento por dia da semana | Recorte M4A: intervalos gravados por caixa na tela e avaliados no fuso do tenant, depois do refetch da versão. O remonte do formulário ainda apaga instante e decisão; pendência de produto, sem correção neste recorte. Sem escala por atendente. |
+| 06-fora-expediente | V1 | Resposta fora do expediente | O texto foi gravado. O envio automático dessa resposta continua pendente. |
 | 06-setor-padrao | V1 | Setor padrão por caixa | Destino quando não há menu ou quando o menu estoura as tentativas. |
 | 06-atribuicao-chegar | V1 | Atribuição automática ao chegar | Depois da triagem ou do setor padrão, usa as regras da seção 05. |
 | 06-menu | V1 | Menu de triagem | Interativo quando o driver permitir; texto numerado como fallback. Sempre há saída para humano. Conteúdo imprevisto tem limite curto de tentativas. |
 | 06-inatividade | V1 | Encerramento automático por inatividade | Só depois de resposta pública humana confirmada. Aviso e, depois, encerramento com no_response. Revalida estado, posse, adiamento e mensagem nova. |
 | 06-retorno-adiada | V1 | Retorno de conversa adiada à fila | No prazo, tenta o antigo responsável se elegível; senão volta à fila. Não encerra. |
-| 06-plantao | V1 simples | Setor de plantão fora do expediente | Opcional por caixa. Em vez de só responder, encaminha ao setor de plantão. |
-| 06-boas-vindas | V1 simples | Mensagem de boas-vindas | Uma por caixa, concisa, com o número do protocolo. Falha de envio deixa o protocolo pendente de comunicação. |
-| 06-ninguem-disponivel | V1 simples | Resposta quando ninguém está disponível | Mensagem configurável. A conversa permanece na fila. |
+| 06-plantao | V1 simples | Setor de plantão fora do expediente | Recorte M4A: domingo 10:00 em São Paulo, consultado na tela, teve como destino o setor de plantão vinculado à caixa. Não houve encaminhamento automático de conversa. |
+| 06-boas-vindas | V1 simples | Mensagem de boas-vindas | O texto foi gravado por caixa. O envio automático continua pendente. |
+| 06-ninguem-disponivel | V1 simples | Resposta quando ninguém está disponível | O texto foi gravado. A conversa não é respondida por esta configuração. |
 | 06-gancho | V1 simples | Gancho para bot ou IA externa | Um webhook assinado por caixa. HTTP 200 significa recebimento, não resolução. |
 | 06-etiqueta-menu | V1 simples | Etiqueta automática por opção do menu | A opção financeiro pode gravar o motivo. Sem autoetiqueta por palavra-chave. |
 | 06-gatilhos | V1 simples | Gatilhos fixos | Conversa criada, mensagem e mudança de estado, internos ao núcleo, sem editor de regras. |
