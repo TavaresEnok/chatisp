@@ -65,7 +65,9 @@ Sem make, os mesmos comandos são `./scripts/dev.sh`, `./scripts/test.sh`, `./sc
 
 Para experimentar o atendimento com banco descartável e Meta simulado, veja [o roteiro M2](docs/m2-entrega.md). O comando é `go -C backend run ./cmd/m2demo demo`, após instalar as dependências conforme o roteiro.
 
-O demo inclui setor padrão e vínculo setor/caixa do agente para o recorte M3A. [A entrega M3A](docs/m3a-entrega.md) registra as provas de autorização, contatos, compositor e notificações, a revogação de vínculo populado com histórico preservado e o backlog restante. A migração incremental 00012 separa identidade histórica e autorização operacional. M3 completo, revisão independente, gate amplo final e Playwright permanecem pendentes.
+O demo inclui setor padrão e vínculo setor/caixa do agente para o recorte M3A. [A entrega M3A](docs/m3a-entrega.md) registra as provas de autorização, contatos, compositor e notificações, a revogação de vínculo populado com histórico preservado e o backlog restante. A migração incremental 00012 separa identidade histórica e autorização operacional.
+
+O [roteiro M3B](docs/m3b-entrega.md) acrescenta fixture opt-in `m2demo m3b` e `npm --prefix web run test:e2e:m3b`, com PostgreSQL descartável, workers, Meta falso e navegador Playwright. O runner aceita `M3B_CHROMIUM_EXECUTABLE` ou detecta `.paseo-build-tmp/browser/chromium-launcher` relativo ao repositório. Em 03/11/2026 o cenário passou no Chromium 140.0.7339.186 provisionado: receber, assumir, transferir, responder, encerrar e revogação entre setores. M3 completo (incluindo auto-reabertura X e CPF/CNPJ autorizado com cifra/HMAC), revisão independente e gate amplo final permanecem pendentes.
 
 ```sh
 ./scripts/test.sh
