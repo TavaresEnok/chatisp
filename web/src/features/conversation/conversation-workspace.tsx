@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { AttachmentDesk } from "@/features/attachments/attachment-desk";
+import { ConsentForm, TemplateCatalog, WindowIndicator } from "@/features/channelpolicy/channel-panels";
 import { MessageComposer } from "@/features/conversation/message-composer";
+import type { PanelPrincipal } from "@/stores/session-store";
 import { MessageTimeline } from "@/features/conversation/message-timeline";
 import { CloseConversationDialog } from "@/features/conversation/close-conversation-dialog";
 import { ConversationHeader } from "@/features/conversation/conversation-header";
@@ -37,6 +40,11 @@ export type ConversationWorkspaceProps = {
   renderQueue?: (selectedId: string | null, select: (id: string) => void) => ReactNode;
   renderActions?: (conversationId: string) => ReactNode;
   onTyping?: (conversationId: string) => void;
+  inboxId?: string;
+  connectorType?: string;
+  contactId?: string | null;
+  conversationVersion?: number | null;
+  principal?: PanelPrincipal | null;
   onFarewell: (
     conversationId: string,
     command: SendTextCommand,
@@ -121,6 +129,11 @@ function WorkspaceSession({
   renderQueue,
   renderActions,
   onTyping,
+  inboxId,
+  connectorType = "",
+  contactId = null,
+  conversationVersion = null,
+  principal = null,
 }: ConversationWorkspaceProps) {
   const [session, setSession] = useState<Session>({
     selectedId: null,
@@ -237,6 +250,14 @@ function WorkspaceSession({
               status={timelineStatus}
               entries={timelineEntries}
             />
+            {principal && inboxId ? (
+              <>
+                <WindowIndicator connectorType={connectorType} />
+                <TemplateCatalog key={`templates:${card.id}`} principal={principal} inboxId={inboxId} conversationId={card.id} connectorType={connectorType} version={detailMatches ? conversationVersion : null} />
+                {contactId && detailMatches ? <ConsentForm key={`consent:${card.id}:${contactId}`} principal={principal} inboxId={inboxId} contactId={contactId} /> : null}
+                <AttachmentDesk key={`attachments:${card.id}`} principal={principal} inboxId={inboxId} conversationId={card.id} closed={card.phase === "closed"} />
+              </>
+            ) : null}
             {card.phase === "closed" ? (
               <div><p className="text-sm text-muted-foreground">
                 O compositor fica indisponível após o encerramento.
@@ -249,6 +270,7 @@ function WorkspaceSession({
                   offline={offline}
                   localQueue={localQueue}
                   createIntentKey={createIntentKey}
+                  replyInboxId={inboxId}
                   onTyping={() => onTyping?.(item.id)}
                   onSend={(command) => onSend(item.id, command)}
                 />
