@@ -112,6 +112,7 @@ it("carrega caixa e histórico e envia comando versionado pelo contrato HTTP", a
     else if (path.endsWith("/memberships")) data = { memberships: [] };
     else if (path.endsWith("/history")) data = { head, messages: [], timeline: [], next_cursor: 1 };
     else if (path.endsWith("/conversations")) data = { conversations: [head], messages: [], next_cursor: 1 };
+    else if (path.endsWith("/attendant-signature")) data = { enabled: false, prefix: "{{nome_atendente}}: ", version: 0 };
     else if (path.endsWith("/messages")) data = { message_id: "m1", attempt_id: "a1", idempotency_id: "k1", state: "queued", replayed: false };
     else if (path.endsWith("/close")) { head.status = "closed"; data = { conversation: head, closure: {}, farewell: null, farewell_failed: true }; }
     else if (path.endsWith("/reopen")) { head.status = "open"; data = head; }

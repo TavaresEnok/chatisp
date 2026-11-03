@@ -11,6 +11,8 @@ import { NotificationPreferences, type PreferenceValues } from "@/features/notif
 import type { PanelPrincipal } from "@/stores/session-store";
 import { queryKeys } from "@/lib/query-keys";
 import { capacity } from "@/api/assignment";
+import { CannedSettings } from "@/features/cannedreplies/canned-settings";
+import { HoursSettings } from "@/features/businesshours/hours-settings";
 import { useState } from "react";
 
 export function SettingsPage() {
@@ -22,6 +24,8 @@ export function SettingsPage() {
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <Preferences key={JSON.stringify(queryKeys.notificationPreferences(principal))} principal={principal} />}
       {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <Link to="/configuracoes/canais">Caixas Meta</Link> : null}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <Capacity principal={principal} />}
+      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <CannedSettings key={principal.membershipId} principal={principal} />}
+      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <HoursSettings key={principal.membershipId} principal={principal} />}
       {principal && !principal.mfaEnrollmentRequired ? (
         <p className="text-sm">
           <Link to="/mfa" className="font-medium underline-offset-4 hover:underline">

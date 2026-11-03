@@ -139,7 +139,13 @@ export class PanelDouble {
     },
   ];
   tenants: Tenant[] = [];
+  replies: components["schemas"]["CannedReply"][] = [];
+  signature: components["schemas"]["CannedSignature"] = { enabled: false, prefix: "{{nome_atendente}}: ", version: 0 };
+  hours = new Map<string, components["schemas"]["BusinessHoursConfiguration"]>();
+  templates: components["schemas"]["ChannelPolicyTemplate"][] = [];
+  attachments = new Map<string, components["schemas"]["AttachmentRecord"]>();
   private inviteCount = 0;
+  private replyCount = 0;
 
   handle(req: http.IncomingMessage, res: http.ServerResponse, body: unknown) {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -329,7 +335,155 @@ export class PanelDouble {
       sendJson(res, 200, tenant);
       return;
     }
+    if (this.productivity(method, url, body, res)) return;
     problem(res, 404, "o caminho solicitado não existe");
+  }
+
+  private productivity(method: string, url: URL, body: unknown, res: http.ServerResponse): boolean {
+    const role = this.issued?.role;
+    const writer = role === "admin" || role === "supervisor";
+    const path = url.pathname;
+    if (method === "GET" && path === "/api/panel/canned-replies") {
+      const search = url.searchParams.get("search") ?? "";
+      const replies = this.replies.filter((reply) => reply.shortcode.includes(search) || reply.title.includes(search));
+      sendJson(res, 200, { replies, has_more: false });
+      return true;
+    }
+    if (method === "POST" && path === "/api/panel/canned-replies") {
+      if (!writer) return this.deny(res);
+      const input = objectBody(body);
+      this.replyCount += 1;
+      const reply: components["schemas"]["CannedReply"] = {
+        id: `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa${this.replyCount}`,
+        shortcode: String(input.shortcode ?? ""),
+        title: String(input.title ?? ""),
+        content: String(input.content ?? ""),
+        version: 1,
+      };
+      this.replies.push(reply);
+      sendJson(res, 201, reply);
+      return true;
+    }
+    const replyItem = path.match(/^\/api\/panel\/canned-replies\/([^/]+)$/);
+    if (replyItem && method === "DELETE") {
+      if (!writer) return this.deny(res);
+      this.replies = this.replies.filter((reply) => reply.id !== replyItem[1]);
+      sendJson(res, 200, {});
+      return true;
+    }
+    if (replyItem && method === "PUT") {
+      if (!writer) return this.deny(res);
+      const input = objectBody(body);
+      const reply = this.replies.find((item) => item.id === replyItem[1]);
+      if (!reply) {
+        problem(res, 404, "resposta não encontrada");
+        return true;
+      }
+      if (Number(input.version) !== reply.version) {
+        problem(res, 409, "versão obsoleta");
+        return true;
+      }
+      reply.shortcode = String(input.shortcode ?? reply.shortcode);
+      reply.title = String(input.title ?? reply.title);
+      reply.content = String(input.content ?? reply.content);
+      reply.version += 1;
+      sendJson(res, 200, reply);
+      return true;
+    }
+    const render = path.match(/^\/api\/panel\/canned-replies\/([^/]+)\/render$/);
+    if (render && method === "POST") {
+      const reply = this.replies.find((item) => item.id === render[1]);
+      if (!reply) {
+        problem(res, 404, "resposta não encontrada");
+        return true;
+      }
+      const text = reply.content
+        .replaceAll("{{nome_cliente}}", "Cliente")
+        .replaceAll("{{protocolo}}", "PROTOCOLO")
+        .replaceAll("{{nome_atendente}}", this.issued?.email ?? "");
+      sendJson(res, 200, { text, missing: [] });
+      return true;
+    }
+    if (path === "/api/panel/attendant-signature" && method === "GET") {
+      sendJson(res, 200, this.signature);
+      return true;
+    }
+    if (path === "/api/panel/attendant-signature" && method === "PUT") {
+      if (!writer) return this.deny(res);
+      const input = objectBody(body);
+      if (Number(input.version) !== this.signature.version) {
+        problem(res, 409, "versão obsoleta");
+        return true;
+      }
+      this.signature = {
+        enabled: input.enabled === true,
+        prefix: String(input.prefix ?? this.signature.prefix),
+        version: this.signature.version + 1,
+      };
+      sendJson(res, 200, this.signature);
+      return true;
+    }
+    const templates = path.match(/^\/api\/panel\/inboxes\/([^/]+)\/channel-policy\/templates$/);
+    if (templates && method === "GET") {
+      sendJson(res, 200, { templates: this.templates });
+      return true;
+    }
+    if (path.endsWith("/channel-policy/templates/sync") && method === "POST") {
+      if (role !== "admin") return this.deny(res);
+      sendEmpty(res, 204);
+      return true;
+    }
+    const consent = path.match(/^\/api\/panel\/inboxes\/([^/]+)\/channel-policy\/contacts\/([^/]+)\/consents$/);
+    if (consent && method === "POST") {
+      sendJson(res, 200, { invalidated_ids: objectBody(body).revoke === true ? ["pendencia-1"] : [] });
+      return true;
+    }
+    const hours = path.match(/^\/api\/panel\/inboxes\/([^/]+)\/business-hours$/);
+    const hoursInbox = hours?.[1];
+    if (hours && hoursInbox) {
+      if (role === "agent") return this.deny(res);
+      const current = this.hours.get(hoursInbox) ?? { version: 0, configured: false, timezone: "America/Sao_Paulo", config: { intervals: [], welcome: "", outside_hours: "", nobody_available: "", on_call_sector_id: "" } };
+      if (method === "GET") {
+        sendJson(res, 200, current);
+        return true;
+      }
+      if (role !== "admin") return this.deny(res);
+      if (method === "PUT") {
+        const input = objectBody(body);
+        const next = { ...current, version: current.version + 1, configured: true, config: (input.config ?? current.config) as components["schemas"]["BusinessHoursConfig"] };
+        this.hours.set(hoursInbox, next);
+        sendJson(res, 200, next);
+        return true;
+      }
+      if (method === "DELETE") {
+        const next = { ...current, version: current.version + 1, configured: false };
+        this.hours.set(hoursInbox, next);
+        sendJson(res, 200, next);
+        return true;
+      }
+    }
+    const evaluation = path.match(/^\/api\/panel\/inboxes\/([^/]+)\/business-hours\/evaluation$/);
+    const evaluationInbox = evaluation?.[1];
+    if (evaluation && evaluationInbox && method === "GET") {
+      if (role === "agent") return this.deny(res);
+      const current = this.hours.get(evaluationInbox);
+      sendJson(res, 200, {
+        ...(current ?? { version: 0, configured: false, timezone: "America/Sao_Paulo", config: { intervals: [], welcome: "", outside_hours: "", nobody_available: "", on_call_sector_id: "" } }),
+        instant: url.searchParams.get("instant"),
+        open: false,
+        next_opening: null,
+        default_sector_id: "",
+        on_call_sector_id: "",
+        destination_sector_id: "",
+      });
+      return true;
+    }
+    return false;
+  }
+
+  private deny(res: http.ServerResponse): boolean {
+    problem(res, 403, "acesso negado");
+    return true;
   }
 
   private login(res: http.ServerResponse, body: unknown) {
@@ -442,6 +596,10 @@ export class PanelDouble {
     }
     return output;
   }
+}
+
+function objectBody(body: unknown): Record<string, unknown> {
+  return typeof body === "object" && body !== null ? body as Record<string, unknown> : {};
 }
 
 function rememberCookie(jar: Map<string, string>, raw: string) {
