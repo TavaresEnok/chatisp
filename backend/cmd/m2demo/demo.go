@@ -39,10 +39,17 @@ import (
 	"github.com/pquerna/otp/totp"
 )
 
-type demoInfo struct{ Email, Password, App, Secret, Waba, Phone string }
+type demoInfo struct {
+	Email, Password, App, Secret, Waba, Phone string
+	M3B                                       *m3bInfo `json:",omitempty"`
+}
 
 // runDemo owns a fresh embedded cluster and stops the runtime before removing it.
 func runDemo(ctx context.Context, apiListener, metricsListener, fakeListener net.Listener, ready chan<- demoInfo) error {
+	return runDemoMode(ctx, apiListener, metricsListener, fakeListener, ready, false)
+}
+
+func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener net.Listener, ready chan<- demoInfo, m3b bool) error {
 	for _, key := range []string{"CHATISP_TEST_DATABASE_URL", "CHATISP_DATABASE_URL", "CHATISP_APP_DATABASE_URL", "CHATISP_PLATFORM_DATABASE_URL", "CHATISP_INGRESS_DATABASE_URL", "CHATISP_JOBS_DATABASE_URL"} {
 		if _, ok := os.LookupEnv(key); ok {
 			return fmt.Errorf("%s definido: demo recusa DSNs preexistentes", key)
@@ -133,7 +140,7 @@ func runDemo(ctx context.Context, apiListener, metricsListener, fakeListener net
 		return err
 	}
 	store := db.NewStore(pools.App, pools.Platform)
-	identity, err := auth.New(auth.Options{Store: store, Keys: ring})
+	identity, err := auth.New(auth.Options{Store: store, Keys: ring, Logger: logging.New("info", nil)})
 	if err != nil {
 		return err
 	}
@@ -221,6 +228,12 @@ func runDemo(ctx context.Context, apiListener, metricsListener, fakeListener net
 	if err = sectorService.SetDefault(ctx, principal, sector.ID, configured.InboxID); err != nil {
 		return err
 	}
+	if m3b {
+		info.M3B, err = seedM3B(ctx, store, ring, sectorService, principal, sector.ID, configured.InboxID, member)
+		if err != nil {
+			return err
+		}
+	}
 	inserts, err := jobs.New(nil, jobs.Handlers{})
 	if err != nil {
 		return err
@@ -247,6 +260,9 @@ func runDemo(ctx context.Context, apiListener, metricsListener, fakeListener net
 	defer notifier.Close()
 	adapter := realtime.NewAuthAdapter(identity, store)
 	origins := []string{"http://localhost:5174", "http://127.0.0.1:5174"}
+	if m3b {
+		origins = append(origins, "https://localhost:5174")
+	}
 	rt := realtime.NewHandler(realtime.Options{TrustedOrigins: origins, Authenticator: adapter, Attendance: attendance, InboxResolver: adapter, Notifier: notifier, DB: store})
 	fake := &http.Server{Handler: handler(), ReadHeaderTimeout: 5 * time.Second}
 	go fake.Serve(fakeListener)

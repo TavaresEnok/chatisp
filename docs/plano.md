@@ -264,7 +264,7 @@ Estado de todas as linhas: pendente.
 
 ### Requisitos V1 e V1 simples
 
-O aceite integral das linhas permanece pendente. O recorte M3A e suas evidências são acompanhados separadamente; transferências, capacidade, abas, busca completa, notas de conversa, tags, prioridade, leitura, colisão, CPF/CNPJ autorizado com cifra/HMAC e Playwright de M3 completo seguem no backlog.
+O aceite integral das linhas permanece pendente. O recorte M3A e suas evidências são acompanhados separadamente. A integração M3B de transferências, capacidade manual, abas, busca fulltext, notas, tags, prioridade, leitura e colisão tem roteiro e fixture opt-in em [m3b-entrega.md](m3b-entrega.md). Em 03/11/2026, `npm --prefix web run test:e2e:m3b` passou no Chromium `140.0.7339.186` provisionado: receber, assumir, transferir, responder, encerrar e revogação entre dois setores. Isso não conclui o marco. Auto-reabertura X, CPF/CNPJ autorizado com cifra/HMAC e os demais itens M3–M8 continuam no backlog aprovado. Revisão independente e o gate amplo final permanecem a cargo do controlador.
 
 | ID | Prioridade | Requisito | Evidência |
 | --- | --- | --- | --- |
