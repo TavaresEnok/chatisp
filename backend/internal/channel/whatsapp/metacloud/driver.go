@@ -271,4 +271,16 @@ func uncertainStatus(status, code int, transient bool) bool {
 	return false
 }
 
+// SendTemplate refuses before any HTTP client, trace or Graph URL is used.
+// Official template delivery is not this batch. The simulation driver is the
+// only identified template sender.
+func (d *Driver) SendTemplate(context.Context, whatsapp.TemplateRequest) (whatsapp.Result, error) {
+	return whatsapp.Result{
+		Local:         whatsapp.StateFailed,
+		RejectionCode: "template_not_authorized",
+		Detail:        "template oficial não chama Graph neste marco",
+	}, nil
+}
+
 var _ whatsapp.TextDriver = (*Driver)(nil)
+var _ whatsapp.TemplateSender = (*Driver)(nil)

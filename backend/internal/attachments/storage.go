@@ -16,6 +16,24 @@ var (
 	ErrStorage   = errors.New("private attachment storage unavailable")
 )
 
+// UnavailableStorage keeps attachment routes mounted when object storage is
+// not configured. Every operation fails with ErrStorage and writes nothing.
+func UnavailableStorage() Storage { return unavailableStorage{} }
+
+type unavailableStorage struct{}
+
+func (unavailableStorage) Available() bool { return false }
+func (unavailableStorage) Create(context.Context, string, io.ReadSeeker, int64) (string, error) {
+	return "", ErrStorage
+}
+func (unavailableStorage) Read(context.Context, string, string) (io.ReadCloser, error) {
+	return nil, ErrStorage
+}
+func (unavailableStorage) Sign(context.Context, string, string, string, time.Duration) (string, error) {
+	return "", ErrStorage
+}
+func (unavailableStorage) Delete(context.Context, string, string) error { return ErrStorage }
+
 // Storage is private and versioned. Create MUST be create-only, never overwrite.
 // Read/Sign/Delete MUST address the exact version; Delete with empty version
 // removes every version of a never-published key (crash/orphan recovery).

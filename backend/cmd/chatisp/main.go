@@ -16,11 +16,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"chatisp/internal/attachments"
 	"chatisp/internal/attendance/pipeline"
 	attendanceService "chatisp/internal/attendance/service"
+	"chatisp/internal/businesshours"
+	"chatisp/internal/cannedreplies"
 	channelConfig "chatisp/internal/channel/configuration"
+	"chatisp/internal/channelpolicy"
 	"chatisp/internal/collision"
 	"chatisp/internal/contactdirectory"
 	"chatisp/internal/notifications"
@@ -91,7 +97,7 @@ func run(ctx context.Context, args []string, environ []string, stdout, stderr io
 		if err != nil {
 			return err
 		}
-		svcs, err := setupRuntimeServices(ctx, cfg, mode, log)
+		svcs, err := setupRuntimeServices(ctx, cfg, mode, log, environ)
 		if err != nil {
 			return err
 		}
@@ -108,6 +114,10 @@ func run(ctx context.Context, args []string, environ []string, stdout, stderr io
 			Notifications:  svcs.Notifications,
 			Realtime:       svcs.Realtime,
 			Webhook:        svcs.Webhook,
+			CannedReplies:  svcs.CannedReplies,
+			ChannelPolicy:  svcs.ChannelPolicy,
+			Attachments:    svcs.Attachments,
+			BusinessHours:  svcs.BusinessHours,
 			JobsClient:     svcs.JobsClient,
 			ReadyChecks:    svcs.ReadyChecks,
 			Cleanup:        svcs.Cleanup,
@@ -148,12 +158,16 @@ type runtimeServices struct {
 	Notifications *notifications.Service
 	Realtime      http.Handler
 	Webhook       http.Handler
+	CannedReplies cannedreplies.Service
+	ChannelPolicy *channelpolicy.Service
+	Attachments   *attachments.Service
+	BusinessHours businesshours.Service
 	JobsClient    runtime.Worker
 	ReadyChecks   []func(context.Context) error
 	Cleanup       func()
 }
 
-func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mode, log *slog.Logger) (runtimeServices, error) {
+func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mode, log *slog.Logger, environ []string) (runtimeServices, error) {
 	switch mode {
 	case config.ModeAPI:
 		if cfg.AppDatabaseURL == "" || cfg.PlatformDatabaseURL == "" || cfg.IngressDatabaseURL == "" {
@@ -393,6 +407,24 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		}
 	}
 
+	var canned cannedreplies.Service
+	var hours businesshours.Service
+	var policySvc *channelpolicy.Service
+	var attachmentSvc *attachments.Service
+	if store != nil {
+		canned = cannedreplies.New(store)
+		hours = businesshours.New(store)
+		// No implicit catalog driver. SyncTemplates refuses before any write
+		// until a real driver is injected. An empty fake is not a provider snapshot.
+		policySvc = &channelpolicy.Service{DB: store}
+		storage, err := attachmentStorage(environ)
+		if err != nil {
+			cleanupAll()
+			return runtimeServices{}, err
+		}
+		attachmentSvc = &attachments.Service{DB: store, Storage: storage, Limits: tenantAttachmentLimits}
+	}
+
 	return runtimeServices{
 		Auth:          identity,
 		Attendance:    attendanceSvc,
@@ -403,10 +435,77 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		Notifications: notifications.New(store),
 		Realtime:      realtimeHandler,
 		Webhook:       webhookHandler,
+		CannedReplies: canned,
+		ChannelPolicy: policySvc,
+		Attachments:   attachmentSvc,
+		BusinessHours: hours,
 		JobsClient:    workerWorker,
 		ReadyChecks:   readyChecks,
 		Cleanup:       cleanupAll,
 	}, nil
+}
+
+func environValue(environ []string, key string) string {
+	prefix := key + "="
+	for _, entry := range environ {
+		if strings.HasPrefix(entry, prefix) {
+			return entry[len(prefix):]
+		}
+	}
+	return ""
+}
+
+func attachmentStorage(environ []string) (attachments.Storage, error) {
+	keys := []string{
+		"CHATISP_ATTACHMENTS_S3_ENDPOINT",
+		"CHATISP_ATTACHMENTS_S3_REGION",
+		"CHATISP_ATTACHMENTS_S3_BUCKET",
+		"CHATISP_ATTACHMENTS_S3_ACCESS_KEY",
+		"CHATISP_ATTACHMENTS_S3_SECRET_KEY",
+	}
+	values := make(map[string]string, len(keys))
+	var missing []string
+	for _, key := range keys {
+		value := strings.TrimSpace(environValue(environ, key))
+		values[key] = value
+		if value == "" {
+			missing = append(missing, key)
+		}
+	}
+	if len(missing) == len(keys) {
+		return attachments.UnavailableStorage(), nil
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("armazenamento de anexos incompleto: %s", strings.Join(missing, ", "))
+	}
+	storage, err := attachments.NewS3(attachments.S3Config{
+		Endpoint:     values["CHATISP_ATTACHMENTS_S3_ENDPOINT"],
+		Region:       values["CHATISP_ATTACHMENTS_S3_REGION"],
+		Bucket:       values["CHATISP_ATTACHMENTS_S3_BUCKET"],
+		AccessKey:    values["CHATISP_ATTACHMENTS_S3_ACCESS_KEY"],
+		SecretKey:    values["CHATISP_ATTACHMENTS_S3_SECRET_KEY"],
+		SessionToken: strings.TrimSpace(environValue(environ, "CHATISP_ATTACHMENTS_S3_SESSION_TOKEN")),
+		PathStyle:    strings.EqualFold(strings.TrimSpace(environValue(environ, "CHATISP_ATTACHMENTS_S3_PATH_STYLE")), "true"),
+	})
+	if err != nil {
+		return nil, errors.New("armazenamento de anexos recusou a configuração explícita")
+	}
+	return storage, nil
+}
+
+func tenantAttachmentLimits(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) (attachments.Limits, error) {
+	var plan, reserve, file int64
+	err := tx.QueryRow(ctx, `
+		SELECT COALESCE((limits->>'attachment_plan_bytes')::bigint, 0),
+		       COALESCE((limits->>'attachment_reserve_bytes')::bigint, 0),
+		       COALESCE((limits->>'attachment_file_bytes')::bigint, 0)
+		  FROM tenants
+		 WHERE id = $1
+		   AND id = NULLIF(current_setting('app.tenant_id', true), '')::uuid`, tenantID).Scan(&plan, &reserve, &file)
+	if err != nil || plan <= 0 || file <= 0 || reserve < 0 {
+		return attachments.Limits{}, attachments.ErrStorage
+	}
+	return attachments.Limits{PlanBytes: plan, IncomingReserveBytes: reserve, FileBytes: file}, nil
 }
 
 func openWorkerPool(ctx context.Context, rawURL string) (*pgxpool.Pool, error) {

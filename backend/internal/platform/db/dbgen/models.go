@@ -49,6 +49,44 @@ type AssignmentRequest struct {
 	Result          json.RawMessage
 }
 
+type Attachment struct {
+	TenantID       uuid.UUID
+	ID             uuid.UUID
+	ConversationID uuid.UUID
+	RequestID      uuid.UUID
+	Direction      string
+	Name           string
+	ExpectedBytes  int64
+	ObjectKey      string
+	ObjectVersion  string
+	State          string
+	MediaType      string
+	Sha256         string
+	CreatedAt      pgtype.Timestamptz
+	ExpiresAt      pgtype.Timestamptz
+}
+
+type AttachmentBudget struct {
+	TenantID      uuid.UUID
+	Namespace     uuid.UUID
+	ReservedBytes int64
+}
+
+type AttendantSignatureReceipt struct {
+	TenantID     uuid.UUID
+	AcceptanceID uuid.UUID
+	MembershipID uuid.UUID
+	OriginalText string
+	AcceptedText string
+}
+
+type AttendantSignatureSetting struct {
+	TenantID uuid.UUID
+	Enabled  bool
+	Prefix   string
+	Version  int64
+}
+
 type AuditLog struct {
 	ID            uuid.UUID
 	TenantID      uuid.UUID
@@ -82,6 +120,23 @@ type AuthToken struct {
 	CreatedAt    pgtype.Timestamptz
 }
 
+type BusinessHoursCommand struct {
+	TenantID     uuid.UUID
+	MembershipID uuid.UUID
+	RequestID    uuid.UUID
+	RequestHash  []byte
+	Response     json.RawMessage
+}
+
+type CannedReply struct {
+	TenantID  uuid.UUID
+	ID        uuid.UUID
+	Shortcode string
+	Title     string
+	Content   string
+	Version   int64
+}
+
 type ChannelConnector struct {
 	ID            uuid.UUID
 	TenantID      uuid.UUID
@@ -94,6 +149,22 @@ type ChannelConnector struct {
 	Channel       string
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+}
+
+type ChannelPolicyCatalogSync struct {
+	TenantID            uuid.UUID
+	WabaID              uuid.UUID
+	RequestedGeneration int64
+	AppliedGeneration   int64
+}
+
+type ChannelPolicyPending struct {
+	TenantID  uuid.UUID
+	ID        uuid.UUID
+	ContactID uuid.UUID
+	InboxID   uuid.UUID
+	Purpose   string
+	State     string
 }
 
 type CollisionIndicator struct {
@@ -129,6 +200,19 @@ type ContactChannelIdentity struct {
 	ExternalID  string
 	Evidence    string
 	CreatedAt   pgtype.Timestamptz
+}
+
+type ContactConsent struct {
+	TenantID  uuid.UUID
+	ID        uuid.UUID
+	ContactID uuid.UUID
+	InboxID   uuid.UUID
+	Purpose   string
+	Source    string
+	Evidence  string
+	GrantedAt pgtype.Timestamptz
+	RevokedAt pgtype.Timestamptz
+	Sequence  *int64
 }
 
 type Conversation struct {
@@ -241,6 +325,24 @@ type CredentialSecret struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type DispatchPolicyDecision struct {
+	TenantID       uuid.UUID
+	ID             uuid.UUID
+	AttemptID      uuid.UUID
+	Phase          string
+	LeaseVersion   *int64
+	Allowed        bool
+	Reason         string
+	Driver         string
+	OfficialWindow bool
+	EvaluatedAt    pgtype.Timestamptz
+	WindowEndsAt   pgtype.Timestamptz
+	Mode           string
+	Kind           string
+	Purpose        string
+	TemplateID     string
+}
+
 type IdempotencyRecord struct {
 	TenantID        uuid.UUID
 	ID              uuid.UUID
@@ -260,6 +362,14 @@ type Inbox struct {
 	Hours           json.RawMessage
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+}
+
+type InboxBusinessHour struct {
+	TenantID   uuid.UUID
+	InboxID    uuid.UUID
+	Version    int64
+	Configured bool
+	Config     json.RawMessage
 }
 
 type InboxSectorDefault struct {
@@ -322,6 +432,8 @@ type Message struct {
 	TrustedAt          pgtype.Timestamptz
 	IngestedAt         pgtype.Timestamptz
 	Historical         bool
+	ContentKind        string
+	ContentContext     json.RawMessage
 }
 
 type MessageStatusEvent struct {
@@ -549,6 +661,19 @@ type User struct {
 	TotpAadTenant   *uuid.UUID
 	TotpConfirmedAt pgtype.Timestamptz
 	IsSuperadmin    bool
+}
+
+type WaTemplate struct {
+	TenantID   uuid.UUID
+	WabaID     uuid.UUID
+	ExternalID string
+	Name       string
+	Language   string
+	Category   string
+	State      string
+	Components json.RawMessage
+	SyncSource string
+	SyncedAt   pgtype.Timestamptz
 }
 
 type WebhookItem struct {

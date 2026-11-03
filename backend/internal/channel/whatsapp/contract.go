@@ -102,10 +102,30 @@ type TextRequest struct {
 }
 
 // TextDriver is the send surface a future worker calls.
-// There is no media, template or webhook method on this contract.
+// Media and webhooks stay outside this contract. Templates use TemplateSender.
 type TextDriver interface {
 	Capabilities() Capabilities
 	SendText(ctx context.Context, req TextRequest) (Result, error)
+}
+
+// TemplateRequest is one local intention to send an already authorized template.
+// It is not a Graph call and does not carry a rendered body.
+type TemplateRequest struct {
+	AttemptID     AttemptID
+	ConnectionID  ConnectionID
+	ConnectorType ConnectorType
+	RecipientID   RecipientID
+	CallbackData  string
+	TemplateID    string
+	Language      string
+}
+
+// TemplateSender is the identified local template contract.
+// The simulation driver implements it without a network. An official driver
+// must refuse before any remote call. Capabilities.Templates stays false until
+// a later batch binds media and real template delivery.
+type TemplateSender interface {
+	SendTemplate(ctx context.Context, req TemplateRequest) (Result, error)
 }
 
 // Observation is the evidence available when a send attempt finishes.

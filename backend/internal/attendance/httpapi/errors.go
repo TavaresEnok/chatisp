@@ -22,6 +22,8 @@ func problem(err error) error {
 		return huma.Error409Conflict("conflito de atendimento")
 	case errors.Is(err, store.ErrInvalid):
 		return huma.Error422UnprocessableEntity("comando inválido")
+	case errors.Is(err, service.ErrPolicyDenied):
+		return huma.Error422UnprocessableEntity("política de canal recusou o envio")
 	default:
 		return huma.Error503ServiceUnavailable("serviço indisponível")
 	}
