@@ -17,11 +17,12 @@ export default defineConfig({
     // proxy and three live panels that exhausts the browser and stalls navigation.
     trace: "off",
     screenshot: "only-on-failure",
-    // One renderer and no GPU/zygote-less mode: the runner cgroup caps threads at
-    // 256, and --single-process / --no-zygote crash a second panel context.
+    // One renderer and no GPU process: the runner cgroup caps threads at 256,
+    // and --single-process / --no-zygote crash a second panel context. SwiftShader
+    // stays available; disabling the software rasterizer crashes this host.
     launchOptions: {
       ...(process.env.M3B_CHROMIUM_EXECUTABLE ? { executablePath: process.env.M3B_CHROMIUM_EXECUTABLE } : {}),
-      args: ["--disable-gpu", "--disable-software-rasterizer", "--mute-audio", "--renderer-process-limit=1", "--num-raster-threads=1", "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process"],
+      args: ["--disable-gpu", "--disable-dev-shm-usage", "--mute-audio", "--renderer-process-limit=1", "--num-raster-threads=1", "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process"],
     },
   },
 });
