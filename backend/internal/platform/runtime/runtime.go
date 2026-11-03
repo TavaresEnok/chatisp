@@ -12,8 +12,12 @@ import (
 	"sync"
 	"time"
 
+	"chatisp/internal/attachments"
 	attendanceService "chatisp/internal/attendance/service"
+	"chatisp/internal/businesshours"
+	"chatisp/internal/cannedreplies"
 	channelConfig "chatisp/internal/channel/configuration"
+	"chatisp/internal/channelpolicy"
 	"chatisp/internal/collision"
 	"chatisp/internal/contactdirectory"
 	"chatisp/internal/notifications"
@@ -50,6 +54,10 @@ type Options struct {
 	Notifications   *notifications.Service
 	Realtime        http.Handler
 	Webhook         http.Handler
+	CannedReplies   cannedreplies.Service
+	ChannelPolicy   *channelpolicy.Service
+	Attachments     *attachments.Service
+	BusinessHours   businesshours.Service
 	JobsClient      Worker
 	Cleanup         func()
 	TrustedOrigins  []string
@@ -98,6 +106,10 @@ func Run(parent context.Context, opts Options) error {
 			Notifications:  opts.Notifications,
 			Realtime:       opts.Realtime,
 			Webhook:        opts.Webhook,
+			CannedReplies:  opts.CannedReplies,
+			ChannelPolicy:  opts.ChannelPolicy,
+			Attachments:    opts.Attachments,
+			BusinessHours:  opts.BusinessHours,
 			TrustedOrigins: opts.TrustedOrigins,
 		})
 		httpServer = newServer(api.Handler, opts.Logger)

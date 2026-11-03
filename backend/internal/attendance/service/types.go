@@ -13,6 +13,8 @@ import (
 const (
 	// OpSendText is the idempotency operation for one public text send.
 	OpSendText = "send_text"
+	// OpSendTemplate is one proactive template. It does not share send_text.
+	OpSendTemplate = "send_template"
 	// OpClose is the idempotency operation for closing a cycle.
 	OpClose = "close_attendance"
 	// OpReopen is the idempotency operation for a manual reopen.
@@ -25,6 +27,7 @@ const (
 // enrollment. IsSuperadmin does not grant attendance access by itself.
 type Principal struct {
 	UserID       uuid.UUID
+	Email        string
 	MembershipID uuid.UUID
 	TenantID     uuid.UUID
 	Role         string

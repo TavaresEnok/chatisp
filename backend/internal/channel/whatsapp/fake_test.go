@@ -39,6 +39,27 @@ func TestFakeIdentifiesSimulationAndCapabilities(t *testing.T) {
 	}
 }
 
+func TestFakeTemplateStaysLocal(t *testing.T) {
+	fake := NewFake()
+	res, err := fake.SendTemplate(context.Background(), TemplateRequest{
+		AttemptID: "attempt-tpl", ConnectionID: "connection-1", ConnectorType: ConnectorMetaCloud,
+		RecipientID: "recipient-1", CallbackData: "callback-1", TemplateID: "tpl-1", Language: "pt_BR",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Simulation || res.Local != StateAccepted || res.ProviderMessageID != "sim:attempt-tpl:1" {
+		t.Fatalf("template simulado: %#v", res)
+	}
+	got := fake.Captures()
+	if len(got) != 1 || got[0].TemplateID != "tpl-1" || got[0].Language != "pt_BR" || !got[0].Result.Simulation {
+		t.Fatalf("captura: %#v", got)
+	}
+	if fake.Capabilities().Templates {
+		t.Fatal("simulação passou a anunciar template oficial")
+	}
+}
+
 func TestFakeLoseResponseAfterAcceptance(t *testing.T) {
 	fake := NewFake()
 	fake.SetMode(ModeLoseResponse)

@@ -84,6 +84,21 @@ func TestSendTextAcceptsWithRemoteIDOnly(t *testing.T) {
 	assertClean(t, res.Detail+" "+res.RejectionCode+" "+fmt.Sprintf("%#v", res))
 }
 
+func TestSendTemplateRefusesBeforeHTTP(t *testing.T) {
+	server, driver := newTestPair(t, ServerAccept)
+	var sender whatsapp.TemplateSender = driver
+	res, err := sender.SendTemplate(context.Background(), whatsapp.TemplateRequest{
+		AttemptID: "attempt-tpl", ConnectionID: "connection-1", ConnectorType: whatsapp.ConnectorMetaCloud,
+		RecipientID: "16505551234", TemplateID: "tpl-1", Language: "pt_BR",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Local != whatsapp.StateFailed || res.RejectionCode != "template_not_authorized" || res.Simulation || len(server.AcceptedRequests()) != 0 {
+		t.Fatalf("template oficial: %#v pedidos=%d", res, len(server.AcceptedRequests()))
+	}
+}
+
 func TestSendTextInvalidTokenIsSanitized(t *testing.T) {
 	_, driver := newTestPair(t, ServerTokenInvalid)
 	res, err := driver.SendText(context.Background(), testRequest())

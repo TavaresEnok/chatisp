@@ -30,4 +30,8 @@ var (
 
 	// ErrActiveConversation means another open attendance already owns the identity.
 	ErrActiveConversation = errors.New("já existe conversa ativa para o contato nesta caixa")
+
+	// ErrPolicyDenied means window, consent or template policy refused the send
+	// before any network call. ReserveDispatch commits the local reclassification.
+	ErrPolicyDenied = errors.New("política de canal recusou o envio")
 )

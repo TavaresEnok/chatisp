@@ -35,6 +35,7 @@ func Register(api huma.API, deps Dependencies) {
 	huma.Register(api, op("attendance-events", http.MethodGet, "/api/panel/inboxes/{inbox_id}/events", 200), h.events)
 	registerBody(api, op("attendance-assume", http.MethodPost, item+"/assume", 200), versionBody{}, h.assume)
 	registerBody(api, op("attendance-send", http.MethodPost, item+"/messages", 201), sendBody{}, h.send)
+	registerBody(api, op("attendance-send-template", http.MethodPost, item+"/template-messages", 201), templateBody{}, h.sendTemplate)
 	registerBody(api, op("attendance-close", http.MethodPost, item+"/close", 200), closeBody{}, h.close)
 	registerBody(api, op("attendance-reopen", http.MethodPost, item+"/reopen", 200), reopenBody{}, h.reopen)
 	RegisterAssignment(api, deps)
@@ -93,7 +94,7 @@ func (h handler) principal(ctx context.Context, c Credentials, write bool) (serv
 	if p.IsSuperadmin || p.EnrollmentOnly || p.TenantID == uuid.Nil || p.MembershipID == uuid.Nil {
 		return service.Principal{}, huma.Error403Forbidden("acesso negado")
 	}
-	return service.Principal{UserID: p.UserID, MembershipID: p.MembershipID, TenantID: p.TenantID, Role: p.Role, IsSuperadmin: p.IsSuperadmin}, nil
+	return service.Principal{UserID: p.UserID, Email: p.Email, MembershipID: p.MembershipID, TenantID: p.TenantID, Role: p.Role, IsSuperadmin: p.IsSuperadmin}, nil
 }
 func headFrom(v store.Head) head {
 	return head{v.ID, v.Protocol, v.Status, v.Version, v.Controller, v.ControllerEpoch, v.AssigneeID, v.ContactID, v.CycleNumber, v.Summary, v.LastCustomerMessageAt, v.WaitingSince, v.CreatedAt}
@@ -212,6 +213,24 @@ func (h handler) send(ctx context.Context, in *sendInput) (*sendOutput, error) {
 		return nil, e
 	}
 	v, e := h.deps.Attendance.Send(ctx, p, service.SendInput{InboxID: in.InboxID, ConversationID: in.ConversationID, ExpectedVersion: b.ExpectedVersion, ClientRequestID: b.ClientRequestID, Body: b.Body, At: time.Now().UTC()})
+	if e != nil {
+		return nil, problem(e)
+	}
+	return &sendOutput{Body: outboundFrom(v.OutboundResult)}, nil
+}
+func (h handler) sendTemplate(ctx context.Context, in *templateInput) (*sendOutput, error) {
+	p, e := h.principal(ctx, in.Credentials, true)
+	if e != nil {
+		return nil, e
+	}
+	var b templateBody
+	if e = decode(in.RawBody, &b); e != nil {
+		return nil, e
+	}
+	v, e := h.deps.Attendance.SendTemplate(ctx, p, service.TemplateSendInput{
+		InboxID: in.InboxID, ConversationID: in.ConversationID, ExpectedVersion: b.ExpectedVersion,
+		ClientRequestID: b.ClientRequestID, TemplateID: b.TemplateID, Language: b.Language, Purpose: b.Purpose, At: time.Now().UTC(),
+	})
 	if e != nil {
 		return nil, problem(e)
 	}

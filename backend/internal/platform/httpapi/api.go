@@ -16,10 +16,17 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 
+	"chatisp/internal/attachments"
+	attachmentHTTP "chatisp/internal/attachments/httpapi"
 	attendanceHttpAPI "chatisp/internal/attendance/httpapi"
 	attendanceService "chatisp/internal/attendance/service"
+	"chatisp/internal/businesshours"
+	businessHoursHTTP "chatisp/internal/businesshours/httpapi"
+	"chatisp/internal/cannedreplies"
 	channelConfig "chatisp/internal/channel/configuration"
 	channelHttpAPI "chatisp/internal/channel/httpapi"
+	"chatisp/internal/channelpolicy"
+	channelPolicyHTTP "chatisp/internal/channelpolicy/httpapi"
 	"chatisp/internal/collision"
 	collisionHTTP "chatisp/internal/collision/httpapi"
 	"chatisp/internal/contactdirectory"
@@ -54,6 +61,10 @@ type Dependencies struct {
 	Notifications  *notifications.Service
 	Realtime       http.Handler
 	Webhook        http.Handler
+	CannedReplies  cannedreplies.Service
+	ChannelPolicy  *channelpolicy.Service
+	Attachments    *attachments.Service
+	BusinessHours  businesshours.Service
 }
 
 // API is the public HTTP handler and its generated OpenAPI document.
@@ -109,6 +120,16 @@ func New(deps Dependencies) *API {
 		}
 		if t.PkgPath() == "chatisp/internal/contactdirectory" && t.Name() != "" {
 			return "Directory" + t.Name()
+		}
+		switch {
+		case strings.Contains(t.PkgPath(), "chatisp/internal/cannedreplies"):
+			return "Canned" + t.Name()
+		case strings.Contains(t.PkgPath(), "chatisp/internal/channelpolicy"):
+			return "ChannelPolicy" + t.Name()
+		case strings.Contains(t.PkgPath(), "chatisp/internal/attachments"):
+			return "Attachment" + t.Name()
+		case strings.Contains(t.PkgPath(), "chatisp/internal/businesshours"):
+			return "BusinessHours" + t.Name()
 		}
 		return huma.DefaultSchemaNamer(t, hint)
 	})
@@ -168,6 +189,10 @@ func New(deps Dependencies) *API {
 	sectorHTTP.Register(api, sectorHTTP.Dependencies{Auth: deps.Auth, Sectors: deps.Sectors, TrustedOrigins: deps.TrustedOrigins})
 	contactHTTP.Register(api, contactHTTP.Dependencies{Auth: deps.Auth, Contacts: deps.Contacts, TrustedOrigins: deps.TrustedOrigins})
 	notificationHTTP.Register(api, notificationHTTP.Dependencies{Auth: deps.Auth, Notifications: deps.Notifications, TrustedOrigins: deps.TrustedOrigins})
+	cannedreplies.Register(api, cannedreplies.Dependencies{Auth: deps.Auth, CannedReplies: deps.CannedReplies, TrustedOrigins: deps.TrustedOrigins})
+	channelPolicyHTTP.Register(api, channelPolicyHTTP.Dependencies{Auth: deps.Auth, Policy: deps.ChannelPolicy, TrustedOrigins: deps.TrustedOrigins})
+	attachmentHTTP.Register(api, attachmentHTTP.Dependencies{Auth: deps.Auth, Attachments: deps.Attachments, TrustedOrigins: deps.TrustedOrigins})
+	businessHoursHTTP.Register(api, businessHoursHTTP.Dependencies{Auth: deps.Auth, BusinessHours: deps.BusinessHours, TrustedOrigins: deps.TrustedOrigins})
 	registerRealtimeContract(api)
 
 	realtimeHandler := deps.Realtime

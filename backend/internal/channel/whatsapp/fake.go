@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -35,6 +36,8 @@ const FakeDriverName = "simulation"
 // when that id was withheld because the response was lost.
 type Capture struct {
 	Request          TextRequest
+	TemplateID       string
+	Language         string
 	Dispatched       bool
 	ResponseLost     bool
 	InternalAcceptID string
@@ -177,6 +180,39 @@ func (f *Fake) SendText(ctx context.Context, req TextRequest) (Result, error) {
 	}
 }
 
+// SendTemplate classifies a simulated template outcome. It does not open a
+// connection and does not call Graph. The capture keeps the template id apart
+// from a freeform body. Capabilities.Templates remains false.
+func (f *Fake) SendTemplate(ctx context.Context, req TemplateRequest) (Result, error) {
+	if strings.TrimSpace(req.Language) != "" && !validToken(req.Language, 40) {
+		return Result{}, errors.New("idioma do template inválido")
+	}
+	text := TextRequest{
+		AttemptID: req.AttemptID, ConnectionID: req.ConnectionID, ConnectorType: req.ConnectorType,
+		RecipientID: req.RecipientID, CallbackData: req.CallbackData, Text: req.TemplateID,
+	}
+	if err := Validate(text); err != nil {
+		return Result{}, err
+	}
+	if !validToken(req.TemplateID, 256) {
+		return Result{}, errors.New("template inválido")
+	}
+	result, err := f.SendText(ctx, text)
+	if err != nil || f == nil {
+		return result, err
+	}
+	f.mu.Lock()
+	if n := len(f.captures); n > 0 {
+		last := &f.captures[n-1]
+		if last.Request.AttemptID == req.AttemptID && last.TemplateID == "" {
+			last.TemplateID = req.TemplateID
+			last.Language = req.Language
+		}
+	}
+	f.mu.Unlock()
+	return result, nil
+}
+
 func (f *Fake) dispatchLocked(req TextRequest) Result {
 	f.seq++
 	seq := f.seq
@@ -261,3 +297,4 @@ func (f *Fake) wakeLocked() {
 }
 
 var _ TextDriver = (*Fake)(nil)
+var _ TemplateSender = (*Fake)(nil)

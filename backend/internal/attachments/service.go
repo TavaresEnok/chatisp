@@ -54,9 +54,21 @@ func (s *Service) now() time.Time {
 	}
 	return time.Now().UTC()
 }
+func storageReady(storage Storage) bool {
+	if storage == nil {
+		return false
+	}
+	gate, ok := storage.(interface{ Available() bool })
+	return !ok || gate.Available()
+}
+
 func (s *Service) run(ctx context.Context, p auth.Principal, inbox, conv uuid.UUID, fn func(context.Context, pgx.Tx) error) error {
 	if s == nil || s.DB == nil || s.Storage == nil || p.SessionID == uuid.Nil || p.IsSuperadmin || p.EnrollmentOnly || inbox == uuid.Nil || conv == uuid.Nil {
 		return ErrForbidden
+	}
+	// Refuse before any budget or attachment row when storage is not configured.
+	if !storageReady(s.Storage) {
+		return ErrStorage
 	}
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()

@@ -151,11 +151,13 @@ func seedWorld(t *testing.T) world {
 		if _, err := tx.Exec(ctx, `INSERT INTO contacts (id, tenant_id, name) VALUES ($1, $2, 'Contato')`, w.contact, w.tenant); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `
+		if _, err := tx.Exec(ctx, `
 			INSERT INTO contact_channel_identities (id, tenant_id, contact_id, connector_id, external_id)
 			VALUES ($1, $2, $3, $4, $5)
-		`, w.identity, w.tenant, w.contact, w.connector, "wa-"+w.identity.String())
-		return err
+		`, w.identity, w.tenant, w.contact, w.connector, "wa-"+w.identity.String()); err != nil {
+			return err
+		}
+		return seedMetaCloud(ctx, tx, w.tenant, w.connector, w.inbox)
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -199,8 +201,26 @@ func live(queuer Queuer) Service {
 	return New(testStore, queuer)
 }
 
+// fixtureBase stays inside the official 24h window for the whole process.
+// at remains comparable across calls. It is not time.Now() on every call.
+var fixtureBase = time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Minute)
+
 func at(minute int) time.Time {
-	return time.Date(2026, 10, 29, 12, minute, 0, 0, time.UTC)
+	return fixtureBase.Add(time.Duration(minute) * time.Minute)
+}
+
+func seedMetaCloud(ctx context.Context, tx pgx.Tx, tenant, connector, inbox uuid.UUID) error {
+	app := uuid.New()
+	waba := uuid.New()
+	aad := "ingress_registry\x1fmeta_app_registry\x1f" + app.String() + "\x1fapp_secret"
+	if _, err := tx.Exec(ctx, `SELECT bind_meta_app($1,$2,$2,'v1',$3,'ingress_registry',NULL,'meta_app_registry',$2,'app_secret',$4,true,NULL)`, app.String(), app, []byte{1}, aad); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO meta_wabas (tenant_id, id, meta_app_id, waba_id, status) VALUES ($1, $2, $3, $4, 'active')`, tenant, waba, app, waba.String()); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO meta_phone_numbers (tenant_id, id, meta_waba_id, phone_number_id, status, connector_id, inbox_id) VALUES ($1, $2, $3, $4, 'active', $5, $6)`, tenant, uuid.New(), waba, uuid.NewString(), connector, inbox)
+	return err
 }
 
 func countQuery(t *testing.T, ctx context.Context, tenant uuid.UUID, query string, args ...any) int {

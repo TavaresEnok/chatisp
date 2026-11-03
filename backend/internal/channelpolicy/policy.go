@@ -57,6 +57,9 @@ func validScope(v Scope) bool {
 }
 
 // lockScope serializes consent, opt-out, registration and dispatch, including an absent consent.
+// Order is the phone and connector configuration, then the contact. The caller
+// locks the conversation only after this returns. The dispatch fence uses the
+// same order: connector, contact, conversation, each in its own statement.
 func lockScope(ctx context.Context, tx pgx.Tx, p sectors.Principal, v Scope) error {
 	if !validScope(v) {
 		return ErrInvalid
@@ -64,8 +67,42 @@ func lockScope(ctx context.Context, tx pgx.Tx, p sectors.Principal, v Scope) err
 	if e := lockInboxConfiguration(ctx, tx, p, v.InboxID); e != nil {
 		return e
 	}
+	// One table only. The identity predicate does not lock the connector again.
 	var id uuid.UUID
 	e := tx.QueryRow(ctx, `SELECT c.id FROM contacts c WHERE c.tenant_id=$1 AND c.id=$2 AND EXISTS(SELECT 1 FROM contact_channel_identities ci JOIN inboxes i ON i.tenant_id=ci.tenant_id AND i.connector_id=ci.connector_id WHERE ci.tenant_id=c.tenant_id AND ci.contact_id=c.id AND i.id=$3) FOR UPDATE OF c`, p.TenantID, v.ContactID, v.InboxID).Scan(&id)
+	if errors.Is(e, pgx.ErrNoRows) {
+		return sectors.ErrForbidden
+	}
+	return e
+}
+
+// LockConnector, LockContact and LockConversation are the shared row order for
+// acceptance, revocation and the final dispatch fence. Each statement locks one
+// table. A join must not be the first acquisition: its plan can lock the
+// conversation before the connector. exclusive asks for FOR UPDATE; otherwise
+// the row is taken FOR SHARE. The caller chooses the mode. The order does not.
+func LockConnector(ctx context.Context, tx pgx.Tx, tenant, connector uuid.UUID, exclusive bool) error {
+	return lockID(ctx, tx, `SELECT id FROM channel_connectors WHERE tenant_id=$1 AND id=$2`, tenant, connector, exclusive)
+}
+
+func LockContact(ctx context.Context, tx pgx.Tx, tenant, contact uuid.UUID, exclusive bool) error {
+	return lockID(ctx, tx, `SELECT id FROM contacts WHERE tenant_id=$1 AND id=$2`, tenant, contact, exclusive)
+}
+
+func LockConversation(ctx context.Context, tx pgx.Tx, tenant, conversation uuid.UUID, exclusive bool) error {
+	return lockID(ctx, tx, `SELECT id FROM conversations WHERE tenant_id=$1 AND id=$2`, tenant, conversation, exclusive)
+}
+
+func lockID(ctx context.Context, tx pgx.Tx, query string, tenant, id uuid.UUID, exclusive bool) error {
+	if id == uuid.Nil {
+		return ErrInvalid
+	}
+	mode := " FOR SHARE"
+	if exclusive {
+		mode = " FOR UPDATE"
+	}
+	var locked uuid.UUID
+	e := tx.QueryRow(ctx, query+mode, tenant, id).Scan(&locked)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return sectors.ErrForbidden
 	}
@@ -138,9 +175,13 @@ func (s Service) EvaluateDispatchTx(ctx context.Context, tx pgx.Tx, p sectors.Pr
 	if (in.Mode != "requested" && in.Mode != "proactive") || (in.Kind != "freeform" && in.Kind != "template") {
 		return d, ErrInvalid
 	}
-	// Match ingress: contact before conversation. Authorization is still pinned
-	// in this same transaction, before reading messages or returning a decision.
+	// Match ingress and the dispatch fence: connector, contact, then conversation.
+	// The conversation row is locked before RequireConversation joins sector
+	// tables, so that join cannot take those tables ahead of the conversation.
 	if e := lockScope(ctx, tx, p, in.Scope); e != nil {
+		return d, e
+	}
+	if e := LockConversation(ctx, tx, p.TenantID, in.ConversationID, false); e != nil {
 		return d, e
 	}
 	if e := sectors.RequireConversation(ctx, tx, p, in.InboxID, in.ConversationID); e != nil {
@@ -244,8 +285,32 @@ func (s Service) RecordConsentTx(ctx context.Context, tx pgx.Tx, p sectors.Princ
 		return nil, e
 	}
 	if p.Role == "agent" {
+		// Pin every conversation of this contact before the sector join. The
+		// join still authorizes visibility, but it is not the first lock.
+		list, e := tx.Query(ctx, `SELECT id FROM conversations WHERE tenant_id=$1 AND inbox_id=$2 AND contact_id=$3 ORDER BY id`, p.TenantID, in.InboxID, in.ContactID)
+		if e != nil {
+			return nil, e
+		}
+		var conversations []uuid.UUID
+		for list.Next() {
+			var id uuid.UUID
+			if e = list.Scan(&id); e != nil {
+				list.Close()
+				return nil, e
+			}
+			conversations = append(conversations, id)
+		}
+		list.Close()
+		if e = list.Err(); e != nil {
+			return nil, e
+		}
+		for _, id := range conversations {
+			if e = LockConversation(ctx, tx, p.TenantID, id, false); e != nil {
+				return nil, e
+			}
+		}
 		var visible uuid.UUID
-		e := tx.QueryRow(ctx, `SELECT c.id FROM conversations c JOIN sector_inboxes si ON si.tenant_id=c.tenant_id AND si.inbox_id=c.inbox_id AND si.sector_id=c.sector_id JOIN sectors s ON s.tenant_id=si.tenant_id AND s.id=si.sector_id AND s.active JOIN sector_memberships sm ON sm.tenant_id=s.tenant_id AND sm.sector_id=s.id AND sm.membership_id=$4 WHERE c.tenant_id=$1 AND c.inbox_id=$2 AND c.contact_id=$3 ORDER BY c.id LIMIT 1 FOR SHARE OF c,si,s,sm`, p.TenantID, in.InboxID, in.ContactID, p.MembershipID).Scan(&visible)
+		e = tx.QueryRow(ctx, `SELECT c.id FROM conversations c JOIN sector_inboxes si ON si.tenant_id=c.tenant_id AND si.inbox_id=c.inbox_id AND si.sector_id=c.sector_id JOIN sectors s ON s.tenant_id=si.tenant_id AND s.id=si.sector_id AND s.active JOIN sector_memberships sm ON sm.tenant_id=s.tenant_id AND sm.sector_id=s.id AND sm.membership_id=$4 WHERE c.tenant_id=$1 AND c.inbox_id=$2 AND c.contact_id=$3 ORDER BY c.id LIMIT 1 FOR SHARE OF c,si,s,sm`, p.TenantID, in.InboxID, in.ContactID, p.MembershipID).Scan(&visible)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return nil, sectors.ErrForbidden
 		}
@@ -273,8 +338,12 @@ func (s Service) RecordConsentTx(ctx context.Context, tx pgx.Tx, p sectors.Princ
 
 // InvalidateProactiveTx returns pending IDs to cancel in the joined outbox transaction.
 // Only registered proactive pending operations are touched. Uncertain/in-flight sends are preserved.
+// Conversations, messages and attempts are locked in that order before pending changes.
 func InvalidateProactiveTx(ctx context.Context, tx pgx.Tx, p sectors.Principal, v Scope) ([]uuid.UUID, error) {
 	if e := lockScope(ctx, tx, p, v); e != nil {
+		return nil, e
+	}
+	if _, e := tx.Exec(ctx, `SELECT public.channel_policy_lock_outbox($1,$2,$3,$4)`, p.TenantID, v.ContactID, v.InboxID, v.Purpose); e != nil {
 		return nil, e
 	}
 	rows, e := tx.Query(ctx, `UPDATE channel_policy_pending SET state='cancelled' WHERE tenant_id=$1 AND contact_id=$2 AND inbox_id=$3 AND purpose=$4 AND state='pending' RETURNING id`, p.TenantID, v.ContactID, v.InboxID, v.Purpose)
@@ -331,10 +400,29 @@ type CatalogDriver interface {
 	Templates(context.Context, string) ([]Template, error)
 	IsFake() bool
 }
+
+// FakeCatalog is a test double. The zero value is not a configured provider:
+// SyncTemplates rejects it before touching the catalog. Explicit opts in to
+// applying this double, including an empty snapshot. IsFake stays true, so
+// rows it writes do not authorize dispatch.
 type FakeCatalog struct {
-	Items []Template
-	Err   error
+	Items    []Template
+	Err      error
+	Explicit bool
 }
 
 func (f FakeCatalog) Templates(context.Context, string) ([]Template, error) { return f.Items, f.Err }
 func (FakeCatalog) IsFake() bool                                            { return true }
+
+// unconfiguredCatalog is true for the implicit empty fake. A driver with items,
+// an error, or Explicit set is a deliberate snapshot source.
+func unconfiguredCatalog(driver CatalogDriver) bool {
+	switch fake := driver.(type) {
+	case FakeCatalog:
+		return !fake.Explicit && fake.Err == nil && len(fake.Items) == 0
+	case *FakeCatalog:
+		return fake == nil || (!fake.Explicit && fake.Err == nil && len(fake.Items) == 0)
+	default:
+		return false
+	}
+}

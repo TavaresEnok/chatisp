@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"chatisp/internal/attendance/store"
+	"chatisp/internal/channelpolicy"
 	"chatisp/internal/contactdirectory"
 	"chatisp/internal/conversation"
 	"chatisp/internal/platform/db"
@@ -261,81 +262,26 @@ func (s Service) Assume(ctx context.Context, p Principal, inboxID, conversationI
 }
 
 // Send enqueues one human text, its outbox row and its River job in this transaction.
+// The attendant signature is applied once here. Dispatch and retry send the stored body.
 func (s Service) Send(ctx context.Context, p Principal, in SendInput) (SendResult, error) {
-	var out SendResult
-	err := s.tx(ctx, p.TenantID, func(ctx context.Context, tx pgx.Tx) error {
-		if err := s.authorize(ctx, tx, p, in.InboxID, true); err != nil {
-			return err
-		}
-		body := strings.TrimSpace(in.Body)
-		requestID := strings.TrimSpace(in.ClientRequestID)
-		if body == "" || requestID == "" || in.At.IsZero() || in.ExpectedVersion < 1 {
-			return store.ErrInvalid
-		}
-		conv, err := lockAuthorizedConversation(ctx, tx, p, in.InboxID, in.ConversationID)
-		if err != nil {
-			return err
-		}
-		if conv.InboxID != in.InboxID {
-			return store.ErrNotFound
-		}
-		connector, err := queries(tx).GetInboxConnector(ctx, dbgen.GetInboxConnectorParams{TenantID: p.TenantID, ID: conv.InboxID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return store.ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		payload, err := canonicalSend(conv.ID.String(), connector.String(), body)
-		if err != nil {
-			return err
-		}
-		replay, err := queuedAlready(ctx, queries(tx), p, requestID)
-		if err != nil {
-			return err
-		}
-		if !replay {
-			if conv.Version != in.ExpectedVersion {
-				return store.ErrStaleVersion
-			}
-			if conv.Status == store.StatusClosed {
-				return store.ErrClosed
-			}
-			if conv.Controller != store.ControllerHuman || conv.AssigneeID != p.MembershipID {
-				return ErrForbidden
-			}
-		}
-		sent, err := s.Repo.EnqueueText(ctx, tx, store.OutboundInput{
-			TenantID: p.TenantID, ConversationID: conv.ID, ConnectorID: connector, PrincipalID: p.MembershipID,
-			Operation: OpSendText, ClientRequestID: requestID, Payload: payload, Body: body, At: in.At,
-		})
-		if err != nil {
-			return err
-		}
-		out.OutboundResult = sent
-		if !sent.Replayed {
-			id, err := enqueueJob(ctx, s.Jobs, tx, p.TenantID, sent.AttemptID)
-			if err != nil {
-				return err
-			}
-			out.JobID = id
-		}
-		return nil
+	return s.enqueuePublic(ctx, p, publicIntent{
+		InboxID: in.InboxID, ConversationID: in.ConversationID, ExpectedVersion: in.ExpectedVersion,
+		ClientRequestID: in.ClientRequestID, Body: in.Body, At: in.At,
+		Operation: OpSendText, Mode: "requested", Kind: "freeform", Purpose: purposeService,
 	})
-	return out, err
 }
 
-func queuedAlready(ctx context.Context, q *dbgen.Queries, p Principal, requestID string) (bool, error) {
-	_, err := q.GetIdempotency(ctx, dbgen.GetIdempotencyParams{
-		TenantID: p.TenantID, PrincipalID: p.MembershipID, Operation: OpSendText, ClientRequestID: requestID,
+// SendTemplate enqueues one proactive template under OpSendTemplate.
+// The catalog row must already be an authorized driver snapshot. This method
+// does not call Graph and does not sign the body.
+func (s Service) SendTemplate(ctx context.Context, p Principal, in TemplateSendInput) (SendResult, error) {
+	body := strings.TrimSpace(in.TemplateID)
+	return s.enqueuePublic(ctx, p, publicIntent{
+		InboxID: in.InboxID, ConversationID: in.ConversationID, ExpectedVersion: in.ExpectedVersion,
+		ClientRequestID: in.ClientRequestID, Body: body, At: in.At,
+		Operation: OpSendTemplate, Mode: "proactive", Kind: "template", Purpose: strings.TrimSpace(in.Purpose),
+		TemplateID: body, Language: strings.TrimSpace(in.Language),
 	})
-	if err == nil {
-		return true, nil
-	}
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	return false, err
 }
 
 // Close stores the outcome and, when asked, a human farewell on the outbox.
@@ -345,7 +291,9 @@ func queuedAlready(ctx context.Context, q *dbgen.Queries, p Principal, requestID
 func (s Service) Close(ctx context.Context, p Principal, in CloseInput) (CloseResult, error) {
 	var out CloseResult
 	err := s.tx(ctx, p.TenantID, func(ctx context.Context, tx pgx.Tx) error {
-		if err := s.authorize(ctx, tx, p, in.InboxID, false); err != nil {
+		// Principal only. Inbox locks stay after the farewell policy so the
+		// phone/connector lock is not inverted with channel configuration.
+		if err := s.authorizePrincipal(ctx, tx, p); err != nil {
 			return err
 		}
 		in.Reason = strings.TrimSpace(in.Reason)
@@ -359,6 +307,31 @@ func (s Service) Close(ctx context.Context, p Principal, in CloseInput) (CloseRe
 		}
 		if in.FarewellBody != "" && in.FarewellRequestID == "" {
 			return store.ErrInvalid
+		}
+		var farewellDenied error
+		var farewellDecision channelpolicy.Decision
+		if in.FarewellBody != "" {
+			var contactID uuid.UUID
+			err := tx.QueryRow(ctx, `SELECT contact_id FROM conversations WHERE tenant_id=$1 AND id=$2 AND inbox_id=$3`, p.TenantID, in.ConversationID, in.InboxID).Scan(&contactID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrForbidden
+			}
+			if err != nil {
+				return err
+			}
+			replayFarewell, err := queuedOperation(ctx, queries(tx), p, OpSendText, in.FarewellRequestID)
+			if err != nil {
+				return err
+			}
+			if !replayFarewell {
+				farewellDecision, err = s.admit(ctx, tx, p, contactID, in.InboxID, in.ConversationID, "requested", "freeform", purposeService, "", "")
+				if err != nil {
+					farewellDenied = err
+				}
+			}
+		}
+		if err := s.authorize(ctx, tx, p, in.InboxID, false); err != nil {
+			return err
 		}
 		conv, err := lockAuthorizedConversation(ctx, tx, p, in.InboxID, in.ConversationID)
 		if err != nil {
@@ -391,7 +364,13 @@ func (s Service) Close(ctx context.Context, p Principal, in CloseInput) (CloseRe
 				return err
 			}
 			if in.FarewellRequestID != "" {
-				if farewell, err := s.replayFarewell(ctx, tx, p, conv, in); err != nil {
+				replayInput := in
+				resolved, err := s.storedHumanBody(ctx, tx, p, OpSendText, in.FarewellRequestID, in.FarewellBody)
+				if err != nil {
+					return err
+				}
+				replayInput.FarewellBody = resolved
+				if farewell, err := s.replayFarewell(ctx, tx, p, conv, replayInput); err != nil {
 					return err
 				} else if farewell != nil {
 					out.Farewell = farewell
@@ -419,12 +398,25 @@ func (s Service) Close(ctx context.Context, p Principal, in CloseInput) (CloseRe
 			if conv.Controller != store.ControllerHuman || conv.AssigneeID != p.MembershipID {
 				return ErrForbidden
 			}
-			if err := s.connectorReady(ctx, tx, p.TenantID, conv.InboxID); err != nil {
+			if farewellDenied != nil {
+				out.FarewellErr = farewellDenied
+			} else if err := s.connectorReady(ctx, tx, p.TenantID, conv.InboxID); err != nil {
 				out.FarewellErr = err
 			} else {
 				farewell, ferr := s.queueFarewell(ctx, tx, p, conv, in)
+				if errors.Is(ferr, ErrForbidden) {
+					return ferr
+				}
 				out.Farewell = farewell
 				out.FarewellErr = ferr
+				if ferr == nil && farewell != nil && !farewell.Replayed {
+					if err := s.stampMessage(ctx, tx, p.TenantID, farewell.MessageID, "text", messageContext{Mode: "requested", Kind: "freeform", Purpose: purposeService}); err != nil {
+						return err
+					}
+					if err := s.rememberDecision(ctx, tx, p.TenantID, farewell.AttemptID, "enqueue", 0, farewellDecision, "requested", "freeform", purposeService, ""); err != nil {
+						return err
+					}
+				}
 			}
 		}
 		closed, closure, err := s.Repo.Close(ctx, tx, store.CloseInput{
@@ -502,19 +494,36 @@ func (s Service) queueFarewell(ctx context.Context, tx pgx.Tx, p Principal, conv
 	if err := savepoint(ctx, tx, "svc_farewell"); err != nil {
 		return nil, err
 	}
-	connector, err := queries(tx).GetInboxConnector(ctx, dbgen.GetInboxConnectorParams{TenantID: p.TenantID, ID: conv.InboxID})
-	if err != nil {
+	fail := func(err error) (*Farewell, error) {
 		rollbackSavepoint(ctx, tx, "svc_farewell")
 		return nil, err
 	}
-	payload, err := canonicalSend(conv.ID.String(), connector.String(), in.FarewellBody)
+	// Signature acceptance shares the farewell savepoint. A validation or
+	// expansion failure rolls back with the outbox and stays a FarewellErr.
+	replay, err := queuedOperation(ctx, queries(tx), p, OpSendText, in.FarewellRequestID)
 	if err != nil {
-		rollbackSavepoint(ctx, tx, "svc_farewell")
-		return nil, err
+		return fail(err)
+	}
+	body := in.FarewellBody
+	if replay {
+		body, err = s.storedHumanBody(ctx, tx, p, OpSendText, in.FarewellRequestID, in.FarewellBody)
+	} else {
+		body, err = s.signHuman(ctx, tx, p, OpSendText, in.FarewellRequestID, in.FarewellBody)
+	}
+	if err != nil {
+		return fail(err)
+	}
+	connector, err := queries(tx).GetInboxConnector(ctx, dbgen.GetInboxConnectorParams{TenantID: p.TenantID, ID: conv.InboxID})
+	if err != nil {
+		return fail(err)
+	}
+	payload, err := canonicalSend(conv.ID.String(), connector.String(), body)
+	if err != nil {
+		return fail(err)
 	}
 	sent, err := s.Repo.EnqueueText(ctx, tx, store.OutboundInput{
 		TenantID: p.TenantID, ConversationID: conv.ID, ConnectorID: connector, PrincipalID: p.MembershipID,
-		Operation: OpSendText, ClientRequestID: in.FarewellRequestID, Payload: payload, Body: in.FarewellBody, At: in.At,
+		Operation: OpSendText, ClientRequestID: in.FarewellRequestID, Payload: payload, Body: body, At: in.At,
 	})
 	if err != nil {
 		rollbackSavepoint(ctx, tx, "svc_farewell")

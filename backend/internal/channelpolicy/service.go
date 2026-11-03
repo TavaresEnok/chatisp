@@ -65,8 +65,9 @@ func (s Service) ListTemplates(ctx context.Context, p sectors.Principal, inbox u
 
 // SyncTemplates fetches outside transactions, then pins authorization and WABA again.
 // Supervisors can inspect/use the catalog but cannot configure or synchronize the provider.
+// A missing driver, or the zero fake catalog, is refused before any reservation or delete.
 func (s Service) SyncTemplates(ctx context.Context, p sectors.Principal, inbox uuid.UUID) error {
-	if s.DB == nil || s.Driver == nil {
+	if s.DB == nil || s.Driver == nil || unconfiguredCatalog(s.Driver) {
 		return ErrUnsupported
 	}
 	var waba uuid.UUID
@@ -153,6 +154,11 @@ func SetPendingStateTx(ctx context.Context, tx pgx.Tx, p sectors.Principal, v Sc
 	}
 	if e := lockScope(ctx, tx, p, v); e != nil {
 		return e
+	}
+	if state == "cancelled" {
+		if _, err := tx.Exec(ctx, `SELECT public.channel_policy_lock_outbox($1,$2,$3,$4)`, p.TenantID, v.ContactID, v.InboxID, v.Purpose); err != nil {
+			return err
+		}
 	}
 	tag, e := tx.Exec(ctx, `UPDATE channel_policy_pending SET state=$6 WHERE tenant_id=$1 AND id=$2 AND contact_id=$3 AND inbox_id=$4 AND purpose=$5 AND (state='pending' OR state=$6 OR (state='uncertain' AND $6='dispatched'))`, p.TenantID, id, v.ContactID, v.InboxID, v.Purpose, state)
 	if e != nil {

@@ -58,10 +58,8 @@ func seed(t *testing.T) fixture {
 				return e
 			}
 		}
-		if _, err := tx.Exec(ctx, `WITH s AS (INSERT INTO sectors (tenant_id,id,name,legacy_default) VALUES ($1,$2,'Padrão',true)), i AS (INSERT INTO sector_inboxes VALUES ($1,$2,$3)), m AS (INSERT INTO sector_memberships VALUES ($1,$2,$4)) INSERT INTO inbox_sector_defaults VALUES ($1,$3,$2)`, w.tenant, uuid.New(), w.inbox, w.member); err != nil {
-			return err
-		}
-		return nil
+		_, err := tx.Exec(ctx, `WITH s AS (INSERT INTO sectors (tenant_id,id,name,legacy_default) VALUES ($1,$2,'Padrão',true)), i AS (INSERT INTO sector_inboxes VALUES ($1,$2,$3)), m AS (INSERT INTO sector_memberships VALUES ($1,$2,$4)) INSERT INTO inbox_sector_defaults VALUES ($1,$3,$2)`, w.tenant, uuid.New(), w.inbox, w.member)
+		return err
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -91,6 +89,21 @@ func TestHTTPFlow(t *testing.T) {
 	svc := service.New(testStore, jobsClient)
 	w := seed(t)
 	other := seed(t)
+	if err := testStore.WithTenantTx(context.Background(), w.tenant, func(ctx context.Context, tx pgx.Tx) error {
+		app := uuid.New()
+		waba := uuid.New()
+		aad := "ingress_registry\x1fmeta_app_registry\x1f" + app.String() + "\x1fapp_secret"
+		if _, err := tx.Exec(ctx, `SELECT bind_meta_app($1,$2,$2,'v1',$3,'ingress_registry',NULL,'meta_app_registry',$2,'app_secret',$4,true,NULL)`, app.String(), app, []byte{1}, aad); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO meta_wabas (tenant_id, id, meta_app_id, waba_id, status) VALUES ($1, $2, $3, $4, 'active')`, w.tenant, waba, app, waba.String()); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO meta_phone_numbers (tenant_id, id, meta_waba_id, phone_number_id, status, connector_id, inbox_id) VALUES ($1, $2, $3, $4, 'active', $5, $6)`, w.tenant, uuid.New(), waba, uuid.NewString(), w.connector, w.inbox)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
 	p := service.Principal{UserID: w.user, MembershipID: w.member, TenantID: w.tenant, Role: "agent"}
 	now := time.Now().UTC()
 	received, e := svc.ReceiveText(context.Background(), p, service.ReceiveInput{InboxID: w.inbox, ContactID: w.contact, IdentityID: w.identity, ConnectorID: w.connector, ExternalMessageID: uuid.NewString(), Body: "hello", Period: "202610", TrustedAt: now, OpenedAt: now})

@@ -17,6 +17,7 @@ import (
 	"chatisp/internal/channel/configuration"
 	"chatisp/internal/channel/whatsapp"
 	"chatisp/internal/channel/whatsapp/metacloud"
+	"chatisp/internal/channelpolicy"
 	"chatisp/internal/contactdirectory"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/jobs"
@@ -218,6 +219,7 @@ func (h *outboundHandler) DispatchOutbound(ctx context.Context, tenantID, attemp
 	// renew expiration for the network send window, and strictly bind the call context
 	// to the effective reservation deadline (fencing).
 	var fencedExpiresAt time.Time
+	var outboundKind, outboundTemplate, outboundLanguage string
 	invalidated := false
 	err = h.dbStore.WithTenantTx(ctx, tenantID, func(ctx context.Context, tx pgx.Tx) error {
 		// Tenant gate precedes lease and attendance locks, and remains held until
@@ -227,10 +229,13 @@ func (h *outboundHandler) DispatchOutbound(ctx context.Context, tenantID, attemp
 		}
 
 		// Consistent lock order: tenant gate advisory lock -> inbox_send_leases ->
-		// conversations, messages, channel_connectors, outbound_attempts ->
-		// memberships -> send_reservations.
-		// Locking inbox_send_leases first matches ReserveDispatch and prevents lock cycles
-		// with concurrent reservations on the same inbox.
+		// channel_connectors -> contacts -> conversations -> messages and
+		// outbound_attempts -> memberships -> send_reservations.
+		// Acceptance and revocation take the connector, then the contact, then
+		// the conversation. Those three are separate statements here. A join
+		// that lists them together can lock the conversation before the
+		// connector and deadlock with a new acceptance that already holds the
+		// connector. The lease stays first, matching ReserveDispatch.
 		var currentLeaseOwner uuid.UUID
 		var currentLeaseVersion int64
 		err = tx.QueryRow(ctx, `SELECT owner_id, lease_version FROM inbox_send_leases WHERE tenant_id=$1 AND inbox_id=$2 FOR UPDATE`,
@@ -239,10 +244,32 @@ func (h *outboundHandler) DispatchOutbound(ctx context.Context, tenantID, attemp
 			return err
 		}
 
-		// Re-read mutable authorization and configuration under row locks at the
-		// same boundary as the lease fence. The farewell exception is bound to
-		// the exact conversation and epoch, as in ReserveDispatch.
 		var conversationID, contactID uuid.UUID
+		err = tx.QueryRow(ctx, `SELECT c.id, c.contact_id
+			FROM outbound_attempts o
+			JOIN conversations c ON c.tenant_id=o.tenant_id AND c.id=o.conversation_id
+			WHERE o.tenant_id=$1 AND o.id=$2`, tenantID, attemptID).Scan(&conversationID, &contactID)
+		if err != nil {
+			return err
+		}
+		// Exclusive on the connector and the conversation: this boundary freezes
+		// the rows it revalidates. The contact stays shared, as the blocked-contact
+		// read. Acceptance takes the contact exclusively and the other two shared.
+		if err = channelpolicy.LockConnector(ctx, tx, tenantID, connectorID, true); err != nil {
+			return err
+		}
+		if err = channelpolicy.LockContact(ctx, tx, tenantID, contactID, false); err != nil {
+			return err
+		}
+		if err = channelpolicy.LockConversation(ctx, tx, tenantID, conversationID, true); err != nil {
+			return err
+		}
+
+		// Re-read mutable authorization and configuration under the locks above.
+		// Messages and attempts are first locked here, after the conversation.
+		// The farewell exception is bound to the exact conversation and epoch,
+		// as in ReserveDispatch.
+		var lockedConversation, lockedContact uuid.UUID
 		var attemptEpoch, currentEpoch, attemptLeaseVersion int64
 		var convStatus, origin, attemptState, tenantStatus, channelStatus, channelKind, channelVersion string
 		var enabled bool
@@ -255,19 +282,18 @@ func (h *outboundHandler) DispatchOutbound(ctx context.Context, tenantID, attemp
             JOIN channel_connectors cc ON cc.tenant_id=m.tenant_id AND cc.id=m.connector_id
             JOIN inboxes i ON i.tenant_id=c.tenant_id AND i.id=c.inbox_id AND i.connector_id=cc.id
             JOIN tenants t ON t.id=o.tenant_id
-            WHERE o.tenant_id=$1 AND o.id=$2 AND cc.id=$3
-            FOR UPDATE OF c, m, cc, o`, tenantID, attemptID, connectorID).Scan(
-			&conversationID, &attemptEpoch, &currentEpoch, &convStatus, &contactID, &origin, &author,
+            WHERE o.tenant_id=$1 AND o.id=$2 AND cc.id=$3 AND c.id=$4
+            FOR UPDATE OF m, o`, tenantID, attemptID, connectorID, conversationID).Scan(
+			&lockedConversation, &attemptEpoch, &currentEpoch, &convStatus, &lockedContact, &origin, &author,
 			&attemptState, &attemptLeaseVersion, &tenantStatus, &channelStatus, &enabled, &channelKind, &channelVersion)
 		if err != nil {
 			return err
 		}
+		if lockedConversation != conversationID || lockedContact != contactID {
+			return store.ErrInvalid
+		}
 		allowed := attemptState == "sending" && tenantStatus == "active" && enabled && channelStatus == "connected" && channelKind == "meta_cloud" && channelVersion == versionText
 		if origin == "human" {
-			var lockedID uuid.UUID
-			if err := tx.QueryRow(ctx, `SELECT id FROM contacts WHERE tenant_id=$1 AND id=$2 FOR SHARE`, tenantID, contactID).Scan(&lockedID); err != nil {
-				return err
-			}
 			blocked, err := contactdirectory.IsBlocked(ctx, tx, tenantID, contactID)
 			if err != nil {
 				return err
@@ -305,6 +331,23 @@ func (h *outboundHandler) DispatchOutbound(ctx context.Context, tenantID, attemp
 			return store.ErrLeaseHeld
 		} else if err != nil {
 			return err
+		}
+		// The attempt row is already locked. Re-read window, consent and template
+		// approval after preparation and before the lease is renewed for the
+		// network. A denial is committed with this lease; the driver runs only
+		// after this transaction ends.
+		if attemptState == "sending" && attemptLeaseVersion == reservation.LeaseVersion {
+			decision, err := h.attendance.RevalidateDispatchFence(ctx, tx, tenantID, attemptID, reservation.LeaseVersion)
+			if err != nil {
+				return err
+			}
+			outboundKind = decision.Kind
+			outboundTemplate = decision.TemplateID
+			outboundLanguage = decision.Language
+			if decision.Code != "" {
+				preparationCode = decision.Code
+				preparationMessage = decision.Message
+			}
 		}
 		if !allowed || preparationCode != "" {
 			if attemptState != "sending" || attemptLeaseVersion != reservation.LeaseVersion {
@@ -406,16 +449,41 @@ func (h *outboundHandler) DispatchOutbound(ctx context.Context, tenantID, attemp
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
-	textReq := whatsapp.TextRequest{
-		AttemptID:     whatsapp.AttemptID(attemptID.String()),
-		ConnectionID:  whatsapp.ConnectionID(connectorID.String()),
-		ConnectorType: whatsapp.ConnectorMetaCloud,
-		RecipientID:   whatsapp.RecipientID(recipientPhone),
-		CallbackData:  attemptID.String(),
-		Text:          messageBody,
+	var result whatsapp.Result
+	if outboundKind == "template" {
+		templateID := outboundTemplate
+		if templateID == "" {
+			templateID = messageBody
+		}
+		sender, ok := driver.(whatsapp.TemplateSender)
+		if !ok || templateID == "" {
+			result = whatsapp.Result{
+				AttemptID:     whatsapp.AttemptID(attemptID.String()),
+				Local:         whatsapp.StateFailed,
+				RejectionCode: "template_not_authorized",
+				Detail:        "template sem contrato de envio",
+			}
+		} else {
+			result, _ = sender.SendTemplate(callCtx, whatsapp.TemplateRequest{
+				AttemptID:     whatsapp.AttemptID(attemptID.String()),
+				ConnectionID:  whatsapp.ConnectionID(connectorID.String()),
+				ConnectorType: whatsapp.ConnectorMetaCloud,
+				RecipientID:   whatsapp.RecipientID(recipientPhone),
+				CallbackData:  attemptID.String(),
+				TemplateID:    templateID,
+				Language:      outboundLanguage,
+			})
+		}
+	} else {
+		result, _ = driver.SendText(callCtx, whatsapp.TextRequest{
+			AttemptID:     whatsapp.AttemptID(attemptID.String()),
+			ConnectionID:  whatsapp.ConnectionID(connectorID.String()),
+			ConnectorType: whatsapp.ConnectorMetaCloud,
+			RecipientID:   whatsapp.RecipientID(recipientPhone),
+			CallbackData:  attemptID.String(),
+			Text:          messageBody,
+		})
 	}
-
-	result, _ := driver.SendText(callCtx, textReq)
 
 	// 6. Handle dispatch results and receipts.
 	if result.RejectionCode == metacloud.RejectionTokenInvalid || result.RejectionCode == "token_invalid" {

@@ -21,6 +21,7 @@ func (s Service) ReserveDispatch(ctx context.Context, in ReserveInput) (Reservat
 	var out Reservation
 	var stale bool
 	var revoked bool
+	var policyDenied bool
 	err := s.tx(ctx, in.TenantID, func(ctx context.Context, tx pgx.Tx) error {
 		// Match the dispatch boundary and sector policy: acquire the tenant
 		// gate before the lease and attendance rows, and hold it through commit.
@@ -113,6 +114,21 @@ func (s Service) ReserveDispatch(ctx context.Context, in ReserveInput) (Reservat
 			out.State = state
 			return nil
 		}
+		if peek.State == "queued" || peek.State == "retrying" {
+			code, message, err := s.EvaluateAttemptPolicy(ctx, tx, in.TenantID, in.AttemptID, lease.LeaseVersion)
+			if err != nil {
+				return err
+			}
+			if code != "" {
+				state, err := s.refuseQueued(ctx, tx, in.TenantID, in.AttemptID, peek.State, code, message)
+				if err != nil {
+					return err
+				}
+				out.State = state
+				policyDenied = true
+				return nil
+			}
+		}
 		id, err := reserveSendSlot(ctx, tx, s.Repo, in.TenantID, in.InboxID, in.AttemptID, in.OwnerID, lease.LeaseVersion, in.ExpiresAt)
 		if err != nil {
 			return err
@@ -133,6 +149,12 @@ func (s Service) ReserveDispatch(ctx context.Context, in ReserveInput) (Reservat
 	}
 	if revoked {
 		return out, ErrForbidden
+	}
+	if policyDenied {
+		// The existing dispatch fence stops before any driver when it sees
+		// ErrForbidden. Joining the policy sentinel keeps the stored reason
+		// distinct and still uses that fence without a remote call or a retry.
+		return out, errors.Join(ErrPolicyDenied, ErrForbidden)
 	}
 	if stale {
 		return out, ErrStaleEpoch

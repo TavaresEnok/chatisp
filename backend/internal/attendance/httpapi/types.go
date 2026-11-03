@@ -36,6 +36,13 @@ type sendBody struct {
 	ClientRequestID string `json:"client_request_id"`
 	Body            string `json:"body"`
 }
+type templateBody struct {
+	ExpectedVersion int64  `json:"expected_version"`
+	ClientRequestID string `json:"client_request_id"`
+	TemplateID      string `json:"template_id"`
+	Language        string `json:"language"`
+	Purpose         string `json:"purpose"`
+}
 type closeBody struct {
 	ExpectedVersion   int64  `json:"expected_version"`
 	ClientRequestID   string `json:"client_request_id"`
@@ -54,6 +61,10 @@ type assumeInput struct {
 	RawBody []byte
 }
 type sendInput struct {
+	ConversationInput
+	RawBody []byte
+}
+type templateInput struct {
 	ConversationInput
 	RawBody []byte
 }

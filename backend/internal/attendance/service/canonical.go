@@ -27,6 +27,36 @@ func canonicalSend(conversationID, connectorID, body string) ([]byte, error) {
 	})
 }
 
+// templatePayload is the canonical proactive template. Language and purpose
+// belong to the idempotency hash; the visible body stays the template id.
+type templatePayload struct {
+	V              int    `json:"v"`
+	ConversationID string `json:"conversation_id"`
+	ConnectorID    string `json:"connector_id"`
+	Body           string `json:"body"`
+	Visibility     string `json:"visibility"`
+	Kind           string `json:"kind"`
+	Mode           string `json:"mode"`
+	Purpose        string `json:"purpose"`
+	Language       string `json:"language"`
+	TemplateID     string `json:"template_id"`
+}
+
+func canonicalTemplate(conversationID, connectorID, body, mode, purpose, language, templateID string) ([]byte, error) {
+	return json.Marshal(templatePayload{
+		V:              payloadVersion,
+		ConversationID: conversationID,
+		ConnectorID:    connectorID,
+		Body:           body,
+		Visibility:     "public",
+		Kind:           "template",
+		Mode:           mode,
+		Purpose:        strings.TrimSpace(purpose),
+		Language:       strings.TrimSpace(language),
+		TemplateID:     strings.TrimSpace(templateID),
+	})
+}
+
 func commandHash(parts ...string) []byte {
 	mac := sha256.New()
 	var n [8]byte
