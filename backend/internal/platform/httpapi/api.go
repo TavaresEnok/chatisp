@@ -44,6 +44,7 @@ import (
 	"chatisp/internal/platform/version"
 	"chatisp/internal/presence"
 	presenceHTTP "chatisp/internal/presence/httpapi"
+	"chatisp/internal/publicapi"
 	"chatisp/internal/sectors"
 	sectorHTTP "chatisp/internal/sectors/httpapi"
 	"chatisp/internal/triage"
@@ -244,6 +245,10 @@ func New(deps Dependencies) *API {
 	router.Handle("/api/webhooks/meta", webhookHandler)
 	router.Handle("/webhooks/meta", webhookHandler)
 	router.Handle("/meta/webhook", webhookHandler)
+
+	// Public read routes stay outside Huma so the committed OpenAPI document
+	// does not change in this block.
+	router.Mount("/api/public", publicapi.NewHandler(deps.Store))
 
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		Write(w, http.StatusNotFound, "o caminho solicitado não existe")
