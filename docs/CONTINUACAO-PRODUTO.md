@@ -1,0 +1,42 @@
+# Continuação — frente de produto
+
+Worktree: `/home/enok/srv_projetos/workspace/chat-isp-cursor-produto`
+Branch: `continuation/cursor-produto`
+Base: `54febe97b69ff131d80ff3cc880eac33f832e958` (`orchestration/eec2118bdf14`)
+
+Dependência local: `npm ci --prefix backend/tools/pg` (PostgreSQL embutido dos testes). `npm ci --prefix web` (537 pacotes). O Vitest deste host precisou de Node 24.11.0 em `/tmp/chatisp-node24` (o Node do sistema é 20 e o jsdom não sobe). O binário não entra no repositório.
+
+## Privacidade, exportação e exclusão
+
+Estado: **implementado e verificado** no banco sintético do teste. Não é homologação com titular real nem com backup de produção.
+
+O que fechou:
+
+- Exportação do titular em `GET /api/panel/contacts/{id}/privacy-export`, só administrador. Inclui perfil, canal, corpos, notas, metadados de anexo e demandas. Não inclui cifra, HMAC nem chave de objeto. O rótulo deixa claro que não é o histórico do ERP e que backup imutável fica de fora.
+- Exclusão em `POST .../privacy-deletion` com confirmação `excluir titular`. Anonimiza o contato, esvazia corpos, limpa documento e apaga anexos. Protocolo, ciclo, motivo e protocolo externo do vínculo permanecem. Cada anexo vai para `deletion_records` (`attachment`) para o ensaio de restore reaplicar. A trilha por classe fica em `retention_deletion_records`.
+- Repetição devolve `already_erased` e não apaga o ciclo. Se o armazenamento recusa o objeto, a transação volta atrás.
+- `automatic_purge` continua falso. `POST /api/panel/retention/purge` segue 409 e não apaga conteúdo por classe.
+- Painel do administrador: exportar dados do titular e excluir só depois da frase de confirmação.
+
+Commits: ver `git log` desta branch. O primeiro bloco é o commit de privacidade.
+
+Evidência:
+
+- `go test -count=1 ./internal/retention/ ./internal/retention/httpapi/` — ok (retention 1,994s, httpapi 1,816s).
+- `go vet` dos mesmos pacotes — ok.
+- Vitest `retention-panel.test.tsx` e `identity.test.tsx` com Node 24.11.0 — 2 arquivos, 9 testes, ok.
+
+Lacuna restante:
+
+- Expurgo operacional permanece desligado (D2-06). Não há prazo regulatório inventado.
+- Backup imutável não é apagado na hora. A reaplicação depois do restore continua sendo a do ensaio existente, que lê `deletion_records`; este bloco não reexecutou o ensaio de restore.
+- A cifra do documento não é devolvida em claro. A exportação informa só que o documento existe e o tipo.
+- Sem storage configurado, a exclusão de um contato que ainda tem anexo falha por inteiro em vez de deixar o arquivo para trás. Com storage indisponível de propósito (`UnavailableStorage`), o mesmo vale.
+
+## Mídia e ffmpeg
+
+Estado: pendente neste arquivo até o bloco seguinte.
+
+## API pública e integrações
+
+Estado: pendente neste arquivo até o bloco seguinte.

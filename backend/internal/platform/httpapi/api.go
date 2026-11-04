@@ -56,6 +56,7 @@ import (
 	"chatisp/internal/presence"
 	presenceHTTP "chatisp/internal/presence/httpapi"
 	"chatisp/internal/publicapi"
+	"chatisp/internal/retention"
 	retentionHTTP "chatisp/internal/retention/httpapi"
 	"chatisp/internal/sectors"
 	sectorHTTP "chatisp/internal/sectors/httpapi"
@@ -253,7 +254,11 @@ func New(deps Dependencies) *API {
 	if deps.Auth != nil {
 		retentionAuth = deps.Auth
 	}
-	retentionHTTP.Register(router, retentionHTTP.Dependencies{Auth: retentionAuth, Store: deps.Store, TrustedOrigins: deps.TrustedOrigins})
+	var privacyObjects retention.ObjectDeleter
+	if deps.Attachments != nil && deps.Attachments.Storage != nil {
+		privacyObjects = deps.Attachments.Storage
+	}
+	retentionHTTP.Register(router, retentionHTTP.Dependencies{Auth: retentionAuth, Store: deps.Store, Objects: privacyObjects, TrustedOrigins: deps.TrustedOrigins})
 	var brandingAuth branding.Authenticator
 	if deps.Auth != nil {
 		brandingAuth = deps.Auth

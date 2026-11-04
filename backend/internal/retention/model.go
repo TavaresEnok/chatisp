@@ -1,6 +1,7 @@
 package retention
 
 import (
+	"context"
 	"errors"
 
 	"github.com/google/uuid"
@@ -43,8 +44,11 @@ type Principal struct {
 }
 
 // Service reads and writes retention for one provider.
+// Objects, when set, deletes the private file of each removed attachment
+// in the same transaction attempt. A failure rolls the database change back.
 type Service struct {
-	DB *db.Store
+	DB      *db.Store
+	Objects ObjectDeleter
 }
 
 // Policy is the provider retention profile. Nil days are still undefined.
@@ -93,4 +97,91 @@ type PurgeResult struct {
 	Refused bool `json:"refused"`
 	Deleted bool `json:"deleted"`
 	Tasks   int  `json:"tasks"`
+}
+
+const (
+	// PrivacyExportLabel states the file is the attendance dossier of one person.
+	PrivacyExportLabel = "Exportação dos dados do titular neste atendimento. Não é o histórico completo do provedor nem do ERP. Cópias de backup imutável não entram neste arquivo."
+	// PrivacyDeletionNote states what the subject erasure keeps.
+	PrivacyDeletionNote = "O expurgo automático continua desligado. Ciclos, protocolos e motivos permanecem. Backup imutável não é apagado por esta operação."
+	// TombstoneName replaces the contact name after a subject erasure.
+	TombstoneName = "titular excluído"
+	// NoteTombstone replaces a conversation note that cannot be empty.
+	NoteTombstone = "conteúdo removido a pedido do titular"
+)
+
+// ObjectDeleter removes one private object version after the row is ready
+// to leave the database. A nil deleter still removes the database reference.
+type ObjectDeleter interface {
+	Delete(ctx context.Context, key, version string) error
+}
+
+// PrivacyProfile is the contact card. The document ciphertext is never copied.
+type PrivacyProfile struct {
+	Name           string  `json:"name"`
+	Phone          *string `json:"phone"`
+	Email          *string `json:"email"`
+	Notes          string  `json:"notes"`
+	Blocked        bool    `json:"blocked"`
+	ExternalRef    *string `json:"external_ref,omitempty"`
+	DocumentStored bool    `json:"document_stored"`
+	DocumentKind   string  `json:"document_kind,omitempty"`
+	ErasedAt       *string `json:"erased_at,omitempty"`
+}
+
+// PrivacyIdentity is the channel identifier still stored for the contact.
+type PrivacyIdentity struct {
+	ExternalID string `json:"external_id"`
+}
+
+// PrivacyMessage is one stored body of this contact's attendance.
+type PrivacyMessage struct {
+	ConversationID uuid.UUID `json:"conversation_id"`
+	Protocol       string    `json:"protocol"`
+	Direction      string    `json:"direction"`
+	Origin         string    `json:"origin"`
+	Visibility     string    `json:"visibility"`
+	Body           string    `json:"body"`
+	IngestedAt     string    `json:"ingested_at"`
+}
+
+// PrivacyNote is an attendant note on a conversation of this contact.
+type PrivacyNote struct {
+	ConversationID uuid.UUID `json:"conversation_id"`
+	Body           string    `json:"body"`
+}
+
+// PrivacyMedia describes an attachment without its storage key.
+type PrivacyMedia struct {
+	AttachmentID uuid.UUID `json:"attachment_id"`
+	Name         string    `json:"name"`
+	MediaType    string    `json:"media_type"`
+	SizeBytes    int64     `json:"size_bytes"`
+	SHA256       string    `json:"sha256"`
+}
+
+// PrivacyExport is the admin file for one subject request.
+type PrivacyExport struct {
+	Label      string            `json:"label"`
+	ContactID  uuid.UUID         `json:"contact_id"`
+	Profile    PrivacyProfile    `json:"profile"`
+	Identities []PrivacyIdentity `json:"identities"`
+	Messages   []PrivacyMessage  `json:"messages"`
+	Notes      []PrivacyNote     `json:"notes"`
+	Media      []PrivacyMedia    `json:"media"`
+	Demands    []Demand          `json:"demands"`
+}
+
+// DeletionResult is the subject erasure. AutomaticPurge stays false.
+type DeletionResult struct {
+	ContactID          uuid.UUID `json:"contact_id"`
+	Erased             bool      `json:"erased"`
+	AlreadyErased      bool      `json:"already_erased"`
+	Protocols          []string  `json:"protocols"`
+	MessagesRedacted   int       `json:"messages_redacted"`
+	NotesRedacted      int       `json:"notes_redacted"`
+	AttachmentsRemoved int       `json:"attachments_removed"`
+	ObjectsRemoved     int       `json:"objects_removed"`
+	AutomaticPurge     bool      `json:"automatic_purge"`
+	Note               string    `json:"note"`
 }

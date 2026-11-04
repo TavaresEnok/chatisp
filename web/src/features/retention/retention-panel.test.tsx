@@ -56,6 +56,51 @@ it("mostra o nome, o expurgo desligado e a exportação que não é histórico d
   expect(screen.getAllByText(/Não é o histórico completo do provedor nem do ERP/).length).toBeGreaterThan(1);
 });
 
+it("exporta o dossiê do titular e só exclui depois da confirmação", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (url.endsWith("/api/panel/retention")) return json(policy);
+    if (url.endsWith("/api/panel/plan-limits")) return json(usage);
+    if (url.includes("/privacy-export")) {
+      return json({
+        label: "Exportação dos dados do titular neste atendimento. Não é o histórico completo do provedor nem do ERP. Cópias de backup imutável não entram neste arquivo.",
+        contact_id: "c1",
+        profile: { name: "Titular Sintético", document_stored: true, document_kind: "cpf" },
+        messages: [{ body: "segredo" }],
+        demands: [{ protocol: "P-PRIV" }],
+      });
+    }
+    if (url.includes("/privacy-deletion") && init?.method === "POST") {
+      return json({
+        erased: true,
+        already_erased: false,
+        protocols: ["P-PRIV"],
+        automatic_purge: false,
+        note: "O expurgo automático continua desligado. Ciclos, protocolos e motivos permanecem. Backup imutável não é apagado por esta operação.",
+      });
+    }
+    return json({}, 404);
+  }));
+  const user = userEvent.setup();
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <RetentionPanel />
+    </QueryClientProvider>,
+  );
+  await screen.findByDisplayValue("Nexo Fibra");
+  const erase = screen.getByRole("button", { name: "Excluir dados do titular" });
+  expect(erase).toBeDisabled();
+  await user.type(screen.getByLabelText("Contato para exportar"), "c1");
+  await user.click(screen.getByRole("button", { name: "Exportar dados do titular" }));
+  expect(await screen.findByText(/Titular Sintético/)).toBeInTheDocument();
+  expect(screen.getByText(/Cópias de backup imutável não entram neste arquivo/)).toBeInTheDocument();
+  expect(erase).toBeDisabled();
+  await user.type(screen.getByLabelText("Confirmação da exclusão"), "excluir titular");
+  await user.click(erase);
+  expect(await screen.findByText(/Protocolos preservados: P-PRIV/)).toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("continua desligado");
+});
+
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 }

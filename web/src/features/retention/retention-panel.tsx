@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { exportDemands, getPlanUsage, getRetentionPolicy, saveRetentionPolicy, type DemandExport, type RetentionPolicy } from "@/api/retention";
+import { deletePrivacy, exportDemands, exportPrivacy, getPlanUsage, getRetentionPolicy, saveRetentionPolicy, type DemandExport, type PrivacyDeletion, type PrivacyExport, type RetentionPolicy } from "@/api/retention";
 import { invalidateBranding } from "@/features/branding/cache";
 
 const empty: RetentionPolicy = {
@@ -28,6 +28,9 @@ export function RetentionPanel() {
   const [draft, setDraft] = useState<RetentionPolicy | null>(null);
   const [contact, setContact] = useState("");
   const [file, setFile] = useState<DemandExport | null>(null);
+  const [dossier, setDossier] = useState<PrivacyExport | null>(null);
+  const [erasure, setErasure] = useState<PrivacyDeletion | null>(null);
+  const [confirm, setConfirm] = useState("");
   const [notice, setNotice] = useState("");
   const current = draft ?? policy.data ?? empty;
 
@@ -63,6 +66,29 @@ export function RetentionPanel() {
     }
   }
 
+  async function loadPrivacy() {
+    setNotice("");
+    setDossier(null);
+    try {
+      setDossier(await exportPrivacy(contact.trim()));
+    } catch {
+      setNotice("Não foi possível exportar os dados deste titular.");
+    }
+  }
+
+  async function erase() {
+    setNotice("");
+    setErasure(null);
+    try {
+      const result = await deletePrivacy(contact.trim());
+      setErasure(result);
+      setDossier(null);
+      setNotice(result.already_erased ? "Este titular já estava excluído. Nada mais foi apagado." : "Dados do titular excluídos. O expurgo automático continua desligado.");
+    } catch {
+      setNotice("Não foi possível excluir os dados deste titular.");
+    }
+  }
+
   return (
     <section aria-labelledby="retencao-demandas" className="flex flex-col gap-3">
       <h2 id="retencao-demandas" className="text-base font-medium">Retenção e demandas</h2>
@@ -95,6 +121,19 @@ export function RetentionPanel() {
         <input aria-label="Contato para exportar" value={contact} onChange={(event) => setContact(event.target.value)} />
       </label>
       <button type="button" disabled={contact.trim() === ""} onClick={() => void download()}>Exportar demandas</button>
+      <button type="button" disabled={contact.trim() === ""} onClick={() => void loadPrivacy()}>Exportar dados do titular</button>
+      {dossier ? (
+        <div>
+          <p>{dossier.label}</p>
+          <p>{dossier.profile.name} · {dossier.messages.length} mensagens · documento {dossier.profile.document_stored ? dossier.profile.document_kind : "ausente"}</p>
+        </div>
+      ) : null}
+      <label>
+        Confirmação da exclusão
+        <input aria-label="Confirmação da exclusão" value={confirm} onChange={(event) => setConfirm(event.target.value)} />
+      </label>
+      <button type="button" disabled={contact.trim() === "" || confirm.trim() !== "excluir titular"} onClick={() => void erase()}>Excluir dados do titular</button>
+      {erasure ? <p>{erasure.note} Protocolos preservados: {erasure.protocols.join(", ") || "nenhum"}.</p> : null}
       {file ? (
         <div>
           <p>{file.label}</p>

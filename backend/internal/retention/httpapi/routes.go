@@ -24,9 +24,11 @@ type Authenticator interface {
 }
 
 // Dependencies wires the existing session service and the application store.
+// Objects deletes private attachment bytes during a subject erasure.
 type Dependencies struct {
 	Auth           Authenticator
 	Store          *db.Store
+	Objects        retention.ObjectDeleter
 	TrustedOrigins []string
 }
 
@@ -37,12 +39,14 @@ type handler struct {
 
 // Register mounts the panel routes. It does not change the OpenAPI document.
 func Register(r chi.Router, d Dependencies) {
-	h := handler{d: d, s: retention.Service{DB: d.Store}}
+	h := handler{d: d, s: retention.Service{DB: d.Store, Objects: d.Objects}}
 	r.Get("/api/panel/retention", h.getPolicy)
 	r.Put("/api/panel/retention", h.putPolicy)
 	r.Post("/api/panel/retention/purge", h.purge)
 	r.Get("/api/panel/plan-limits", h.limits)
 	r.Get("/api/panel/contacts/{contact_id}/demands", h.export)
+	r.Get("/api/panel/contacts/{contact_id}/privacy-export", h.privacyExport)
+	r.Post("/api/panel/contacts/{contact_id}/privacy-deletion", h.privacyDelete)
 }
 
 func (h handler) getPolicy(w http.ResponseWriter, r *http.Request) {
@@ -149,6 +153,51 @@ func (h handler) export(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, doc)
+}
+
+func (h handler) privacyExport(w http.ResponseWriter, r *http.Request) {
+	p, err := h.principal(r, false)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	contact, err := uuid.Parse(chi.URLParam(r, "contact_id"))
+	if err != nil {
+		writeProblem(w, http.StatusUnprocessableEntity, "contato inválido")
+		return
+	}
+	doc, err := h.s.ExportPrivacy(r.Context(), p, contact)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, doc)
+}
+
+func (h handler) privacyDelete(w http.ResponseWriter, r *http.Request) {
+	p, err := h.principal(r, true)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	var body struct {
+		Confirm string `json:"confirm"`
+	}
+	if err := decode(r, &body); err != nil || strings.TrimSpace(body.Confirm) != "excluir titular" {
+		writeProblem(w, http.StatusUnprocessableEntity, "confirmação inválida")
+		return
+	}
+	contact, err := uuid.Parse(chi.URLParam(r, "contact_id"))
+	if err != nil {
+		writeProblem(w, http.StatusUnprocessableEntity, "contato inválido")
+		return
+	}
+	result, err := h.s.DeletePrivacy(r.Context(), p, contact)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h handler) principal(r *http.Request, write bool) (retention.Principal, error) {

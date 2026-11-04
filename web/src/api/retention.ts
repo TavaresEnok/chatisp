@@ -65,3 +65,30 @@ export function getPlanUsage(signal?: AbortSignal): Promise<PlanUsage> {
 export function exportDemands(contactId: string, signal?: AbortSignal): Promise<DemandExport> {
   return panel(`/api/panel/contacts/${contactId}/demands`, { signal }).then((response) => response.json() as Promise<DemandExport>);
 }
+
+export type PrivacyExport = {
+  label: string;
+  contact_id: string;
+  profile: { name: string; document_stored: boolean; document_kind?: string };
+  messages: { body: string }[];
+  demands: { protocol: string }[];
+};
+
+export type PrivacyDeletion = {
+  erased: boolean;
+  already_erased: boolean;
+  protocols: string[];
+  automatic_purge: boolean;
+  note: string;
+};
+
+export function exportPrivacy(contactId: string, signal?: AbortSignal): Promise<PrivacyExport> {
+  return panel(`/api/panel/contacts/${contactId}/privacy-export`, { signal }).then((response) => response.json() as Promise<PrivacyExport>);
+}
+
+export function deletePrivacy(contactId: string): Promise<PrivacyDeletion> {
+  return panel(`/api/panel/contacts/${contactId}/privacy-deletion`, {
+    method: "POST",
+    body: JSON.stringify({ confirm: "excluir titular" }),
+  }).then((response) => response.json() as Promise<PrivacyDeletion>);
+}
