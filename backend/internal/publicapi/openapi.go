@@ -26,6 +26,7 @@ func publicRoutes() []publicRoute {
 		{Method: http.MethodGet, Path: "/openapi.json", OperationID: "getPublicOpenAPI", Summary: "Documento OpenAPI desta API", Tag: "documento"},
 		{Method: http.MethodGet, Path: "/v1/contacts", OperationID: "listContacts", Summary: "Lista contatos do provedor", Scope: "contacts.read", Tag: "contatos", Limit: true},
 		{Method: http.MethodPost, Path: "/v1/contacts", OperationID: "createContact", Summary: "Cria um contato ou devolve o external_ref já existente", Scope: "contacts.write", Tag: "contatos", Body: true},
+		{Method: http.MethodPatch, Path: "/v1/contacts/{id}", OperationID: "updateContact", Summary: "Atualiza nome, telefone, e-mail ou referência externa", Scope: "contacts.write", Tag: "contatos", Body: true},
 		{Method: http.MethodGet, Path: "/v1/conversations", OperationID: "listConversations", Summary: "Lista conversas do provedor", Scope: "conversations.read", Tag: "conversas", Limit: true},
 		{Method: http.MethodGet, Path: "/v1/conversations/{ref}", OperationID: "getConversation", Summary: "Lê uma conversa pelo UUID ou protocolo", Scope: "conversations.read", Tag: "conversas"},
 		{Method: http.MethodGet, Path: "/v1/conversations/{ref}/messages", OperationID: "listMessages", Summary: "Lista mensagens públicas da conversa", Scope: "messages.read", Tag: "mensagens", Limit: true},
@@ -51,6 +52,8 @@ func (h *handler) dispatch(operationID string) http.HandlerFunc {
 		return h.listContacts
 	case "createContact":
 		return h.createContact
+	case "updateContact":
+		return h.updateContact
 	case "listConversations":
 		return h.listConversations
 	case "getConversation":
@@ -105,8 +108,9 @@ type docTag struct {
 }
 
 type pathItem struct {
-	Get  *opObject `json:"get,omitempty"`
-	Post *opObject `json:"post,omitempty"`
+	Get   *opObject `json:"get,omitempty"`
+	Post  *opObject `json:"post,omitempty"`
+	Patch *opObject `json:"patch,omitempty"`
 }
 
 type opObject struct {
@@ -216,6 +220,16 @@ func OpenAPIJSON() []byte {
 				"external_ref": {Type: "string", MinLength: &one, MaxLength: &oneTwentyEight, Description: "Sem espaço. Repetir devolve o contato existente."},
 			},
 		},
+		"ContactUpdate": {
+			Type: "object", AdditionalProperties: &falseValue,
+			Description: "Informe ao menos um campo. Texto vazio em phone, email ou external_ref grava nulo. Documento e observações não são aceitos.",
+			Properties: map[string]docSchema{
+				"name":         {Type: "string", MinLength: &one, MaxLength: &twoHundred},
+				"phone":        {Type: "string", Description: "E.164 ou vazio para limpar."},
+				"email":        {Type: "string", MaxLength: &threeTwenty},
+				"external_ref": {Type: "string", MaxLength: &oneTwentyEight, Description: "Sem espaço. Vazio limpa. Outro contato com a mesma referência responde 409."},
+			},
+		},
 		"ContactList": {
 			Type: "object", AdditionalProperties: &falseValue, Required: []string{"contacts"},
 			Properties: map[string]docSchema{
@@ -321,7 +335,7 @@ func OpenAPIJSON() []byte {
 		Info: docInfo{
 			Title:       "Chat ISP API pública",
 			Version:     "1.0.0",
-			Description: "Leitura de conversas, contatos e cadastros, criação de contatos e envio individual de template. O Bearer é um token de API. O documento do painel não inclui estas rotas.",
+			Description: "Leitura de conversas, contatos e cadastros, criação e atualização de contatos e envio individual de template. O Bearer é um token de API. O documento do painel não inclui estas rotas. A atualização não grava documento nem observações.",
 		},
 		Servers: []docServer{{URL: "/api/public", Description: "Prefixo montado"}},
 		Tags: []docTag{
@@ -378,6 +392,17 @@ func OpenAPIJSON() []byte {
 			op.Responses["201"] = jsonResp("Contato criado", "Contact")
 			op.Responses["200"] = jsonResp("Contato já existente para o external_ref", "Contact")
 			op.Responses["400"] = problemResp("Contato inválido")
+		case "updateContact":
+			op.Parameters = append(op.Parameters, docParam{
+				Name: "id", In: "path", Required: true,
+				Description: "UUID do contato",
+				Schema:      docSchema{Type: "string", Format: "uuid"},
+			})
+			op.RequestBody = bodyRef("ContactUpdate")
+			op.Responses["200"] = jsonResp("Contato atualizado", "Contact")
+			op.Responses["400"] = problemResp("Contato inválido")
+			op.Responses["404"] = problemResp("Contato não encontrado")
+			op.Responses["409"] = problemResp("Referência externa já usada ou titular excluído")
 		case "listConversations":
 			op.Responses["200"] = jsonResp("Conversas, cada uma com version", "ConversationList")
 		case "getConversation":
@@ -403,9 +428,12 @@ func OpenAPIJSON() []byte {
 		case "listInboxes":
 			op.Responses["200"] = jsonResp("Caixas", "InboxList")
 		}
-		if route.Method == http.MethodPost {
+		switch route.Method {
+		case http.MethodPost:
 			item.Post = op
-		} else {
+		case http.MethodPatch:
+			item.Patch = op
+		default:
 			item.Get = op
 		}
 		doc.Paths[route.Path] = item

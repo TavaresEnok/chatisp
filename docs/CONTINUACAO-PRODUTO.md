@@ -57,4 +57,30 @@ Lacuna restante:
 
 ## API pública e integrações
 
-Estado: pendente neste arquivo até o bloco seguinte.
+Estado: **parcial**. A atualização de contato está implementada e verificada em banco sintético. Enviar mensagem, atribuir e mudar o estado da conversa pela API pública continuam só no fluxo do painel e no envio de template já existente. Não houve chamada a Meta, ERP ou Evolution.
+
+O que fechou neste bloco:
+
+- `PATCH /api/public/v1/contacts/{id}` com escopo `contacts.write`. Atualiza nome, telefone, e-mail e referência externa. Não grava documento nem observações. Referência repetida de outro contato responde 409. Contato anonimizado pela exclusão do titular responde 409 e o nome permanece. `contacts.read` recebe 403.
+- O documento `backend/api/public-openapi.json` descreve a rota.
+
+Evidência:
+
+- `go test -count=1 ./internal/publicapi/ -timeout 180s` — ok, 2,181s.
+- `go vet ./internal/publicapi/` — ok.
+
+Lacuna restante:
+
+- `POST` de mensagem de texto, atribuição e mudança de estado ainda não têm rota pública. O template (`POST /v1/conversations/{ref}/template`) e a criação de contato permanecem como estavam.
+- Webhook de contato criado ou alterado é V2 e não foi adicionado.
+- Homologação com ERP, Meta ou Evolution reais não foi feita e não deve ser feita com credencial deste ambiente.
+
+## O que a frente de operação não deve sobrescrever
+
+- `backend/db/migrations/00046_privacy_subject.sql`
+- `backend/internal/retention/privacy.go` e o painel em `web/src/features/retention/`
+- `backend/internal/media/convert.go`, `needsOpus` em `media_outbound.go` e `needsServerConversion` em `web/src/features/media/model.ts`
+- `PATCH /v1/contacts/{id}` em `backend/internal/publicapi/` e `backend/api/public-openapi.json`
+- Este arquivo, `docs/CONTINUACAO-PRODUTO.md`
+
+`docs/CONTINUACAO-CURSOR.md` não foi criado nem editado aqui.

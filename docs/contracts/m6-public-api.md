@@ -48,6 +48,7 @@ Prefixo `/api/public`. Credencial `Authorization: Bearer`. O limite por token e 
 | GET | `/api/public/openapi.json` | nenhum |
 | GET | `/api/public/v1/contacts` | `contacts.read` |
 | POST | `/api/public/v1/contacts` | `contacts.write` |
+| PATCH | `/api/public/v1/contacts/{id}` | `contacts.write` |
 | GET | `/api/public/v1/conversations` | `conversations.read` |
 | GET | `/api/public/v1/conversations/{ref}` | `conversations.read` |
 | GET | `/api/public/v1/conversations/{ref}/messages` | `messages.read` |
@@ -58,6 +59,8 @@ Prefixo `/api/public`. Credencial `Authorization: Bearer`. O limite por token e 
 | GET | `/api/public/v1/inboxes` | `directory.read` |
 
 `POST /v1/contacts` aceita nome, telefone, e-mail e `external_ref`. Não grava nem devolve observações. O mesmo `external_ref` devolve o contato já existente.
+
+`PATCH /v1/contacts/{id}` altera só os campos enviados: nome, telefone, e-mail e `external_ref`. Texto vazio em telefone, e-mail ou referência grava nulo. Documento, observações e bloqueio não são aceitos. Outro contato com a mesma referência responde 409. Contato já anonimizado pela exclusão do titular também responde 409 e não volta a ter nome. Escopo `contacts.read` não atualiza.
 
 A leitura de conversa, no detalhe e na lista, inclui `version`. Esse é o `expected_version` do envio. Uma versão diferente da atual responde 409; a releitura traz o valor que o próximo envio novo precisa usar.
 

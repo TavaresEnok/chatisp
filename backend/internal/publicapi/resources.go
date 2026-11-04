@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -23,6 +26,19 @@ type contactBody struct {
 	Email       string `json:"email"`
 	ExternalRef string `json:"external_ref"`
 }
+
+type contactPatch struct {
+	Name        *string `json:"name"`
+	Phone       *string `json:"phone"`
+	Email       *string `json:"email"`
+	ExternalRef *string `json:"external_ref"`
+}
+
+var (
+	phonePattern = regexp.MustCompile(`^\+[1-9][0-9]{7,14}$`)
+	emailPattern = regexp.MustCompile(`^[^@[:space:]]+@[^@[:space:]]+$`)
+	errErased    = errors.New("titular excluído")
+)
 
 type templateBody struct {
 	TemplateID      string `json:"template_id"`
@@ -151,6 +167,114 @@ func (h *handler) createContact(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusOK
 	}
 	writeJSON(w, status, view)
+}
+
+func (h *handler) updateContact(w http.ResponseWriter, r *http.Request) {
+	p, ok := h.admit(w, r, "contacts.write")
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeProblem(w, http.StatusBadRequest, "contato inválido")
+		return
+	}
+	var body contactPatch
+	if err := decodeJSON(r, &body); err != nil || (body.Name == nil && body.Phone == nil && body.Email == nil && body.ExternalRef == nil) {
+		writeProblem(w, http.StatusBadRequest, "contato inválido")
+		return
+	}
+	sets := make([]string, 0, 4)
+	args := []any{p.TenantID, id}
+	add := func(column string, value any) {
+		args = append(args, value)
+		sets = append(sets, fmt.Sprintf("%s = $%d", column, len(args)))
+	}
+	if body.Name != nil {
+		name := strings.TrimSpace(*body.Name)
+		if name == "" || len(name) > 200 {
+			writeProblem(w, http.StatusBadRequest, "contato inválido")
+			return
+		}
+		add("name", name)
+	}
+	if body.Phone != nil {
+		phone := strings.TrimSpace(*body.Phone)
+		if phone == "" {
+			add("phone", nil)
+		} else if !phonePattern.MatchString(phone) {
+			writeProblem(w, http.StatusBadRequest, "contato inválido")
+			return
+		} else {
+			add("phone", phone)
+		}
+	}
+	if body.Email != nil {
+		email := strings.ToLower(strings.TrimSpace(*body.Email))
+		if email == "" {
+			add("email", nil)
+		} else if len(email) < 3 || len(email) > 320 || !emailPattern.MatchString(email) {
+			writeProblem(w, http.StatusBadRequest, "contato inválido")
+			return
+		} else {
+			add("email", email)
+		}
+	}
+	if body.ExternalRef != nil {
+		ref := strings.TrimSpace(*body.ExternalRef)
+		if ref == "" {
+			add("external_ref", nil)
+		} else if len(ref) > 128 || strings.ContainsAny(ref, " \t\r\n") {
+			writeProblem(w, http.StatusBadRequest, "contato inválido")
+			return
+		} else {
+			add("external_ref", ref)
+		}
+	}
+	sets = append(sets, "updated_at = now()")
+	var view contactView
+	err = h.store.WithTenantTx(r.Context(), p.TenantID, func(ctx context.Context, tx pgx.Tx) error {
+		var erased *time.Time
+		err := tx.QueryRow(ctx, `
+			SELECT privacy_erased_at FROM contacts WHERE tenant_id = $1 AND id = $2 FOR UPDATE
+		`, p.TenantID, id).Scan(&erased)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if erased != nil {
+			return errErased
+		}
+		return tx.QueryRow(ctx, `
+			UPDATE contacts SET `+strings.Join(sets, ", ")+`
+			WHERE tenant_id = $1 AND id = $2
+			RETURNING id, name, phone, email, blocked, external_ref
+		`, args...).Scan(&view.ID, &view.Name, &view.Phone, &view.Email, &view.Blocked, &view.ExternalRef)
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			writeProblem(w, http.StatusConflict, "referência externa já usada")
+			return
+		}
+		if errors.Is(err, errErased) {
+			writeProblem(w, http.StatusConflict, "titular excluído")
+			return
+		}
+		if errors.Is(err, errNotFound) {
+			writeProblem(w, http.StatusNotFound, "contato não encontrado")
+			return
+		}
+		if errors.As(err, &pgErr) && (pgErr.Code == "23514" || pgErr.Code == "22023") {
+			writeProblem(w, http.StatusBadRequest, "contato inválido")
+			return
+		}
+		writeAccess(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
 }
 
 func (h *handler) listConversations(w http.ResponseWriter, r *http.Request) {

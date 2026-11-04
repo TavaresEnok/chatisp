@@ -3,7 +3,7 @@
   "info": {
     "title": "Chat ISP API pública",
     "version": "1.0.0",
-    "description": "Leitura de conversas, contatos e cadastros, criação de contatos e envio individual de template. O Bearer é um token de API. O documento do painel não inclui estas rotas."
+    "description": "Leitura de conversas, contatos e cadastros, criação e atualização de contatos e envio individual de template. O Bearer é um token de API. O documento do painel não inclui estas rotas. A atualização não grava documento nem observações."
   },
   "servers": [
     {
@@ -276,6 +276,116 @@
           },
           "403": {
             "description": "Escopo ausente ou provedor suspenso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite do token ou do provedor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "contacts.write"
+      }
+    },
+    "/v1/contacts/{id}": {
+      "patch": {
+        "operationId": "updateContact",
+        "summary": "Atualiza nome, telefone, e-mail ou referência externa",
+        "description": "Escopo exigido: contacts.write.",
+        "tags": [
+          "contatos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "UUID do contato",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contato atualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contact"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Contato inválido",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credencial ausente, inválida ou revogada",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Escopo ausente ou provedor suspenso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Contato não encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Referência externa já usada ou titular excluído",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1092,6 +1202,31 @@
             "items": {
               "$ref": "#/components/schemas/Contact"
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ContactUpdate": {
+        "type": "object",
+        "description": "Informe ao menos um campo. Texto vazio em phone, email ou external_ref grava nulo. Documento e observações não são aceitos.",
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 320
+          },
+          "external_ref": {
+            "type": "string",
+            "description": "Sem espaço. Vazio limpa. Outro contato com a mesma referência responde 409.",
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "phone": {
+            "type": "string",
+            "description": "E.164 ou vazio para limpar."
           }
         },
         "additionalProperties": false
