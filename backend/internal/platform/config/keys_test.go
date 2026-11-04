@@ -56,6 +56,26 @@ func TestLoadAcceptsKeyFile(t *testing.T) {
 	}
 }
 
+func TestDocumentPepperIsNotConfiguration(t *testing.T) {
+	secret := "pepper-em-claro-nao-pode-aparecer"
+	_, err := Load([]string{
+		"CHATISP_ENV=development",
+		"CHATISP_DATABASE_URL=postgres://chatisp:local@127.0.0.1:5432/chatisp?sslmode=disable",
+		"CHATISP_CONTACT_DOCUMENT_PEPPER=" + secret,
+	})
+	if err == nil || !strings.Contains(err.Error(), "CHATISP_CONTACT_DOCUMENT_PEPPER") || strings.Contains(err.Error(), secret) {
+		t.Fatalf("pepper: %v", err)
+	}
+	_, err = Load([]string{
+		"CHATISP_ENV=development",
+		"CHATISP_DATABASE_URL=postgres://chatisp:local@127.0.0.1:5432/chatisp?sslmode=disable",
+		"CHATISP_DOCUMENT_PEPPER=" + secret,
+	})
+	if err == nil || strings.Contains(err.Error(), secret) || !strings.Contains(err.Error(), "CHATISP_CONTACT_DOCUMENT_PEPPER") {
+		t.Fatalf("alias: %v", err)
+	}
+}
+
 func bytes32(t *testing.T) []byte {
 	t.Helper()
 	return []byte("0123456789abcdef0123456789abcdef")

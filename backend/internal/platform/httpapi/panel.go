@@ -8,16 +8,19 @@ import (
 	"strings"
 	"time"
 
+	"log/slog"
+
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 
 	"chatisp/internal/platform/auth"
+	"chatisp/internal/presence"
 )
 
 type clientIPKey struct{}
 
 func registerPanel(api huma.API, deps Dependencies) {
-	panel := &panelAPI{auth: deps.Auth}
+	panel := &panelAPI{auth: deps.Auth, presence: deps.Presence, logger: deps.Logger}
 	huma.Register(api, panelOp("create-panel-session", http.MethodPost, "/api/panel/session", "Entra no painel", "Autentica e-mail e senha e abre uma sessão.", http.StatusOK, []int{
 		http.StatusUnauthorized, http.StatusForbidden, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusTooManyRequests, http.StatusServiceUnavailable,
 	}), panel.login)
@@ -80,7 +83,9 @@ func panelOp(id, method, path, summary, description string, status int, errors [
 }
 
 type panelAPI struct {
-	auth *auth.Service
+	auth     *auth.Service
+	presence presence.Service
+	logger   *slog.Logger
 }
 
 type loginInput struct {
@@ -214,9 +219,12 @@ func (p *panelAPI) logout(ctx context.Context, input *cookieInput) (*clearedOutp
 		return nil, err
 	}
 	if input.Session != "" {
-		_, err := p.auth.Authenticate(ctx, input.Session, input.CSRF, true)
+		principal, err := p.auth.Authenticate(ctx, input.Session, input.CSRF, true)
 		if err != nil && !errors.Is(err, auth.ErrUnauthenticated) && !errors.Is(err, auth.ErrForbidden) {
 			return nil, authProblem(err)
+		}
+		if err == nil {
+			p.endPresence(ctx, principal)
 		}
 		if err := p.auth.Logout(ctx, input.Session); err != nil {
 			return nil, authProblem(err)
@@ -230,7 +238,30 @@ func (p *panelAPI) current(ctx context.Context, input *cookieInput) (*principalO
 	if err != nil {
 		return nil, err
 	}
+	p.notePresence(ctx, principal)
 	return &principalOutput{Body: principalFrom(principal)}, nil
+}
+
+// notePresence refreshes the session tab during the existing session read.
+// A presence failure is logged and does not revoke the session. Enrollment-only
+// and superadmin sessions are refused by the presence gate.
+func (p *panelAPI) notePresence(ctx context.Context, principal auth.Principal) {
+	if p == nil || p.presence.DB == nil || principal.SessionID == uuid.Nil {
+		return
+	}
+	if _, err := p.presence.Heartbeat(ctx, principal, principal.SessionID); err != nil && p.logger != nil && !errors.Is(err, presence.ErrForbidden) {
+		p.logger.Warn("heartbeat de presença no ciclo da sessão falhou", "component", "presence")
+	}
+}
+
+// endPresence closes the session tab before the session itself is revoked.
+func (p *panelAPI) endPresence(ctx context.Context, principal auth.Principal) {
+	if p == nil || p.presence.DB == nil || principal.SessionID == uuid.Nil {
+		return
+	}
+	if _, err := p.presence.Close(ctx, principal, principal.SessionID); err != nil && p.logger != nil && !errors.Is(err, presence.ErrForbidden) {
+		p.logger.Warn("encerramento de presença no ciclo da sessão falhou", "component", "presence")
+	}
 }
 
 func (p *panelAPI) invite(ctx context.Context, input *inviteInput) (*inviteOutput, error) {

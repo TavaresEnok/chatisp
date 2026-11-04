@@ -49,11 +49,14 @@ type Config struct {
 	DataKeys            string        `env:"CHATISP_DATA_KEYS"`
 	DataKeysFile        string        `env:"CHATISP_DATA_KEYS_FILE"`
 	DataKeyVersion      string        `env:"CHATISP_DATA_KEY_VERSION"`
-	KeyRing             *crypto.Ring  `env:"-"`
-	MetaSimulation      bool          `env:"CHATISP_META_SIMULATION"`
-	MetaStandInURL      string        `env:"CHATISP_META_STANDIN_URL"`
-	MetaVerifyToken     string        `env:"CHATISP_META_VERIFY_TOKEN"`
-	MetaAppID           string        `env:"CHATISP_META_APP_ID"`
+	// KeyRing seals tenant secrets. The contact-document pepper is random per
+	// tenant, stored only as ciphertext under this ring, and is not an
+	// environment variable. Neither the master key nor the pepper is logged.
+	KeyRing         *crypto.Ring `env:"-"`
+	MetaSimulation  bool         `env:"CHATISP_META_SIMULATION"`
+	MetaStandInURL  string       `env:"CHATISP_META_STANDIN_URL"`
+	MetaVerifyToken string       `env:"CHATISP_META_VERIFY_TOKEN"`
+	MetaAppID       string       `env:"CHATISP_META_APP_ID"`
 }
 
 // Load reads environ as KEY=VALUE entries and ignores the process environment.
@@ -90,6 +93,9 @@ func load(environ []string, requireOwner bool) (Config, error) {
 		return Config{}, formatConfigError(nil, []string{"CHATISP_PANEL_ORIGINS"})
 	}
 	cfg.PanelOrigins = origins
+	if err := rejectDocumentPepper(values); err != nil {
+		return Config{}, err
+	}
 	if strings.TrimSpace(cfg.DataKeys) != "" || strings.TrimSpace(cfg.DataKeysFile) != "" {
 		ring, err := crypto.Load(cfg.DataKeys, cfg.DataKeysFile, cfg.DataKeyVersion)
 		if err != nil {
@@ -220,6 +226,18 @@ func (c Config) validate(requireOwner bool) error {
 	invalid = append(invalid, keyInvalid...)
 
 	return formatConfigError(missing, invalid)
+}
+
+// rejectDocumentPepper refuses a pepper supplied in the environment. The
+// process generates that secret per tenant and seals it with KeyRing. The
+// error names the variable and does not repeat the supplied value.
+func rejectDocumentPepper(values map[string]string) error {
+	for _, key := range []string{"CHATISP_CONTACT_DOCUMENT_PEPPER", "CHATISP_DOCUMENT_PEPPER"} {
+		if strings.TrimSpace(values[key]) != "" {
+			return formatConfigError(nil, []string{"CHATISP_CONTACT_DOCUMENT_PEPPER"})
+		}
+	}
+	return nil
 }
 
 func (c Config) keyProblem() (string, []string) {

@@ -29,6 +29,7 @@ import (
 	"chatisp/internal/channelpolicy"
 	"chatisp/internal/collision"
 	"chatisp/internal/contactdirectory"
+	"chatisp/internal/contactdocs"
 	"chatisp/internal/notifications"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/config"
@@ -39,6 +40,7 @@ import (
 	"chatisp/internal/platform/mail"
 	"chatisp/internal/platform/migrate"
 	"chatisp/internal/platform/runtime"
+	"chatisp/internal/presence"
 	"chatisp/internal/realtime"
 	"chatisp/internal/sectors"
 )
@@ -118,6 +120,9 @@ func run(ctx context.Context, args []string, environ []string, stdout, stderr io
 			ChannelPolicy:  svcs.ChannelPolicy,
 			Attachments:    svcs.Attachments,
 			BusinessHours:  svcs.BusinessHours,
+			Documents:      svcs.Documents,
+			Presence:       svcs.Presence,
+			Store:          svcs.Store,
 			JobsClient:     svcs.JobsClient,
 			ReadyChecks:    svcs.ReadyChecks,
 			Cleanup:        svcs.Cleanup,
@@ -162,6 +167,9 @@ type runtimeServices struct {
 	ChannelPolicy *channelpolicy.Service
 	Attachments   *attachments.Service
 	BusinessHours businesshours.Service
+	Documents     contactdocs.Service
+	Presence      presence.Service
+	Store         *db.Store
 	JobsClient    runtime.Worker
 	ReadyChecks   []func(context.Context) error
 	Cleanup       func()
@@ -312,15 +320,22 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 			notifier = realtime.NewLocalNotifier()
 		}
 		authAdapter := realtime.NewAuthAdapter(identity, store)
+		var authenticator realtime.Authenticator = authAdapter
+		if store != nil {
+			authenticator = runtime.SessionPresence{Next: authAdapter, Presence: presence.New(store), Log: log}
+		}
 		realtimeHandler = realtime.NewHandler(realtime.Options{
 			TrustedOrigins: cfg.PanelOrigins,
-			Authenticator:  authAdapter,
+			Authenticator:  authenticator,
 			Attendance:     attendanceSvc,
 			InboxResolver:  authAdapter,
 			Notifier:       notifier,
 			Logger:         log,
 			DB:             store,
 		})
+		if store != nil {
+			realtimeHandler = runtime.SessionPresenceHandler{Next: realtimeHandler, Presence: presence.New(store), Log: log}
+		}
 	}
 
 	var webhookHandler http.Handler
@@ -377,6 +392,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 			cleanupAll()
 			return runtimeServices{}, fmt.Errorf("falha ao registrar handlers de workers: %w", err)
 		}
+		handlers.Inbound = arrivalInbound{next: handlers.Inbound, store: store, log: log}
 		workerClient, err = jobs.New(workerPool, handlers, jobs.WithLogger(log))
 		if err != nil {
 			cleanupAll()
@@ -411,6 +427,8 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 	var hours businesshours.Service
 	var policySvc *channelpolicy.Service
 	var attachmentSvc *attachments.Service
+	var documents contactdocs.Service
+	var operatorPresence presence.Service
 	if store != nil {
 		canned = cannedreplies.New(store)
 		hours = businesshours.New(store)
@@ -423,6 +441,8 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 			return runtimeServices{}, err
 		}
 		attachmentSvc = &attachments.Service{DB: store, Storage: storage, Limits: tenantAttachmentLimits}
+		documents = contactdocs.New(store, cfg.KeyRing)
+		operatorPresence = presence.New(store)
 	}
 
 	return runtimeServices{
@@ -439,6 +459,9 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		ChannelPolicy: policySvc,
 		Attachments:   attachmentSvc,
 		BusinessHours: hours,
+		Documents:     documents,
+		Presence:      operatorPresence,
+		Store:         store,
 		JobsClient:    workerWorker,
 		ReadyChecks:   readyChecks,
 		Cleanup:       cleanupAll,

@@ -31,12 +31,17 @@ import (
 	collisionHTTP "chatisp/internal/collision/httpapi"
 	"chatisp/internal/contactdirectory"
 	contactHTTP "chatisp/internal/contactdirectory/httpapi"
+	"chatisp/internal/contactdocs"
+	contactDocsHTTP "chatisp/internal/contactdocs/httpapi"
 	"chatisp/internal/notifications"
 	notificationHTTP "chatisp/internal/notifications/httpapi"
 	"chatisp/internal/platform/auth"
+	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/metrics"
 	"chatisp/internal/platform/version"
+	"chatisp/internal/presence"
+	presenceHTTP "chatisp/internal/presence/httpapi"
 	"chatisp/internal/sectors"
 	sectorHTTP "chatisp/internal/sectors/httpapi"
 )
@@ -65,6 +70,10 @@ type Dependencies struct {
 	ChannelPolicy  *channelpolicy.Service
 	Attachments    *attachments.Service
 	BusinessHours  businesshours.Service
+	Documents      contactdocs.Service
+	Presence       presence.Service
+	// Store is the application database used by distribution. Nil answers 503.
+	Store *db.Store
 }
 
 // API is the public HTTP handler and its generated OpenAPI document.
@@ -130,6 +139,10 @@ func New(deps Dependencies) *API {
 			return "Attachment" + t.Name()
 		case strings.Contains(t.PkgPath(), "chatisp/internal/businesshours"):
 			return "BusinessHours" + t.Name()
+		case strings.Contains(t.PkgPath(), "chatisp/internal/contactdocs"):
+			return "ContactDocument" + t.Name()
+		case strings.Contains(t.PkgPath(), "chatisp/internal/presence"):
+			return "Presence" + t.Name()
 		}
 		return huma.DefaultSchemaNamer(t, hint)
 	})
@@ -193,6 +206,9 @@ func New(deps Dependencies) *API {
 	channelPolicyHTTP.Register(api, channelPolicyHTTP.Dependencies{Auth: deps.Auth, Policy: deps.ChannelPolicy, TrustedOrigins: deps.TrustedOrigins})
 	attachmentHTTP.Register(api, attachmentHTTP.Dependencies{Auth: deps.Auth, Attachments: deps.Attachments, TrustedOrigins: deps.TrustedOrigins})
 	businessHoursHTTP.Register(api, businessHoursHTTP.Dependencies{Auth: deps.Auth, BusinessHours: deps.BusinessHours, TrustedOrigins: deps.TrustedOrigins})
+	contactDocsHTTP.Register(api, contactDocsHTTP.Dependencies{Auth: deps.Auth, Documents: deps.Documents, TrustedOrigins: deps.TrustedOrigins})
+	presenceHTTP.Register(api, presenceHTTP.Dependencies{Auth: deps.Auth, Presence: deps.Presence, TrustedOrigins: deps.TrustedOrigins})
+	registerDistribution(api, deps)
 	registerRealtimeContract(api)
 
 	realtimeHandler := deps.Realtime
