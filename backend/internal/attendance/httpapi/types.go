@@ -2,9 +2,10 @@ package httpapi
 
 import (
 	"encoding/json"
+	"time"
+
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
-	"time"
 )
 
 type Credentials struct {
@@ -93,17 +94,34 @@ type head struct {
 	CreatedAt             time.Time `json:"created_at"`
 }
 type message struct {
-	ID                uuid.UUID `json:"id"`
-	ConversationID    uuid.UUID `json:"conversation_id"`
-	ExternalMessageID string    `json:"external_message_id"`
-	Direction         string    `json:"direction"`
-	Origin            string    `json:"origin"`
-	Visibility        string    `json:"visibility"`
-	Body              string    `json:"body"`
-	LocalState        string    `json:"local_state"`
-	TrustedAt         time.Time `json:"trusted_at"`
-	IngestedAt        time.Time `json:"ingested_at"`
-	Historical        bool      `json:"historical"`
+	ID                uuid.UUID          `json:"id"`
+	ConversationID    uuid.UUID          `json:"conversation_id"`
+	ExternalMessageID string             `json:"external_message_id"`
+	Direction         string             `json:"direction"`
+	Origin            string             `json:"origin"`
+	Visibility        string             `json:"visibility"`
+	Body              string             `json:"body"`
+	LocalState        string             `json:"local_state"`
+	TrustedAt         time.Time          `json:"trusted_at"`
+	IngestedAt        time.Time          `json:"ingested_at"`
+	Historical        bool               `json:"historical"`
+	ContentKind       string             `json:"content_kind,omitempty"`
+	Content           map[string]any     `json:"content,omitempty"`
+	ReplyToMessageID  uuid.UUID          `json:"reply_to_message_id,omitempty"`
+	Attachment        *messageAttachment `json:"attachment,omitempty"`
+	Reactions         []messageReaction  `json:"reactions,omitempty"`
+}
+type messageAttachment struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	MediaType string    `json:"media_type"`
+	State     string    `json:"state"`
+	Bytes     int64     `json:"bytes"`
+}
+type messageReaction struct {
+	Emoji      string `json:"emoji"`
+	ExternalID string `json:"external_id"`
+	Actor      string `json:"actor,omitempty"`
 }
 type timeline struct {
 	ID              uuid.UUID `json:"id"`

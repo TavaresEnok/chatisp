@@ -65,6 +65,9 @@ func (Repo) Snapshot(ctx context.Context, tx pgx.Tx, in SnapshotInput) (Snapshot
 		for _, row := range messages {
 			out.Messages = append(out.Messages, messageFrom(row))
 		}
+		if err := enrichInbound(ctx, tx, in.TenantID, in.ConversationID, out.Messages); err != nil {
+			return Snapshot{}, err
+		}
 	}
 	return out, nil
 }

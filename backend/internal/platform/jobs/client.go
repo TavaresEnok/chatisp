@@ -25,6 +25,7 @@ const (
 	workersIngress  = 2
 	workersInbound  = 4
 	workersOutbound = 2
+	workersMedia    = 2
 )
 
 // Option adjusts a client. Production defaults already bound retries, job time
@@ -98,6 +99,7 @@ func New(pool *pgxpool.Pool, handlers Handlers, opts ...Option) (*Client, error)
 		lease:   handlers.Lease,
 		wait:    cfg.leaseWait,
 	})
+	river.AddWorker(workers, &mediaWorker{handler: handlers.Media})
 	riverCfg := &river.Config{
 		Schema:                      SchemaName,
 		Workers:                     workers,
@@ -116,6 +118,7 @@ func New(pool *pgxpool.Pool, handlers Handlers, opts ...Option) (*Client, error)
 			QueueIngress:  {MaxWorkers: workersIngress},
 			QueueInbound:  {MaxWorkers: workersInbound},
 			QueueOutbound: {MaxWorkers: workersOutbound},
+			QueueMedia:    {MaxWorkers: workersMedia},
 			"scheduled":   {MaxWorkers: 1},
 		}
 		if handlers.Automation != nil {
@@ -174,6 +177,15 @@ func (c *Client) EnqueueIngress(ctx context.Context, tx pgx.Tx, deliveryID uuid.
 // EnqueueInbound inserts a tenant job on tx and does not commit tx.
 func (c *Client) EnqueueInbound(ctx context.Context, tx pgx.Tx, tenantID, itemID uuid.UUID) (int64, error) {
 	args := InboundArgs{V: SchemaVersion, TenantID: tenantID, ItemID: itemID}
+	if err := args.validate(); err != nil {
+		return 0, err
+	}
+	return c.insert(ctx, tx, args)
+}
+
+// EnqueueMedia inserts a durable inbound media download on tx and does not commit tx.
+func (c *Client) EnqueueMedia(ctx context.Context, tx pgx.Tx, tenantID, messageID uuid.UUID) (int64, error) {
+	args := MediaArgs{V: SchemaVersion, TenantID: tenantID, MessageID: messageID}
 	if err := args.validate(); err != nil {
 		return 0, err
 	}

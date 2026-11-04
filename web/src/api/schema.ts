@@ -2245,7 +2245,12 @@ export interface components {
             memberships: components["schemas"]["MembershipBody"][] | null;
         };
         Message: {
+            attachment?: components["schemas"]["MessageAttachment"];
             body: string;
+            content?: {
+                [key: string]: unknown;
+            };
+            content_kind?: string;
             conversation_id: string;
             direction: string;
             external_message_id: string;
@@ -2255,9 +2260,24 @@ export interface components {
             ingested_at: string;
             local_state: string;
             origin: string;
+            reactions?: components["schemas"]["MessageReaction"][] | null;
+            reply_to_message_id?: string;
             /** Format: date-time */
             trusted_at: string;
             visibility: string;
+        };
+        MessageAttachment: {
+            /** Format: int64 */
+            bytes: number;
+            id: string;
+            media_type: string;
+            name: string;
+            state: string;
+        };
+        MessageReaction: {
+            actor?: string;
+            emoji: string;
+            external_id: string;
         };
         MfaStateOutputBody: {
             /** @description Verdadeiro enquanto o MFA obrigatório não foi confirmado. */
@@ -2487,7 +2507,10 @@ export interface components {
             WaitingSince: string;
         };
         RealtimeStoreMessage: {
+            Attachment: components["schemas"]["RealtimeStoreMessageAttachment"];
             Body: string;
+            Content: unknown;
+            ContentKind: string;
             ConversationID: string;
             Direction: string;
             ExternalMessageID: string;
@@ -2497,9 +2520,24 @@ export interface components {
             IngestedAt: string;
             LocalState: string;
             Origin: string;
+            Reactions: components["schemas"]["RealtimeStoreMessageReaction"][] | null;
+            ReplyToMessageID: string;
             /** Format: date-time */
             TrustedAt: string;
             Visibility: string;
+        };
+        RealtimeStoreMessageAttachment: {
+            /** Format: int64 */
+            bytes: number;
+            id: string;
+            media_type: string;
+            name: string;
+            state: string;
+        };
+        RealtimeStoreMessageReaction: {
+            actor?: string;
+            emoji: string;
+            external_id: string;
         };
         RealtimeStoreQueueCounts: {
             /** Format: int64 */

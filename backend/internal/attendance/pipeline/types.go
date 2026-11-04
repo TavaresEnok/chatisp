@@ -9,6 +9,7 @@ import (
 	"chatisp/internal/attendance/store"
 	"chatisp/internal/channel/configuration"
 	"chatisp/internal/channel/whatsapp"
+	"chatisp/internal/channel/whatsapp/metacloud"
 )
 
 // AppResolver opens the App Secret bound to one trusted endpoint.
@@ -63,15 +64,16 @@ func (s StaticVerifyTokens) VerifyToken(_ context.Context, appID string) (string
 
 // MessageItemPayload is the tenant-segregated payload stored in webhook_items for messages.
 type MessageItemPayload struct {
-	AppID         string    `json:"app_id"`
-	WABAID        string    `json:"waba_id"`
-	PhoneNumberID string    `json:"phone_number_id"`
-	From          string    `json:"from"`
-	Text          string    `json:"text"`
-	ExternalID    string    `json:"external_id"`
-	DedupKey      string    `json:"dedup_key"`
-	OriginAt      time.Time `json:"origin_at"`
-	ProfileName   string    `json:"profile_name,omitempty"`
+	AppID         string                   `json:"app_id"`
+	WABAID        string                   `json:"waba_id"`
+	PhoneNumberID string                   `json:"phone_number_id"`
+	From          string                   `json:"from"`
+	Text          string                   `json:"text"`
+	ExternalID    string                   `json:"external_id"`
+	DedupKey      string                   `json:"dedup_key"`
+	OriginAt      time.Time                `json:"origin_at"`
+	ProfileName   string                   `json:"profile_name,omitempty"`
+	Content       metacloud.InboundContent `json:"content,omitempty"`
 }
 
 // StatusItemPayload is the tenant-segregated payload stored in webhook_items for status events.

@@ -211,7 +211,17 @@ func TestPipelinePreservesOriginalWithoutFFmpeg(t *testing.T) {
 		t.Fatal("a resposta fingiu conversão")
 	}
 
-	binDir := t.TempDir()
+	// t.TempDir is on noexec /tmp, so LookPath reports EACCES as not found.
+	// The stand-in must be an absolute path on a filesystem that can execute.
+	wd, e := os.Getwd()
+	if e != nil {
+		t.Fatal(e)
+	}
+	binDir, e := os.MkdirTemp(wd, "ffmpeg-bin-")
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(func() { os.RemoveAll(binDir) })
 	script := filepath.Join(binDir, "ffmpeg")
 	if e = os.WriteFile(script, []byte("#!/bin/sh\nout=\nfor a in \"$@\"; do out=$a; done\nprintf 'OggS\\000audio-original-preservado-nao-substituido' > \"$out\"\nexit 0\n"), 0o755); e != nil {
 		t.Fatal(e)

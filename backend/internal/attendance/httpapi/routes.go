@@ -99,10 +99,33 @@ func (h handler) principal(ctx context.Context, c Credentials, write bool) (serv
 func headFrom(v store.Head) head {
 	return head{v.ID, v.Protocol, v.Status, v.Version, v.Controller, v.ControllerEpoch, v.AssigneeID, v.ContactID, v.CycleNumber, v.Summary, v.LastCustomerMessageAt, v.WaitingSince, v.CreatedAt}
 }
+func contentObject(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 || string(raw) == "{}" || string(raw) == "null" {
+		return nil
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil || len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func messagesFrom(v []store.Message) []message {
 	out := make([]message, 0, len(v))
 	for _, m := range v {
-		out = append(out, message{m.ID, m.ConversationID, m.ExternalMessageID, m.Direction, m.Origin, m.Visibility, m.Body, m.LocalState, m.TrustedAt, m.IngestedAt, m.Historical})
+		item := message{
+			ID: m.ID, ConversationID: m.ConversationID, ExternalMessageID: m.ExternalMessageID,
+			Direction: m.Direction, Origin: m.Origin, Visibility: m.Visibility, Body: m.Body,
+			LocalState: m.LocalState, TrustedAt: m.TrustedAt, IngestedAt: m.IngestedAt, Historical: m.Historical,
+			ContentKind: m.ContentKind, Content: contentObject(m.Content), ReplyToMessageID: m.ReplyToMessageID,
+		}
+		if m.Attachment != nil {
+			item.Attachment = &messageAttachment{ID: m.Attachment.ID, Name: m.Attachment.Name, MediaType: m.Attachment.MediaType, State: m.Attachment.State, Bytes: m.Attachment.Bytes}
+		}
+		for _, reaction := range m.Reactions {
+			item.Reactions = append(item.Reactions, messageReaction{Emoji: reaction.Emoji, ExternalID: reaction.ExternalID, Actor: reaction.Actor})
+		}
+		out = append(out, item)
 	}
 	return out
 }

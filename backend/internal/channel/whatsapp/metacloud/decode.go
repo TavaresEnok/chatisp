@@ -59,6 +59,7 @@ type Item struct {
 	From        string
 	Text        string
 	ProfileName string
+	Content     InboundContent
 
 	Status       string
 	Remote       whatsapp.RemoteEvidence
@@ -185,30 +186,20 @@ func messageItem(appID, waba, phone, display string, names map[string]string, ra
 	}
 	id := strings.TrimSpace(msg.ID)
 	idOK := id != "" && !strings.ContainsAny(id, "\r\n\x00") && len(id) <= 256
-	if msg.Type != "text" {
-		key := hashKey(ReasonUnsupportedType, raw, len(raw))
-		if idOK {
-			key = "quarantine:" + ReasonUnsupportedType + ":" + id
-		}
-		item := quarantine(appID, waba, phone, ReasonUnsupportedType, clip(raw), ingestedAt, key)
-		if idOK {
-			item.ExternalID = id
-		}
-		item.DisplayPhone = display
-		return item
+	if strings.TrimSpace(msg.GroupID) != "" {
+		return quarantineMessage(appID, waba, phone, display, id, idOK, ReasonGroupOutOfScope, raw, ingestedAt)
+	}
+	kind := strings.TrimSpace(msg.Type)
+	if !supportedInbound(kind) {
+		return quarantineMessage(appID, waba, phone, display, id, idOK, ReasonUnsupportedType, raw, ingestedAt)
 	}
 	from := strings.TrimSpace(msg.From)
 	if !idOK || !wabaOK(waba) || from == "" {
-		key := hashKey(ReasonMissingIdentity, raw, len(raw))
-		if idOK {
-			key = "quarantine:" + ReasonMissingIdentity + ":" + id
-		}
-		item := quarantine(appID, waba, phone, ReasonMissingIdentity, clip(raw), ingestedAt, key)
-		if idOK {
-			item.ExternalID = id
-		}
-		item.DisplayPhone = display
-		return item
+		return quarantineMessage(appID, waba, phone, display, id, idOK, ReasonMissingIdentity, raw, ingestedAt)
+	}
+	content, text, err := decodeInbound(msg)
+	if err != nil {
+		return quarantineMessage(appID, waba, phone, display, id, idOK, ReasonInvalidJSON, raw, ingestedAt)
 	}
 	origin, known := parseUnix(msg.Timestamp)
 	return Item{
@@ -223,10 +214,24 @@ func messageItem(appID, waba, phone, display string, names map[string]string, ra
 		OriginKnown:   known,
 		IngestedAt:    ingestedAt,
 		From:          from,
-		Text:          msg.Text.Body,
+		Text:          text,
 		ProfileName:   names[from],
+		Content:       content,
 		Preserved:     append([]byte(nil), raw...),
 	}
+}
+
+func quarantineMessage(appID, waba, phone, display, id string, idOK bool, reason string, raw []byte, ingestedAt time.Time) Item {
+	key := hashKey(reason, raw, len(raw))
+	if idOK {
+		key = "quarantine:" + reason + ":" + id
+	}
+	item := quarantine(appID, waba, phone, reason, clip(raw), ingestedAt, key)
+	if idOK {
+		item.ExternalID = id
+	}
+	item.DisplayPhone = display
+	return item
 }
 
 func statusItem(appID, waba, phone, display string, raw json.RawMessage, ingestedAt time.Time) Item {
@@ -421,13 +426,23 @@ type wireChange struct {
 }
 
 type wireMessage struct {
-	From      string `json:"from"`
-	ID        string `json:"id"`
-	Timestamp string `json:"timestamp"`
-	Type      string `json:"type"`
-	Text      struct {
-		Body string `json:"body"`
-	} `json:"text"`
+	From        string          `json:"from"`
+	ID          string          `json:"id"`
+	Timestamp   string          `json:"timestamp"`
+	Type        string          `json:"type"`
+	GroupID     string          `json:"group_id"`
+	Context     json.RawMessage `json:"context"`
+	Text        json.RawMessage `json:"text"`
+	Image       json.RawMessage `json:"image"`
+	Document    json.RawMessage `json:"document"`
+	Audio       json.RawMessage `json:"audio"`
+	Video       json.RawMessage `json:"video"`
+	Sticker     json.RawMessage `json:"sticker"`
+	Location    json.RawMessage `json:"location"`
+	Contacts    json.RawMessage `json:"contacts"`
+	Reaction    json.RawMessage `json:"reaction"`
+	Interactive json.RawMessage `json:"interactive"`
+	Button      json.RawMessage `json:"button"`
 }
 
 type wireStatus struct {

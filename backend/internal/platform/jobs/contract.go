@@ -43,12 +43,15 @@ const (
 	QueueIngress  = "ingress"
 	QueueInbound  = "inbound"
 	QueueOutbound = "outbound"
+	QueueMedia    = "inbound_media"
 
 	KindIngress  = "chatisp.ingress.expand.v1"
 	KindInbound  = "chatisp.inbound.apply.v1"
 	KindOutbound = "chatisp.outbound.dispatch.v1"
+	KindMedia    = "chatisp.inbound.media.v1"
 
 	priorityInbound  = 1
+	priorityMedia    = 1
 	priorityIngress  = 2
 	priorityOutbound = 3
 
@@ -102,6 +105,12 @@ type Handlers struct {
 	Outbound   OutboundHandler
 	Lease      OutboundLease
 	Automation AutomationHandler
+	Media      MediaHandler
+}
+
+// MediaHandler downloads one inbound media object after the message is stored.
+type MediaHandler interface {
+	DownloadInboundMedia(ctx context.Context, tenantID, messageID uuid.UUID) error
 }
 
 // IngressArgs identifies one authenticated envelope. It has no tenant.
@@ -131,6 +140,16 @@ type OutboundArgs struct {
 
 func (OutboundArgs) Kind() string { return KindOutbound }
 
+// MediaArgs identifies one stored inbound message that still needs its file.
+// The bytes stay out of the job.
+type MediaArgs struct {
+	V         int       `json:"v"`
+	TenantID  uuid.UUID `json:"tenant_id"`
+	MessageID uuid.UUID `json:"message_id"`
+}
+
+func (MediaArgs) Kind() string { return KindMedia }
+
 func (a IngressArgs) validate() error {
 	if a.V != SchemaVersion || a.DeliveryID == uuid.Nil {
 		return errInvalidArgs
@@ -147,6 +166,13 @@ func (a InboundArgs) validate() error {
 
 func (a OutboundArgs) validate() error {
 	if a.V != SchemaVersion || a.TenantID == uuid.Nil || a.AttemptID == uuid.Nil {
+		return errInvalidArgs
+	}
+	return nil
+}
+
+func (a MediaArgs) validate() error {
+	if a.V != SchemaVersion || a.TenantID == uuid.Nil || a.MessageID == uuid.Nil {
 		return errInvalidArgs
 	}
 	return nil

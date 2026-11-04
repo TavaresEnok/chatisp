@@ -119,6 +119,10 @@ type InboundInput struct {
 	TrustedAt         time.Time
 	OpenedAt          time.Time
 	Historical        bool
+	ContentKind       string
+	Content           json.RawMessage
+	ReplyTo           uuid.UUID
+	ReplyToText       string
 }
 
 // InboundResult is the stored message. Duplicate means the external id already existed.
@@ -201,6 +205,27 @@ type Message struct {
 	TrustedAt         time.Time
 	IngestedAt        time.Time
 	Historical        bool
+	ContentKind       string
+	Content           json.RawMessage
+	ReplyToMessageID  uuid.UUID
+	Attachment        *MessageAttachment
+	Reactions         []MessageReaction
+}
+
+// MessageAttachment is the private file linked to one inbound message.
+type MessageAttachment struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	MediaType string    `json:"media_type"`
+	State     string    `json:"state"`
+	Bytes     int64     `json:"bytes"`
+}
+
+// MessageReaction is one emoji attached to a target message.
+type MessageReaction struct {
+	Emoji      string `json:"emoji"`
+	ExternalID string `json:"external_id"`
+	Actor      string `json:"actor,omitempty"`
 }
 
 // Head is one row of the inbox list.
