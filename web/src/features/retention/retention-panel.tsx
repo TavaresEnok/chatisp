@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { exportDemands, getPlanUsage, getRetentionPolicy, saveRetentionPolicy, type DemandExport, type RetentionPolicy } from "@/api/retention";
+import { invalidateBranding } from "@/features/branding/cache";
 
 const empty: RetentionPolicy = {
   display_name: "",
@@ -45,6 +46,7 @@ export function RetentionPanel() {
       const saved = await saveRetentionPolicy({ ...current, automatic_purge: false });
       setDraft(null);
       client.setQueryData(["retention", "policy"], saved);
+      await invalidateBranding(client);
       setNotice("Política guardada. O expurgo automático continua desligado.");
     } catch {
       setNotice("Não foi possível guardar a política.");

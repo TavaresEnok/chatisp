@@ -23,6 +23,7 @@ import (
 	"chatisp/internal/auditview"
 	"chatisp/internal/bothook"
 	bothookHTTP "chatisp/internal/bothook/httpapi"
+	"chatisp/internal/branding"
 	"chatisp/internal/businesshours"
 	businessHoursHTTP "chatisp/internal/businesshours/httpapi"
 	"chatisp/internal/cannedreplies"
@@ -253,6 +254,11 @@ func New(deps Dependencies) *API {
 		retentionAuth = deps.Auth
 	}
 	retentionHTTP.Register(router, retentionHTTP.Dependencies{Auth: retentionAuth, Store: deps.Store, TrustedOrigins: deps.TrustedOrigins})
+	var brandingAuth branding.Authenticator
+	if deps.Auth != nil {
+		brandingAuth = deps.Auth
+	}
+	branding.Mount(router, branding.Dependencies{Auth: brandingAuth, Store: deps.Store, TrustedOrigins: deps.TrustedOrigins})
 	registerRealtimeContract(api)
 	embed.Mount(router, embed.Dependencies{Auth: deps.Auth, Panels: deps.Embed, TrustedOrigins: deps.TrustedOrigins})
 
