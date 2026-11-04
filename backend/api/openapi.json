@@ -2434,7 +2434,17 @@
       "Message": {
         "additionalProperties": false,
         "properties": {
+          "attachment": {
+            "$ref": "#/components/schemas/MessageAttachment"
+          },
           "body": {
+            "type": "string"
+          },
+          "content": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "content_kind": {
             "type": "string"
           },
           "conversation_id": {
@@ -2462,6 +2472,18 @@
           "origin": {
             "type": "string"
           },
+          "reactions": {
+            "items": {
+              "$ref": "#/components/schemas/MessageReaction"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "reply_to_message_id": {
+            "type": "string"
+          },
           "trusted_at": {
             "format": "date-time",
             "type": "string"
@@ -2482,6 +2504,54 @@
           "trusted_at",
           "ingested_at",
           "historical"
+        ],
+        "type": "object"
+      },
+      "MessageAttachment": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "media_type",
+          "state",
+          "bytes"
+        ],
+        "type": "object"
+      },
+      "MessageReaction": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "emoji": {
+            "type": "string"
+          },
+          "external_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "emoji",
+          "external_id"
         ],
         "type": "object"
       },
@@ -3199,7 +3269,14 @@
       "RealtimeStoreMessage": {
         "additionalProperties": false,
         "properties": {
+          "Attachment": {
+            "$ref": "#/components/schemas/RealtimeStoreMessageAttachment"
+          },
           "Body": {
+            "type": "string"
+          },
+          "Content": {},
+          "ContentKind": {
             "type": "string"
           },
           "ConversationID": {
@@ -3227,6 +3304,18 @@
           "Origin": {
             "type": "string"
           },
+          "Reactions": {
+            "items": {
+              "$ref": "#/components/schemas/RealtimeStoreMessageReaction"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "ReplyToMessageID": {
+            "type": "string"
+          },
           "TrustedAt": {
             "format": "date-time",
             "type": "string"
@@ -3246,7 +3335,60 @@
           "LocalState",
           "TrustedAt",
           "IngestedAt",
-          "Historical"
+          "Historical",
+          "ContentKind",
+          "Content",
+          "ReplyToMessageID",
+          "Attachment",
+          "Reactions"
+        ],
+        "type": "object"
+      },
+      "RealtimeStoreMessageAttachment": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "media_type",
+          "state",
+          "bytes"
+        ],
+        "type": "object"
+      },
+      "RealtimeStoreMessageReaction": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "emoji": {
+            "type": "string"
+          },
+          "external_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "emoji",
+          "external_id"
         ],
         "type": "object"
       },

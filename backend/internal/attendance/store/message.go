@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -104,6 +105,9 @@ func (r Repo) AcceptInbound(ctx context.Context, tx pgx.Tx, in InboundInput) (In
 	if err := releaseSavepoint(ctx, tx, "store_msg"); err != nil {
 		return InboundResult{}, err
 	}
+	if err := stampInbound(ctx, tx, in, messageID); err != nil {
+		return InboundResult{}, err
+	}
 	if _, err := q.LinkPendingStatus(ctx, dbgen.LinkPendingStatusParams{
 		MessageID:         &messageID,
 		TenantID:          in.TenantID,
@@ -162,13 +166,26 @@ func (r Repo) AcceptInbound(ctx context.Context, tx pgx.Tx, in InboundInput) (In
 	if err != nil {
 		return InboundResult{}, err
 	}
-	if err := publish(ctx, q, in.TenantID, "conversation.message", "conversation", conv.ID, conv.Version, map[string]any{
+	fields := map[string]any{
 		"conversation_id":     conv.ID.String(),
 		"message_id":          messageID.String(),
 		"external_message_id": external,
 		"historical":          in.Historical,
 		"clock_moved":         moved,
-	}); err != nil {
+	}
+	if in.ContentKind != "" {
+		fields["content_kind"] = in.ContentKind
+	}
+	if len(in.Content) > 0 {
+		fields["content"] = json.RawMessage(in.Content)
+	}
+	if in.ReplyTo != uuid.Nil {
+		fields["reply_to_message_id"] = in.ReplyTo.String()
+	}
+	if text := strings.TrimSpace(in.ReplyToText); text != "" {
+		fields["reply_to_text"] = text
+	}
+	if err := publish(ctx, q, in.TenantID, "conversation.message", "conversation", conv.ID, conv.Version, fields); err != nil {
 		return InboundResult{}, err
 	}
 	return InboundResult{Conversation: conv, MessageID: messageID, CreatedConversation: opened.Created}, nil

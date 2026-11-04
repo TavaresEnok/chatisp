@@ -102,6 +102,28 @@ func (OutboundArgs) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{Queue: QueueOutbound, Priority: priorityOutbound, MaxAttempts: MaxAttempts, Metadata: []byte(metadataVersion)}
 }
 
+func (MediaArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{Queue: QueueMedia, Priority: priorityMedia, MaxAttempts: MaxAttempts, Metadata: []byte(metadataVersion)}
+}
+
+type mediaWorker struct {
+	river.WorkerDefaults[MediaArgs]
+	handler MediaHandler
+}
+
+func (w *mediaWorker) Work(ctx context.Context, job *river.Job[MediaArgs]) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := job.Args.validate(); err != nil || !metadataOK(job.Metadata) {
+		return river.JobCancel(errInvalidArgs)
+	}
+	if w.handler == nil {
+		return errHandlerMissing
+	}
+	return w.handler.DownloadInboundMedia(ctx, job.Args.TenantID, job.Args.MessageID)
+}
+
 // AutomationArgs carries no customer data. Tenant enumeration uses platform metadata.
 type AutomationArgs struct {
 	V int `json:"v"`

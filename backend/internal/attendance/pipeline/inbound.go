@@ -24,6 +24,7 @@ type inboundHandler struct {
 	attendance service.Service
 	repo       store.Repo
 	automation *Automation
+	jobs       *jobs.Client
 }
 
 // NewInboundHandler constructs the River InboundHandler for processing tenant webhook items.
@@ -119,6 +120,9 @@ func (h *inboundHandler) ApplyInbound(ctx context.Context, tenantID, itemID uuid
 		var p MessageItemPayload
 		if err := json.Unmarshal(rawPayload, &p); err != nil {
 			return err
+		}
+		if p.Content.Type == "reaction" {
+			return h.applyReaction(ctx, tenantID, itemID, connectorID, p)
 		}
 
 		err = h.dbStore.WithTenantTx(ctx, tenantID, func(ctx context.Context, tx pgx.Tx) error {
@@ -228,7 +232,12 @@ func (h *inboundHandler) ApplyInbound(ctx context.Context, tenantID, itemID uuid
 					}
 				}
 			}
-			_, err = h.repo.AcceptInbound(ctx, tx, store.InboundInput{
+			content := prepareContent(p.Content)
+			replyTo, replyText, content, err := resolveReply(ctx, tx, tenantID, connectorID, inboxID, identityID, content)
+			if err != nil {
+				return err
+			}
+			stored, err := h.repo.AcceptInbound(ctx, tx, store.InboundInput{
 				TenantID:          tenantID,
 				InboxID:           inboxID,
 				ContactID:         contactID,
@@ -239,9 +248,25 @@ func (h *inboundHandler) ApplyInbound(ctx context.Context, tenantID, itemID uuid
 				Period:            period,
 				TrustedAt:         trustedAt,
 				OpenedAt:          trustedAt,
+				ContentKind:       content.Type,
+				Content:           mustContent(content),
+				ReplyTo:           replyTo,
+				ReplyToText:       replyText,
 			})
 			if err != nil {
 				return err
+			}
+			if _, err := tx.Exec(ctx, `
+				UPDATE message_reactions
+				   SET target_message_id = $4, conversation_id = $5, updated_at = now()
+				 WHERE tenant_id = $1 AND connector_id = $2 AND target_external_id = $3 AND target_message_id IS NULL
+			`, tenantID, connectorID, p.ExternalID, stored.MessageID, stored.Conversation.ID); err != nil {
+				return err
+			}
+			if !stored.Duplicate && needsDownload(content) && h.jobs != nil {
+				if _, err := h.jobs.EnqueueMedia(ctx, tx, tenantID, stored.MessageID); err != nil {
+					return err
+				}
 			}
 
 			_, err = tx.Exec(ctx, `

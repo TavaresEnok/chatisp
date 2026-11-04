@@ -182,3 +182,67 @@ func marshalGroups(groups []changeGroup) ([]byte, error) {
 		"entry":  entries,
 	})
 }
+
+// MessageFixture is one inbound message of any supported Cloud API type.
+// Object is the typed payload (image, location, contacts, and so on).
+type MessageFixture struct {
+	WABAID        string
+	PhoneNumberID string
+	DisplayPhone  string
+	MessageID     string
+	From          string
+	ProfileName   string
+	Timestamp     string
+	Type          string
+	ContextID     string
+	Object        any
+}
+
+// MarshalMessageEnvelope builds a webhook body from protocol-shaped fixtures.
+func MarshalMessageEnvelope(items ...MessageFixture) ([]byte, error) {
+	groups := make([]changeGroup, 0)
+	index := map[string]int{}
+	for _, item := range items {
+		if item.WABAID == "" || item.PhoneNumberID == "" || item.MessageID == "" || item.Type == "" {
+			return nil, errPhoneMissing
+		}
+		id := item.WABAID + "\x00" + item.PhoneNumberID
+		n, ok := index[id]
+		if !ok {
+			n = len(groups)
+			index[id] = n
+			groups = append(groups, changeGroup{
+				waba: item.WABAID, phone: item.PhoneNumberID, display: item.DisplayPhone,
+				value: map[string]any{
+					"messaging_product": "whatsapp",
+					"metadata": map[string]string{
+						"display_phone_number": item.DisplayPhone,
+						"phone_number_id":      item.PhoneNumberID,
+					},
+					"contacts": []any{},
+					"messages": []any{},
+				},
+			})
+		}
+		message := map[string]any{
+			"from": item.From, "id": item.MessageID, "timestamp": item.Timestamp, "type": item.Type,
+		}
+		if item.Object != nil {
+			message[item.Type] = item.Object
+		}
+		if item.ContextID != "" {
+			message["context"] = map[string]string{"id": item.ContextID}
+		}
+		messages := groups[n].value["messages"].([]any)
+		groups[n].value["messages"] = append(messages, message)
+		if item.From == "" {
+			continue
+		}
+		contacts := groups[n].value["contacts"].([]any)
+		groups[n].value["contacts"] = append(contacts, map[string]any{
+			"profile": map[string]string{"name": item.ProfileName},
+			"wa_id":   item.From,
+		})
+	}
+	return marshalGroups(groups)
+}

@@ -136,7 +136,7 @@ func TestParseQuarantinesUnknownAndIdentityLessItems(t *testing.T) {
 		"entry":[{"id":"waba-a","changes":[
 			{"field":"messages","value":{"messaging_product":"whatsapp","metadata":{"phone_number_id":"111"},
 				"messages":[
-					{"from":"1650","timestamp":"10","type":"image","image":{"id":"media-1"}},
+					{"from":"1650","timestamp":"10","type":"order","order":{"id":"media-1"}},
 					{"from":"1650","timestamp":"11","type":"text","text":{"body":"sem id"}}
 				],
 				"statuses":[{"status":"mystery","timestamp":"12","recipient_id":"1650"}]

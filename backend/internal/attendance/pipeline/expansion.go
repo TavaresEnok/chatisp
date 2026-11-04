@@ -229,6 +229,7 @@ func (h *ingressHandler) ExpandIngress(ctx context.Context, deliveryID uuid.UUID
 						DedupKey:      eventKey,
 						OriginAt:      item.OriginAt,
 						ProfileName:   item.ProfileName,
+						Content:       item.Content,
 					}
 					payloadBytes, err = json.Marshal(p)
 				} else {

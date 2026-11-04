@@ -303,9 +303,20 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		}
 	}
 
+	var privateMedia attachments.Storage
+	if store != nil {
+		privateMedia, err = attachmentStorage(environ)
+		if err != nil {
+			cleanupAll()
+			return runtimeServices{}, err
+		}
+	}
+
 	var attendanceSvc attendanceService.Service
 	if store != nil {
 		attendanceSvc = attendanceService.New(store, insertJobsClient)
+		attendanceSvc.Files = privateMedia
+		attendanceSvc.AttachmentLimits = tenantAttachmentLimits
 	}
 
 	var channelSvc *channelConfig.Service
@@ -390,6 +401,11 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		for _, id := range cfg.TriageInboxes {
 			triageInboxes[uuid.MustParse(id)] = true
 		}
+		mediaFetcher, err := runtime.FetcherForProcess(cfg.MetaSimulation, "v23.0")
+		if err != nil {
+			cleanupAll()
+			return runtimeServices{}, fmt.Errorf("falha ao selecionar download de mídia: %w", err)
+		}
 		handlers, err := pipeline.NewWorkers(pipeline.WorkersConfig{
 			DB:                 store,
 			TriageInboxes:      triageInboxes,
@@ -401,6 +417,9 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 			CredentialReporter: configServer,
 			DriverFactory:      driverFactory,
 			Logger:             log,
+			MediaStorage:       privateMedia,
+			MediaFetcher:       mediaFetcher,
+			Simulation:         cfg.MetaSimulation,
 		})
 		if err != nil {
 			cleanupAll()
@@ -450,12 +469,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		// No implicit catalog driver. SyncTemplates refuses before any write
 		// until a real driver is injected. An empty fake is not a provider snapshot.
 		policySvc = &channelpolicy.Service{DB: store}
-		storage, err := attachmentStorage(environ)
-		if err != nil {
-			cleanupAll()
-			return runtimeServices{}, err
-		}
-		attachmentSvc = &attachments.Service{DB: store, Storage: storage, Limits: tenantAttachmentLimits}
+		attachmentSvc = &attachments.Service{DB: store, Storage: privateMedia, Limits: tenantAttachmentLimits}
 		documents = contactdocs.New(store, cfg.KeyRing)
 		operatorPresence = presence.New(store)
 		panels = embed.New(store)
