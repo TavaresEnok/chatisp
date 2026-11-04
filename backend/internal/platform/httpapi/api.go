@@ -20,6 +20,7 @@ import (
 	attachmentHTTP "chatisp/internal/attachments/httpapi"
 	attendanceHttpAPI "chatisp/internal/attendance/httpapi"
 	attendanceService "chatisp/internal/attendance/service"
+	"chatisp/internal/auditview"
 	"chatisp/internal/businesshours"
 	businessHoursHTTP "chatisp/internal/businesshours/httpapi"
 	"chatisp/internal/cannedreplies"
@@ -44,6 +45,7 @@ import (
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/metrics"
 	"chatisp/internal/platform/version"
+	"chatisp/internal/platformusage"
 	"chatisp/internal/presence"
 	presenceHTTP "chatisp/internal/presence/httpapi"
 	"chatisp/internal/publicapi"
@@ -231,6 +233,7 @@ func New(deps Dependencies) *API {
 	registerReopenWindow(api, deps)
 	registerDistribution(api, deps)
 	registerReports(api, deps)
+	auditview.Mount(router, auditview.Dependencies{Auth: deps.Auth, Store: deps.Store})
 	registerRealtimeContract(api)
 	embed.Mount(router, embed.Dependencies{Auth: deps.Auth, Panels: deps.Embed, TrustedOrigins: deps.TrustedOrigins})
 
@@ -252,6 +255,7 @@ func New(deps Dependencies) *API {
 	router.Handle("/api/webhooks/meta", webhookHandler)
 	router.Handle("/webhooks/meta", webhookHandler)
 	router.Handle("/meta/webhook", webhookHandler)
+	router.Method(http.MethodGet, "/api/platform/usage", platformusage.NewHandler(deps.Auth, deps.Store))
 
 	// Public read routes stay outside Huma so the committed OpenAPI document
 	// does not change in this block.

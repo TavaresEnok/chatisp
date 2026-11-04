@@ -206,6 +206,14 @@ func TestPanelRejectsBadOriginCSRFAndRevokedSession(t *testing.T) {
 	_ = panelPools
 }
 
+func TestProviderAuditRouteNeedsAuth(t *testing.T) {
+	api := New(Dependencies{})
+	response := panelCall(api.Handler, http.MethodGet, "/api/panel/audit?from=2026-11-01&to=2026-11-03", "198.51.100.81", nil, "", "", "https://painel.chatisp.test", "")
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status: %d %s", response.Code, response.Body.String())
+	}
+}
+
 func TestPanelWithoutAuthIsUnavailable(t *testing.T) {
 	api := New(Dependencies{})
 	response := panelCall(api.Handler, http.MethodPost, "/api/panel/session", "198.51.100.80", map[string]string{

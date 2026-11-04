@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { createProvider, loadPlatformAccess, setProviderSuspended } from "@/api/panel";
+import { PlatformUsagePanel } from "@/components/settings/platform-usage";
 import { errorMessage } from "@/api/problems";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,7 @@ export function PlatformAdmin() {
         Só o cadastro do provedor. Conversas e mensagens não entram aqui.
       </p>
       <CreateProviderForm />
+      <PlatformUsagePanel />
       <ul aria-label="Provedores" className="flex flex-col gap-3">
         {access.data.tenants.map((tenant) => (
           <li
