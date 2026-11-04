@@ -146,4 +146,5 @@ Se a outra frente editar `backend/cmd/chatisp/main.go` ou `backend/cmd/m2demo/de
 Branch `continuation/cursor-operacao`, a partir de `54febe97b69ff131d80ff3cc880eac33f832e958`.
 
 - `55e907ebc25268f4f4b0050e938430347bfe2f1a` — Medir incerteza, reservas, webhook e storage no registry privado.
-- O commit seguinte desta branch registra o guia, a revisão operacional, o ensaio de carga e este arquivo.
+- `47789b56f7a4f0fc7e0713f19967b0bd25f9771b` — Registrar o guia de operação e o ensaio local de carga.
+- O commit imediatamente posterior a `47789b5` grava esta lista. Não houve push.
