@@ -41,6 +41,7 @@ import (
 	"chatisp/internal/platform/jobs"
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/mail"
+	"chatisp/internal/platform/metrics"
 	"chatisp/internal/platform/migrate"
 	"chatisp/internal/platform/runtime"
 	"chatisp/internal/presence"
@@ -134,6 +135,8 @@ func run(ctx context.Context, args []string, environ []string, stdout, stderr io
 			ReadyChecks:    svcs.ReadyChecks,
 			Cleanup:        svcs.Cleanup,
 			TrustedOrigins: cfg.PanelOrigins,
+			Metrics:        svcs.Metrics,
+			Collectors:     svcs.Collectors,
 		})
 	default:
 		return errors.New("modo desconhecido: use api, worker, migrate, all ou openapi")
@@ -183,6 +186,8 @@ type runtimeServices struct {
 	JobsClient    runtime.Worker
 	ReadyChecks   []func(context.Context) error
 	Cleanup       func()
+	Metrics       *metrics.Metrics
+	Collectors    []func(context.Context)
 }
 
 func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mode, log *slog.Logger, environ []string) (runtimeServices, error) {
@@ -227,6 +232,8 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 			return runtimeServices{}, errors.New("CHATISP_META_VERIFY_TOKEN é obrigatório para recepção de webhooks no modo all")
 		}
 	}
+
+	meter := metrics.New()
 
 	var (
 		pools      *db.Pools
@@ -278,6 +285,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 	if workerPool != nil {
 		readyChecks = append(readyChecks, workerPool.Ping)
 	}
+	collectors := bindProcessTelemetry(meter, pools, workerPool)
 
 	insertJobsClient, err := jobs.New(nil, jobs.Handlers{})
 	if err != nil {
@@ -355,6 +363,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 			Notifier:       notifier,
 			Logger:         log,
 			DB:             store,
+			Metrics:        meter,
 		})
 		if store != nil {
 			realtimeHandler = runtime.SessionPresenceHandler{Next: realtimeHandler, Presence: presence.New(store), Log: log}
@@ -430,7 +439,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		}
 		handlers.Inbound = arrivalInbound{next: handlers.Inbound, store: store, log: log}
 		handlers.Webhook = outwebhook.JobsHandler{Deps: outwebhook.Deps{Store: store, Ring: cfg.KeyRing, Mode: cfg.Env}}
-		workerClient, err = jobs.New(workerPool, handlers, jobs.WithLogger(log))
+		workerClient, err = jobs.New(workerPool, handlers, jobs.WithLogger(log), jobs.WithMetrics(meter))
 		if err != nil {
 			cleanupAll()
 			return runtimeServices{}, fmt.Errorf("falha ao montar cliente de jobs: %w", err)
@@ -502,7 +511,43 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		JobsClient:    workerWorker,
 		ReadyChecks:   readyChecks,
 		Cleanup:       cleanupAll,
+		Metrics:       meter,
+		Collectors:    collectors,
 	}, nil
+}
+
+// bindProcessTelemetry attaches pools that are already open and, only when the
+// jobs pool exists, the River backlog reader. The API process has no jobs pool
+// and therefore does not publish a process-local empty backlog as if it were
+// the queue.
+func bindProcessTelemetry(meter *metrics.Metrics, pools *db.Pools, jobsPool *pgxpool.Pool) []func(context.Context) {
+	if meter == nil {
+		return nil
+	}
+	var bindings []metrics.PoolBinding
+	if pools != nil {
+		if pools.App != nil {
+			bindings = append(bindings, metrics.PoolBinding{Role: "app", Pool: pools.App})
+		}
+		if pools.Platform != nil {
+			bindings = append(bindings, metrics.PoolBinding{Role: "platform", Pool: pools.Platform})
+		}
+		if pools.Ingress != nil {
+			bindings = append(bindings, metrics.PoolBinding{Role: "ingress", Pool: pools.Ingress})
+		}
+	}
+	if jobsPool != nil {
+		bindings = append(bindings, metrics.PoolBinding{Role: "jobs", Pool: jobsPool})
+	}
+	meter.RegisterPools(bindings)
+	if jobsPool == nil {
+		return nil
+	}
+	return []func(context.Context){
+		func(ctx context.Context) {
+			jobs.CollectRiverBacklog(ctx, jobsPool, meter)
+		},
+	}
 }
 
 func environValue(environ []string, key string) string {
