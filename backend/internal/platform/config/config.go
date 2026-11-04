@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
+	"github.com/google/uuid"
 
 	"chatisp/internal/platform/crypto"
 )
@@ -57,6 +58,7 @@ type Config struct {
 	MetaStandInURL  string       `env:"CHATISP_META_STANDIN_URL"`
 	MetaVerifyToken string       `env:"CHATISP_META_VERIFY_TOKEN"`
 	MetaAppID       string       `env:"CHATISP_META_APP_ID"`
+	TriageInboxes   []string     `env:"CHATISP_TRIAGE_INBOXES" envSeparator:","`
 }
 
 // Load reads environ as KEY=VALUE entries and ignores the process environment.
@@ -118,6 +120,12 @@ func (c Config) Validate() error {
 func (c Config) validate(requireOwner bool) error {
 	var missing []string
 	var invalid []string
+	for _, id := range c.TriageInboxes {
+		if parsed, err := uuid.Parse(id); err != nil || parsed == uuid.Nil {
+			invalid = append(invalid, "CHATISP_TRIAGE_INBOXES")
+			break
+		}
+	}
 
 	switch c.Env {
 	case "":

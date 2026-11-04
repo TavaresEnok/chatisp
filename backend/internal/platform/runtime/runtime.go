@@ -21,6 +21,7 @@ import (
 	"chatisp/internal/collision"
 	"chatisp/internal/contactdirectory"
 	"chatisp/internal/contactdocs"
+	"chatisp/internal/lifecycle"
 	"chatisp/internal/notifications"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/config"
@@ -30,6 +31,7 @@ import (
 	"chatisp/internal/platform/metrics"
 	"chatisp/internal/presence"
 	"chatisp/internal/sectors"
+	"chatisp/internal/triage"
 )
 
 // Worker represents the lifecycle for background job execution.
@@ -63,6 +65,8 @@ type Options struct {
 	BusinessHours   businesshours.Service
 	Documents       contactdocs.Service
 	Presence        presence.Service
+	Lifecycle       lifecycle.Service
+	Triage          triage.Service
 	Store           *db.Store
 	JobsClient      Worker
 	Cleanup         func()
@@ -118,6 +122,8 @@ func Run(parent context.Context, opts Options) error {
 			BusinessHours:  opts.BusinessHours,
 			Documents:      opts.Documents,
 			Presence:       opts.Presence,
+			Lifecycle:      opts.Lifecycle,
+			Triage:         opts.Triage,
 			Store:          opts.Store,
 			TrustedOrigins: opts.TrustedOrigins,
 		})

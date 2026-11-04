@@ -73,6 +73,7 @@ type WorkersConfig struct {
 	CredentialReporter CredentialReporter
 	DriverFactory      DriverFactory
 	Logger             *slog.Logger
+	TriageInboxes      map[uuid.UUID]bool
 }
 
 // NewWorkers builds the jobs.Handlers containing Ingress, Inbound, Outbound and Lease handlers.
@@ -83,14 +84,17 @@ func NewWorkers(cfg WorkersConfig) (jobs.Handlers, error) {
 	}
 
 	ingress := NewIngressHandler(cfg.IngressPool, cfg.JobsClient, cfg.Logger, cfg.RouteResolver)
-	inbound := NewInboundHandler(cfg.DB, cfg.AttendanceService)
+	automation := &Automation{DB: cfg.DB, Jobs: cfg.JobsClient, TriageInboxes: cfg.TriageInboxes}
+	inbound := NewInboundHandler(cfg.DB, cfg.AttendanceService, automation)
 	outbound := NewOutboundHandler(cfg.DB, cfg.AttendanceService, cfg.MaterialResolver, cfg.CredentialReporter, cfg.DriverFactory)
+	outbound.(*outboundHandler).triageInboxes = cfg.TriageInboxes
 	lease := NewOutboundLease(cfg.DB)
 
 	return jobs.Handlers{
-		Ingress:  ingress,
-		Inbound:  inbound,
-		Outbound: outbound,
-		Lease:    lease,
+		Ingress:    ingress,
+		Inbound:    inbound,
+		Outbound:   outbound,
+		Lease:      lease,
+		Automation: automation,
 	}, nil
 }

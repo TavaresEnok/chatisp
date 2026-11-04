@@ -90,6 +90,7 @@ func New(pool *pgxpool.Pool, handlers Handlers, opts ...Option) (*Client, error)
 		}
 	}
 	workers := river.NewWorkers()
+	river.AddWorker(workers, &automationWorker{handler: handlers.Automation})
 	river.AddWorker(workers, &ingressWorker{handler: handlers.Ingress})
 	river.AddWorker(workers, &inboundWorker{handler: handlers.Inbound})
 	river.AddWorker(workers, &outboundWorker{
@@ -115,6 +116,10 @@ func New(pool *pgxpool.Pool, handlers Handlers, opts ...Option) (*Client, error)
 			QueueIngress:  {MaxWorkers: workersIngress},
 			QueueInbound:  {MaxWorkers: workersInbound},
 			QueueOutbound: {MaxWorkers: workersOutbound},
+			"scheduled":   {MaxWorkers: 1},
+		}
+		if handlers.Automation != nil {
+			riverCfg.PeriodicJobs = []*river.PeriodicJob{river.NewPeriodicJob(river.PeriodicInterval(10*time.Second), func() (river.JobArgs, *river.InsertOpts) { return AutomationArgs{V: SchemaVersion}, nil }, &river.PeriodicJobOpts{ID: "lifecycle", RunOnStart: true})}
 		}
 		if cfg.poll > 0 {
 			riverCfg.FetchCooldown = cfg.cooldown

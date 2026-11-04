@@ -120,6 +120,18 @@ type AuthToken struct {
 	CreatedAt    pgtype.Timestamptz
 }
 
+type AutomationDispatch struct {
+	TenantID       uuid.UUID
+	ID             uuid.UUID
+	ConversationID uuid.UUID
+	SourceID       uuid.UUID
+	ActionIndex    int32
+	Reason         string
+	Kind           string
+	Generation     int64
+	AttemptID      *uuid.UUID
+}
+
 type BusinessHoursCommand struct {
 	TenantID     uuid.UUID
 	MembershipID uuid.UUID
@@ -340,6 +352,21 @@ type ConversationReadMarker struct {
 	Version        int64
 }
 
+type ConversationSnooze struct {
+	TenantID                uuid.UUID
+	ID                      uuid.UUID
+	ConversationID          uuid.UUID
+	SnoozedUntil            pgtype.Timestamptz
+	Reason                  string
+	DestinationMembershipID uuid.UUID
+	DestinationSectorID     uuid.UUID
+	State                   string
+	Resolution              *string
+	CreatedByMembershipID   uuid.UUID
+	CreatedAt               pgtype.Timestamptz
+	ResolvedAt              pgtype.Timestamptz
+}
+
 type CredentialSecret struct {
 	TenantID   uuid.UUID
 	ID         uuid.UUID
@@ -400,6 +427,19 @@ type IdempotencyRecord struct {
 	CreatedAt       pgtype.Timestamptz
 }
 
+type InactivityWatch struct {
+	TenantID       uuid.UUID
+	ConversationID uuid.UUID
+	AnchorReplyAt  pgtype.Timestamptz
+	AssigneeID     uuid.UUID
+	Generation     int64
+	WarningDueAt   pgtype.Timestamptz
+	CloseDueAt     pgtype.Timestamptz
+	WarningState   string
+	WarningAt      pgtype.Timestamptz
+	ClosedAt       pgtype.Timestamptz
+}
+
 type Inbox struct {
 	ID              uuid.UUID
 	TenantID        uuid.UUID
@@ -449,6 +489,36 @@ type IngressQuarantine struct {
 	Reason     string
 	RemoteRef  string
 	CreatedAt  pgtype.Timestamptz
+}
+
+type LifecycleCommand struct {
+	TenantID     uuid.UUID
+	MembershipID uuid.UUID
+	Operation    string
+	RequestID    uuid.UUID
+	RequestHash  []byte
+	Response     json.RawMessage
+	CreatedAt    pgtype.Timestamptz
+}
+
+type LifecycleInactivitySetting struct {
+	TenantID            uuid.UUID
+	WarningAfterSeconds int32
+	CloseAfterSeconds   int32
+	Version             int64
+}
+
+type LifecycleWarningRequest struct {
+	TenantID       uuid.UUID
+	ConversationID uuid.UUID
+	Generation     int64
+	AnchorReplyAt  pgtype.Timestamptz
+	AssigneeID     uuid.UUID
+	Body           string
+	State          string
+	ReceiptOutcome *string
+	RequestedAt    pgtype.Timestamptz
+	ResolvedAt     pgtype.Timestamptz
 }
 
 type Membership struct {
@@ -728,6 +798,54 @@ type TenantJobSlot struct {
 	TenantID  uuid.UUID
 	QueueName string
 	MaxSlots  int32
+}
+
+type TriageCommand struct {
+	TenantID     uuid.UUID
+	MembershipID uuid.UUID
+	RequestID    uuid.UUID
+	RequestHash  []byte
+	Response     json.RawMessage
+}
+
+type TriageDecision struct {
+	TenantID       uuid.UUID
+	ConversationID uuid.UUID
+	InputID        uuid.UUID
+	Outcome        json.RawMessage
+}
+
+type TriageEvent struct {
+	TenantID       uuid.UUID
+	ID             uuid.UUID
+	ConversationID uuid.UUID
+	InputID        uuid.UUID
+	Kind           string
+	Detail         json.RawMessage
+	CreatedAt      pgtype.Timestamptz
+}
+
+type TriageMenu struct {
+	TenantID    uuid.UUID
+	InboxID     uuid.UUID
+	Version     int64
+	Configured  bool
+	MaxAttempts int32
+	Options     json.RawMessage
+}
+
+type TriageState struct {
+	TenantID        uuid.UUID
+	ConversationID  uuid.UUID
+	InboxID         uuid.UUID
+	Attempts        int32
+	WelcomeSent     bool
+	Resolved        bool
+	Phase           string
+	MenuVersion     int64
+	CycleNumber     int32
+	ControllerEpoch int64
+	UpdatedAt       pgtype.Timestamptz
 }
 
 type User struct {

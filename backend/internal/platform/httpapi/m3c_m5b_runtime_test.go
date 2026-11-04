@@ -187,6 +187,22 @@ func TestM3CM5BComposition(t *testing.T) {
 	if assignee(t, ctx, tenant, convOff) != agent.membership {
 		t.Fatal("conversa não ficou com o atendente")
 	}
+
+	for _, tc := range []struct {
+		cookie, path string
+		want         int
+		match        string
+	}{
+		{agentCookie, "/api/panel/presence/occupancy", 200, `"occupied":1`},
+		{adminCookie, "/api/panel/presence/occupancy?sector_id=" + sector.String(), 200, agent.membership.String()},
+		{agentCookie, "/api/panel/presence/occupancy?sector_id=" + sector.String(), 403, ""},
+		{"", "/api/panel/presence/occupancy", 401, ""},
+	} {
+		r := panelCall(api.Handler, http.MethodGet, tc.path, "198.51.100.45", nil, tc.cookie, "", origin, "")
+		if r.Code != tc.want || (tc.match != "" && !strings.Contains(r.Body.String(), tc.match)) {
+			t.Fatalf("ocupação %s: %d %s", tc.path, r.Code, r.Body.String())
+		}
+	}
 	disabled := panelCall(api.Handler, http.MethodPut, "/api/panel/sectors/"+sector.String()+"/distribution", "198.51.100.44", map[string]any{
 		"expected_version": 1, "enabled": false,
 	}, adminCookie, adminCSRF, origin, "")

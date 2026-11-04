@@ -33,6 +33,8 @@ import (
 	contactHTTP "chatisp/internal/contactdirectory/httpapi"
 	"chatisp/internal/contactdocs"
 	contactDocsHTTP "chatisp/internal/contactdocs/httpapi"
+	"chatisp/internal/lifecycle"
+	lifecycleHTTP "chatisp/internal/lifecycle/httpapi"
 	"chatisp/internal/notifications"
 	notificationHTTP "chatisp/internal/notifications/httpapi"
 	"chatisp/internal/platform/auth"
@@ -44,6 +46,8 @@ import (
 	presenceHTTP "chatisp/internal/presence/httpapi"
 	"chatisp/internal/sectors"
 	sectorHTTP "chatisp/internal/sectors/httpapi"
+	"chatisp/internal/triage"
+	triageHTTP "chatisp/internal/triage/httpapi"
 )
 
 // ReadyFunc reports whether the process can accept traffic.
@@ -72,6 +76,8 @@ type Dependencies struct {
 	BusinessHours  businesshours.Service
 	Documents      contactdocs.Service
 	Presence       presence.Service
+	Lifecycle      lifecycle.Service
+	Triage         triage.Service
 	// Store is the application database used by distribution. Nil answers 503.
 	Store *db.Store
 }
@@ -141,6 +147,10 @@ func New(deps Dependencies) *API {
 			return "BusinessHours" + t.Name()
 		case strings.Contains(t.PkgPath(), "chatisp/internal/contactdocs"):
 			return "ContactDocument" + t.Name()
+		case strings.Contains(t.PkgPath(), "chatisp/internal/lifecycle"):
+			return "Lifecycle" + t.Name()
+		case strings.Contains(t.PkgPath(), "chatisp/internal/triage"):
+			return "Triage" + t.Name()
 		case strings.Contains(t.PkgPath(), "chatisp/internal/presence"):
 			return "Presence" + t.Name()
 		}
@@ -208,6 +218,9 @@ func New(deps Dependencies) *API {
 	businessHoursHTTP.Register(api, businessHoursHTTP.Dependencies{Auth: deps.Auth, BusinessHours: deps.BusinessHours, TrustedOrigins: deps.TrustedOrigins})
 	contactDocsHTTP.Register(api, contactDocsHTTP.Dependencies{Auth: deps.Auth, Documents: deps.Documents, TrustedOrigins: deps.TrustedOrigins})
 	presenceHTTP.Register(api, presenceHTTP.Dependencies{Auth: deps.Auth, Presence: deps.Presence, TrustedOrigins: deps.TrustedOrigins})
+	lifecycleHTTP.Register(api, lifecycleHTTP.Dependencies{Auth: deps.Auth, Lifecycle: deps.Lifecycle, TrustedOrigins: deps.TrustedOrigins})
+	triageHTTP.Register(api, triageHTTP.Dependencies{Auth: deps.Auth, Triage: deps.Triage, TrustedOrigins: deps.TrustedOrigins})
+	registerOccupancy(api, deps)
 	registerDistribution(api, deps)
 	registerRealtimeContract(api)
 

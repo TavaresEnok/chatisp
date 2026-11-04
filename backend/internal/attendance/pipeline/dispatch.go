@@ -30,6 +30,7 @@ type outboundHandler struct {
 	credentialReporter CredentialReporter
 	driverFactory      DriverFactory
 	repo               store.Repo
+	triageInboxes      map[uuid.UUID]bool
 }
 
 // NewOutboundHandler constructs the River OutboundHandler for dispatching messages.
@@ -293,6 +294,16 @@ func (h *outboundHandler) DispatchOutbound(ctx context.Context, tenantID, attemp
 			return store.ErrInvalid
 		}
 		allowed := attemptState == "sending" && tenantStatus == "active" && enabled && channelStatus == "connected" && channelKind == "meta_cloud" && channelVersion == versionText
+		automationOK, guardErr := automationAllowed(ctx, tx, tenantID, attemptID, h.triageInboxes)
+		if guardErr != nil {
+			return guardErr
+		}
+		allowed = allowed && automationOK
+		blockedAll, blockErr := contactdirectory.IsBlocked(ctx, tx, tenantID, contactID)
+		if blockErr != nil {
+			return blockErr
+		}
+		allowed = allowed && !blockedAll
 		if origin == "human" {
 			blocked, err := contactdirectory.IsBlocked(ctx, tx, tenantID, contactID)
 			if err != nil {

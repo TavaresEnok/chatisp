@@ -113,6 +113,20 @@ func RunInactivity(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, now time.Ti
 		return nil, err
 	}
 	rows.Close()
+	// Close publishes the tenant cursor. Lock every candidate conversation
+	// before the first publication, so a later candidate cannot form a
+	// cursor/conversation cycle with a concurrent customer message.
+	locked, err := tx.Query(ctx, `SELECT id FROM conversations WHERE tenant_id=$1 AND id=ANY($2::uuid[]) ORDER BY id FOR UPDATE /* lifecycle-conv */`, tenant, ids)
+	if err != nil {
+		return nil, err
+	}
+	for locked.Next() {
+	} // Drain before issuing statements on this connection.
+	err = locked.Err()
+	locked.Close()
+	if err != nil {
+		return nil, err
+	}
 	out := []Effect{}
 	for _, id := range ids {
 		effect, err := runOne(ctx, tx, tenant, id, now, settings)

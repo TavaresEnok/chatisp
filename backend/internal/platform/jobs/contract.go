@@ -97,10 +97,11 @@ type OutboundLease interface {
 // Handlers are supplied by ingress and attendance. Nil means that kind is not
 // wired yet. Work then fails closed instead of succeeding as a no-op.
 type Handlers struct {
-	Ingress  IngressHandler
-	Inbound  InboundHandler
-	Outbound OutboundHandler
-	Lease    OutboundLease
+	Ingress    IngressHandler
+	Inbound    InboundHandler
+	Outbound   OutboundHandler
+	Lease      OutboundLease
+	Automation AutomationHandler
 }
 
 // IngressArgs identifies one authenticated envelope. It has no tenant.
@@ -150,3 +151,6 @@ func (a OutboundArgs) validate() error {
 	}
 	return nil
 }
+
+// AutomationHandler runs durable lifecycle jobs with a worker clock.
+type AutomationHandler interface{ RunAutomations(context.Context) error }

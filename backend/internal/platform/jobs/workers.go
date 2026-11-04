@@ -101,3 +101,28 @@ func (InboundArgs) InsertOpts() river.InsertOpts {
 func (OutboundArgs) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{Queue: QueueOutbound, Priority: priorityOutbound, MaxAttempts: MaxAttempts, Metadata: []byte(metadataVersion)}
 }
+
+// AutomationArgs carries no customer data. Tenant enumeration uses platform metadata.
+type AutomationArgs struct {
+	V int `json:"v"`
+}
+
+func (AutomationArgs) Kind() string { return "chatisp.automation.tick.v1" }
+func (AutomationArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{Queue: "scheduled", MaxAttempts: MaxAttempts, Metadata: []byte(metadataVersion)}
+}
+
+type automationWorker struct {
+	river.WorkerDefaults[AutomationArgs]
+	handler AutomationHandler
+}
+
+func (w *automationWorker) Work(ctx context.Context, job *river.Job[AutomationArgs]) error {
+	if job.Args.V != SchemaVersion || !metadataOK(job.Metadata) {
+		return river.JobCancel(errInvalidArgs)
+	}
+	if w.handler == nil {
+		return errHandlerMissing
+	}
+	return w.handler.RunAutomations(ctx)
+}

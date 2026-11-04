@@ -30,6 +30,7 @@ import (
 	"chatisp/internal/collision"
 	"chatisp/internal/contactdirectory"
 	"chatisp/internal/contactdocs"
+	"chatisp/internal/lifecycle"
 	"chatisp/internal/notifications"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/config"
@@ -43,6 +44,7 @@ import (
 	"chatisp/internal/presence"
 	"chatisp/internal/realtime"
 	"chatisp/internal/sectors"
+	"chatisp/internal/triage"
 )
 
 const usageText = `uso: chatisp <modo>
@@ -122,6 +124,8 @@ func run(ctx context.Context, args []string, environ []string, stdout, stderr io
 			BusinessHours:  svcs.BusinessHours,
 			Documents:      svcs.Documents,
 			Presence:       svcs.Presence,
+			Lifecycle:      svcs.Lifecycle,
+			Triage:         svcs.Triage,
 			Store:          svcs.Store,
 			JobsClient:     svcs.JobsClient,
 			ReadyChecks:    svcs.ReadyChecks,
@@ -169,6 +173,8 @@ type runtimeServices struct {
 	BusinessHours businesshours.Service
 	Documents     contactdocs.Service
 	Presence      presence.Service
+	Lifecycle     lifecycle.Service
+	Triage        triage.Service
 	Store         *db.Store
 	JobsClient    runtime.Worker
 	ReadyChecks   []func(context.Context) error
@@ -377,8 +383,13 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 			cleanupAll()
 			return runtimeServices{}, fmt.Errorf("falha ao preparar driver factory: %w", err)
 		}
+		triageInboxes := make(map[uuid.UUID]bool)
+		for _, id := range cfg.TriageInboxes {
+			triageInboxes[uuid.MustParse(id)] = true
+		}
 		handlers, err := pipeline.NewWorkers(pipeline.WorkersConfig{
 			DB:                 store,
+			TriageInboxes:      triageInboxes,
 			IngressPool:        pools.Ingress,
 			JobsClient:         insertJobsClient,
 			AttendanceService:  attendanceSvc,
@@ -461,6 +472,8 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		BusinessHours: hours,
 		Documents:     documents,
 		Presence:      operatorPresence,
+		Lifecycle:     lifecycle.New(store),
+		Triage:        triage.New(store),
 		Store:         store,
 		JobsClient:    workerWorker,
 		ReadyChecks:   readyChecks,

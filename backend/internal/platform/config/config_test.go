@@ -133,3 +133,22 @@ func TestOptionalIdentityConfigDoesNotEchoSecrets(t *testing.T) {
 		t.Fatalf("origens: %#v", cfg.PanelOrigins)
 	}
 }
+
+func TestTriageInboxFlagsValidateAndDefaultOff(t *testing.T) {
+	base := []string{"CHATISP_ENV=test"}
+	cfg, err := LoadRuntime(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.TriageInboxes) != 0 {
+		t.Fatal("triage enabled implicitly")
+	}
+	_, err = LoadRuntime(append(base, "CHATISP_TRIAGE_INBOXES=invalid-sensitive-value"))
+	if err == nil || strings.Contains(err.Error(), "sensitive") {
+		t.Fatalf("invalid flag: %v", err)
+	}
+	cfg, err = LoadRuntime(append(base, "CHATISP_TRIAGE_INBOXES=11111111-1111-4111-8111-111111111111"))
+	if err != nil || len(cfg.TriageInboxes) != 1 {
+		t.Fatalf("valid flag: %v", err)
+	}
+}

@@ -14,6 +14,7 @@ import (
 	"chatisp/internal/attendance/service"
 	"chatisp/internal/attendance/store"
 	"chatisp/internal/contactdirectory"
+	"chatisp/internal/lifecycle"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/jobs"
 )
@@ -22,11 +23,17 @@ type inboundHandler struct {
 	dbStore    *db.Store
 	attendance service.Service
 	repo       store.Repo
+	automation *Automation
 }
 
 // NewInboundHandler constructs the River InboundHandler for processing tenant webhook items.
-func NewInboundHandler(database *db.Store, attendance service.Service) jobs.InboundHandler {
+func NewInboundHandler(database *db.Store, attendance service.Service, automation ...*Automation) jobs.InboundHandler {
+	var composed *Automation
+	if len(automation) > 0 {
+		composed = automation[0]
+	}
 	return &inboundHandler{
+		automation: composed,
 		dbStore:    database,
 		attendance: attendance,
 		repo:       store.Repo{},
@@ -98,7 +105,13 @@ func (h *inboundHandler) ApplyInbound(ctx context.Context, tenantID, itemID uuid
 		return err
 	}
 
-	if state == "processed" || state == "quarantined" {
+	if state == "processed" {
+		if h.automation != nil {
+			return h.automation.ApplyTriage(ctx, tenantID, itemID)
+		}
+		return nil
+	}
+	if state == "quarantined" {
 		return nil
 	}
 
@@ -108,11 +121,14 @@ func (h *inboundHandler) ApplyInbound(ctx context.Context, tenantID, itemID uuid
 			return err
 		}
 
-		return h.dbStore.WithTenantTx(ctx, tenantID, func(ctx context.Context, tx pgx.Tx) error {
+		err = h.dbStore.WithTenantTx(ctx, tenantID, func(ctx context.Context, tx pgx.Tx) error {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
 
+			if err := automationTenant(ctx, tx, tenantID); err != nil {
+				return err
+			}
 			// Resolve or create contact and contact_channel_identity.
 			var contactID, identityID uuid.UUID
 			err = tx.QueryRow(ctx, `
@@ -181,6 +197,24 @@ func (h *inboundHandler) ApplyInbound(ctx context.Context, tenantID, itemID uuid
 			}
 			period := trustedAt.UTC().Format("200601")
 
+			// Existing snoozes are released before AcceptInbound publishes its
+			// cursor, preserving conversation -> capacity -> cursor lock order.
+			var active uuid.UUID
+			e := tx.QueryRow(ctx, `SELECT id FROM conversations WHERE tenant_id=$1 AND inbox_id=$2 AND contact_identity_id=$3 AND status<>'closed' FOR UPDATE`, tenantID, inboxID, identityID).Scan(&active)
+			if e != nil && !errors.Is(e, pgx.ErrNoRows) {
+				return e
+			}
+			var duplicate bool
+			if e == nil {
+				if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM messages WHERE tenant_id=$1 AND connector_id=$2 AND external_message_id=$3)`, tenantID, connectorID, p.ExternalID).Scan(&duplicate); e != nil {
+					return e
+				}
+			}
+			if e == nil && !duplicate {
+				if _, e = lifecycle.OnCustomerMessage(ctx, tx, tenantID, active, trustedAt); e != nil {
+					return e
+				}
+			}
 			_, err = h.repo.AcceptInbound(ctx, tx, store.InboundInput{
 				TenantID:          tenantID,
 				InboxID:           inboxID,
@@ -206,6 +240,13 @@ func (h *inboundHandler) ApplyInbound(ctx context.Context, tenantID, itemID uuid
 			`, tenantID, itemID)
 			return err
 		})
+		if err != nil {
+			return err
+		}
+		if h.automation != nil {
+			return h.automation.ApplyTriage(ctx, tenantID, itemID)
+		}
+		return nil
 	}
 
 	if kind == "status" {

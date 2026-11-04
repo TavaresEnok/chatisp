@@ -25,6 +25,8 @@ import (
 	"chatisp/internal/channel/configuration"
 	"chatisp/internal/channelpolicy"
 	"chatisp/internal/contactdirectory"
+	"chatisp/internal/contactdocs"
+	"chatisp/internal/lifecycle"
 	"chatisp/internal/notifications"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/config"
@@ -35,8 +37,10 @@ import (
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/runtime"
 	"chatisp/internal/platform/testdb"
+	"chatisp/internal/presence"
 	"chatisp/internal/realtime"
 	"chatisp/internal/sectors"
+	"chatisp/internal/triage"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -300,7 +304,7 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 	if ready != nil {
 		ready <- info
 	}
-	return runtime.Run(ctx, runtime.Options{Mode: config.ModeAll, Config: config.Config{LogLevel: "info", ShutdownTimeout: 15 * time.Second}, HTTPListener: apiListener, MetricsListener: metricsListener, Auth: identity, Attendance: attendance, Channels: channels, Sectors: sectorService, Contacts: contactdirectory.Service{DB: store, Visibility: panelapi.ContactVisibility{}}, Notifications: notifications.New(store), Realtime: rt, Webhook: wh, CannedReplies: cannedSvc, ChannelPolicy: policySvc, Attachments: attachmentSvc, BusinessHours: hoursSvc, JobsClient: worker, TrustedOrigins: origins, ReadyChecks: []func(context.Context) error{pools.App.Ping, pools.Platform.Ping, pools.Ingress.Ping, wp.Ping}})
+	return runtime.Run(ctx, runtime.Options{Mode: config.ModeAll, Config: config.Config{LogLevel: "info", ShutdownTimeout: 15 * time.Second}, HTTPListener: apiListener, MetricsListener: metricsListener, Auth: identity, Attendance: attendance, Channels: channels, Sectors: sectorService, Contacts: contactdirectory.Service{DB: store, Visibility: panelapi.ContactVisibility{}}, Notifications: notifications.New(store), Realtime: rt, Webhook: wh, CannedReplies: cannedSvc, ChannelPolicy: policySvc, Attachments: attachmentSvc, BusinessHours: hoursSvc, Documents: contactdocs.New(store, ring), Presence: presence.New(store), Lifecycle: lifecycle.New(store), Triage: triage.New(store), Store: store, JobsClient: worker, TrustedOrigins: origins, ReadyChecks: []func(context.Context) error{pools.App.Ping, pools.Platform.Ping, pools.Ingress.Ping, wp.Ping}})
 }
 
 // panelProxy forwards API upgrades directly to the real server, and assets to Vite.
