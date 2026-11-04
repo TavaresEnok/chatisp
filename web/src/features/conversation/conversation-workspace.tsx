@@ -1,3 +1,4 @@
+import { ContactDocument } from "@/features/contactdocs/contact-document";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AttachmentDesk } from "@/features/attachments/attachment-desk";
@@ -252,7 +253,8 @@ function WorkspaceSession({
             />
             {principal && inboxId ? (
               <>
-                <WindowIndicator connectorType={connectorType} />
+                {contactId && detailMatches && <ContactDocument key={`document:${card.id}:${contactId}`} principal={principal} contactId={contactId} />}
+ <WindowIndicator connectorType={connectorType} />
                 <TemplateCatalog key={`templates:${card.id}`} principal={principal} inboxId={inboxId} conversationId={card.id} connectorType={connectorType} version={detailMatches ? conversationVersion : null} />
                 {contactId && detailMatches ? <ConsentForm key={`consent:${card.id}:${contactId}`} principal={principal} inboxId={inboxId} contactId={contactId} /> : null}
                 <AttachmentDesk key={`attachments:${card.id}`} principal={principal} inboxId={inboxId} conversationId={card.id} closed={card.phase === "closed"} />

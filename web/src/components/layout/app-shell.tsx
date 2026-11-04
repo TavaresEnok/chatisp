@@ -1,6 +1,7 @@
 import { useEffect, type MouseEvent } from "react";
 import { Link, Navigate, Outlet, useLocation } from "react-router";
 import { useEndSession } from "@/components/auth/use-end-session";
+import { OperatorPresence } from "@/features/presence/operator-presence";
 import { AreaNav } from "@/components/layout/area-nav";
 import { areas } from "@/lib/areas";
 import { useSessionStore } from "@/stores/session-store";
@@ -65,6 +66,7 @@ export function AppShell() {
             </p>
           </div>
           <AreaNav />
+ <OperatorPresence />
         </aside>
         <div className="flex min-w-0 flex-col">
           <header className="border-b px-4 py-3 md:px-8">

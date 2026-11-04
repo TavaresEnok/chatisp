@@ -1,3 +1,6 @@
+import { directory } from "@/api/directory";
+import { listHoursInboxes } from "@/api/businesshours";
+import { DistributionSettings } from "@/features/distribution/distribution-settings";
 import { Link } from "react-router";
 import { AreaPage } from "@/components/layout/area-page";
 import { LocalDisplayNameForm } from "@/components/settings/local-display-name-form";
@@ -21,9 +24,10 @@ export function SettingsPage() {
   return (
     <AreaPage areaId="settings">
       <SettingsSections />
+ {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <DistributionSettings key={principal.sessionId} principal={principal} />}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <Preferences key={JSON.stringify(queryKeys.notificationPreferences(principal))} principal={principal} />}
       {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <Link to="/configuracoes/canais">Caixas Meta</Link> : null}
-      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <Capacity principal={principal} />}
+      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <Capacity key={principal.sessionId} principal={principal} />}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <CannedSettings key={principal.membershipId} principal={principal} />}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <HoursSettings key={principal.membershipId} principal={principal} />}
       {principal && !principal.mfaEnrollmentRequired ? (
@@ -41,7 +45,9 @@ export function SettingsPage() {
 }
 
 function Capacity({ principal }: { principal: PanelPrincipal }) {
-  void principal;
+  const [inbox, setInbox] = useState("");
+ const boxes = useQuery({queryKey:["m5ops",principal.sessionId,"capacity-inboxes"],queryFn:({signal})=>listHoursInboxes(signal),retry:false});
+ const people = useQuery({queryKey:["m5ops",principal.sessionId,"capacity-directory",inbox],queryFn:({signal})=>directory(inbox,signal),enabled:!!inbox,retry:false});
   const [member, setMember] = useState("");
   const [limit, setLimit] = useState(20);
   const [message, setMessage] = useState("");
@@ -53,7 +59,9 @@ function Capacity({ principal }: { principal: PanelPrincipal }) {
     finally { setBusy(false); }
   }
   return <section aria-label="Capacidade de atendimento"><h2>Capacidade de atendimento</h2>
-    <label>Identificador do vínculo <input value={member} onChange={e => setMember(e.target.value)} /></label>
+    <label>Caixa dos atendentes <select value={inbox} onChange={e => { setInbox(e.target.value); setMember(""); }}><option value="">Selecione</option>{boxes.data?.inboxes?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+ <label>Atendente <select value={member} onChange={e => setMember(e.target.value)}><option value="">Selecione</option>{people.data?.map(p => <option key={p.membership_id} value={p.membership_id}>{p.label}</option>)}</select></label>
+ {(boxes.isError || people.isError) && <p role="alert">Não foi possível listar os atendentes autorizados.</p>}
     <label>Capacidade <input type="number" min={1} value={limit} onChange={e => setLimit(Number(e.target.value))} /></label>
     <button type="button" disabled={!member || !Number.isInteger(limit) || limit < 1 || busy} onClick={() => void save()}>Salvar capacidade</button>
     {message && <p role="status">{message}</p>}
