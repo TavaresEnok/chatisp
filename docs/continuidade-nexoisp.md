@@ -211,3 +211,7 @@ M4B (sem ffmpeg no host), gancho de bot externo, M6 (API pública, webhooks e
 contrato/fake do ERP), o resto do M7 (retenção, expurgo — continua desligado —,
 exportação e exclusão de contato, histórico de demandas, logo, limites de plano) e
 M8. Sem chamadas reais a Meta, ERP ou Evolution.
+
+## Mídia M4B, integrada em 03/11/2026
+
+Entrou o bloco M4B na `continuation/m5-runtime-panel`, por merge sem rebase de `continuation/m4b-media`: metadados de mídia e recusa da conversão quando não há ffmpeg (`1b13b13`) e o envio do blob original do MediaRecorder com id interno de resposta (`b4bfc60`). A conversão permanece recusada sem ffmpeg; o binário não foi instalado. Testes executados e aprovados: `go test -count=1 ./internal/media/...`, `go vet ./internal/media/...` e o Vitest de `message-composer.audio.test.tsx` (1 teste).
