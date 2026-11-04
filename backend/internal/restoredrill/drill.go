@@ -267,7 +267,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	if err := expectDumpRetained(dump); err != nil {
 		return Report{}, err
 	}
-	return succeed(dest, started, outcome{
+	report, err := succeed(dest, started, outcome{
 		attachmentRef:   true,
 		keyRef:          true,
 		content:         true,
@@ -278,6 +278,13 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		tablePresent:    present,
 		dumpRetained:    true,
 	})
+	if err != nil {
+		return Report{}, err
+	}
+	if err := writeRestoreMetric(dump, report.Duration); err != nil {
+		return Report{}, err
+	}
+	return report, nil
 }
 
 func succeed(dest string, started time.Time, got outcome) (Report, error) {

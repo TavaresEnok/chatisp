@@ -48,6 +48,14 @@ go run ./cmd/restoredrill -url '<dsn do superusuário descartável>' -dump "$DUM
 
 `-url` é o socket Unix do cluster descartável, no banco `postgres`, sem senha e sem porta. `-dump` é um diretório temporário vazio, fora de `/home/enok/srv_projetos/workspace/chat-isp`. O comando recusa destino que não seja descartável e não imprime relatório nesse caso. Não há modo que aponte para produção, para `CHATISP_DATABASE_URL` nem para um dump no checkout real.
 
+No mesmo diretório de `-dump`, o sucesso grava `metrics.prom` com uma série e sem rótulo:
+
+```
+chatisp_restore_drill_duration_seconds <segundos com três casas>
+```
+
+O arquivo não leva nome de banco, caminho, chave nem segredo. Não é RPO nem RTO. Falha do ensaio não grava esse arquivo.
+
 A saída padrão é um único JSON:
 
 - `banco`: nome do banco descartável que recebeu o restore

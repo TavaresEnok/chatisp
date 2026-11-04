@@ -43,6 +43,7 @@ import (
 	"chatisp/internal/platform/mail"
 	"chatisp/internal/platform/metrics"
 	"chatisp/internal/platform/migrate"
+	"chatisp/internal/platform/opsignals"
 	"chatisp/internal/platform/runtime"
 	"chatisp/internal/presence"
 	"chatisp/internal/realtime"
@@ -543,11 +544,18 @@ func bindProcessTelemetry(meter *metrics.Metrics, pools *db.Pools, jobsPool *pgx
 	if jobsPool == nil {
 		return nil
 	}
-	return []func(context.Context){
+	collectors := []func(context.Context){
 		func(ctx context.Context) {
 			jobs.CollectRiverBacklog(ctx, jobsPool, meter)
 		},
 	}
+	if pools != nil && pools.Platform != nil {
+		platform := pools.Platform
+		collectors = append(collectors, func(ctx context.Context) {
+			opsignals.Collect(ctx, platform, meter)
+		})
+	}
+	return collectors
 }
 
 func environValue(environ []string, key string) string {

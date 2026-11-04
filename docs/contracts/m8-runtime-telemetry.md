@@ -48,11 +48,9 @@ As séries HTTP, de build, de processo Go e de conector ERP já existentes conti
 
 ## O que este bloco não entrega
 
-- Uso de storage e duração de restauração.
-- Reservas concorrentes de envio ou de vaga.
-- Envios incertos.
-- Latência ou atraso de webhook.
-- Destino de alerta. O registro local em `docs/contracts/m8-ops-alerts.md` não consome estas séries.
+- Uso de storage, reservas, envios incertos e idade de webhook. Isso ficou para `docs/contracts/m8-ops-signals.md`, no mesmo registry, só no processo que também lê o River.
+- Duração de restauração. O ensaio grava `chatisp_restore_drill_duration_seconds` em `metrics.prom`, no diretório temporário do dump.
+- Destino de alerta. O registro local em `docs/contracts/m8-ops-alerts.md` não consome estas séries. O destino das séries é o `GET /metrics` privado.
 - Meta de carga, p95 ou capacidade de piloto. Nenhum número deste contrato é benchmark.
 
 M7, M8 e a homologação do piloto não ficam concluídos por estas séries existirem.
