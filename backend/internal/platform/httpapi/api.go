@@ -40,6 +40,7 @@ import (
 	mediaHTTP "chatisp/internal/media/httpapi"
 	"chatisp/internal/notifications"
 	notificationHTTP "chatisp/internal/notifications/httpapi"
+	"chatisp/internal/opsalert"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/logging"
@@ -260,6 +261,12 @@ func New(deps Dependencies) *API {
 	// Public read routes stay outside Huma so the committed OpenAPI document
 	// does not change in this block.
 	router.Mount("/api/public", publicapi.NewHandler(deps.Store))
+
+	opsalert.Mount(router, opsalert.Dependencies{
+		Auth:           deps.Auth,
+		DB:             deps.Store,
+		TrustedOrigins: deps.TrustedOrigins,
+	})
 
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		Write(w, http.StatusNotFound, "o caminho solicitado não existe")
