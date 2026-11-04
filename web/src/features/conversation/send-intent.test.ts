@@ -141,6 +141,26 @@ describe("intenção de envio", () => {
     expect(failed.notice).not.toBe(UNCERTAIN_FALLBACK);
   });
 
+  it("fixa a citação na intenção perdida ou incerta", () => {
+    const replyToMessageId = "11111111-1111-4111-8111-111111111111";
+    const submitted = reduceComposer(withDraft("oi"), {
+      type: "submit",
+      offline: false,
+      intentKey: "chave-1",
+      text: "oi",
+      replyToMessageId,
+    });
+    expect(submitted.pending).toEqual({ intentKey: "chave-1", text: "oi", replyToMessageId });
+    const lost = reduceComposer(submitted, { type: "result", intentKey: "chave-1", result: { outcome: "lost" } });
+    expect(lost.pending).toEqual({ intentKey: "chave-1", text: "oi", replyToMessageId });
+    const uncertain = reduceComposer(submitted, {
+      type: "result",
+      intentKey: "chave-1",
+      result: { outcome: "uncertain", detail: "O conector não confirmou." },
+    });
+    expect(uncertain.pending).toEqual({ intentKey: "chave-1", text: "oi", replyToMessageId });
+  });
+
   it("não confirma envio vazio, duplicado ou de outra chave", () => {
     const createKey = vi.fn(() => "chave-x");
     expect(selectClientRequestId(createComposerState(), "reuse-if-pending", createKey)).toBeNull();

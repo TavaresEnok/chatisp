@@ -19,6 +19,17 @@ export type LocalSendState =
 /** Recibo remoto. Não substitui o estado local. */
 export type DeliveryReceipt = "delivered" | "read";
 
+export type ReplyTarget = {
+  id: string;
+  preview: string;
+};
+
+export type MessageReactionView = {
+  emoji: string;
+  actor: string;
+  externalId: string;
+};
+
 export type TextTimelineEntry = {
   kind: "text";
   id: string;
@@ -27,6 +38,8 @@ export type TextTimelineEntry = {
   occurredAt?: string;
   localState?: LocalSendState;
   receipt?: DeliveryReceipt;
+  reactions?: readonly MessageReactionView[];
+  replyTo?: ReplyTarget;
 };
 
 export type EventTimelineEntry = {
@@ -45,21 +58,67 @@ export type UnsupportedTimelineEntry = {
   occurredAt?: string;
 };
 
+export type MediaTimelineEntry = {
+  kind: "media";
+  id: string;
+  author: string;
+  occurredAt?: string;
+  localState?: LocalSendState;
+  receipt?: DeliveryReceipt;
+  mediaKind:
+    | "image"
+    | "document"
+    | "audio"
+    | "voice"
+    | "video"
+    | "sticker"
+    | "location"
+    | "contacts"
+    | "interactive"
+    | "button";
+  caption: string;
+  filename: string;
+  mime: string;
+  voice: boolean;
+  latitude?: number;
+  longitude?: number;
+  locationName: string;
+  address: string;
+  contacts: { name: string; phones: string[]; emails: string[]; org: string; vcard: string }[];
+  interactiveType: string;
+  replyId: string;
+  title: string;
+  mediaStatus: string;
+  mediaError: string;
+  attachment?: { id: string; name: string; mediaType: string; state: string; bytes: number };
+  reactions?: readonly MessageReactionView[];
+  replyTo?: ReplyTarget;
+};
+
 export type TimelineEntry =
   | TextTimelineEntry
   | EventTimelineEntry
-  | UnsupportedTimelineEntry;
+  | UnsupportedTimelineEntry
+  | MediaTimelineEntry;
 
 export type TimelineViewStatus = "loading" | "error" | "ready";
 
 export type SendTextCommand = {
   intentKey: string;
   text: string;
+  replyToMessageId?: string;
+};
+
+export type SendMediaCommand = {
+  intentKey: string;
+  caption: string;
+  file: File;
+  replyToMessageId?: string;
 };
 
 export type SendTextResult =
   | { outcome: "accepted" }
-  | { outcome: "failed"; detail: string }
+  | { outcome: "failed"; detail: string; conflict?: boolean }
   | { outcome: "uncertain"; detail: string }
   | { outcome: "lost" };
 

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { needsServerConversion } from "@/features/media/model";
 
 export type AudioCapture = {
   blob: Blob;
@@ -9,6 +10,7 @@ export type AudioCapture = {
 };
 
 type Phase = "idle" | "recording" | "ready" | "sending";
+type ConversionState = "idle" | "sending" | "local" | "refused";
 
 const internalId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -27,6 +29,7 @@ export function AudioRecorder({
   onSend?: (capture: AudioCapture) => Promise<void> | void;
 }) {
   const [phase, setPhase] = useState<Phase>("idle");
+  const [conversion, setConversion] = useState<ConversionState>("idle");
   const [notice, setNotice] = useState("");
   const [reply, setReply] = useState("");
   const recorder = useRef<MediaRecorder | null>(null);
@@ -92,6 +95,12 @@ export function AudioRecorder({
       return;
     }
     setPhase("sending");
+    setConversion("sending");
+    setNotice(
+      needsServerConversion(original.type)
+        ? "Enviando o áudio original para conversão no servidor. O navegador não converte o arquivo."
+        : "Enviando o áudio original. O navegador não converte o arquivo.",
+    );
     try {
       await onSend({
         blob: original,
@@ -101,16 +110,18 @@ export function AudioRecorder({
       blob.current = null;
       setReply("");
       setPhase("idle");
+      setConversion("local");
       setNotice("Áudio original enviado. O navegador não converteu o arquivo.");
     } catch (error) {
       setPhase("ready");
+      setConversion("refused");
       setNotice(error instanceof Error && error.message ? error.message : "O envio do áudio original falhou.");
     }
   }
 
   const canRecord = !disabled && phase !== "recording" && phase !== "sending";
   return (
-    <div className="flex flex-col gap-2" aria-label="Gravação de áudio">
+    <div className="flex flex-col gap-2" aria-label="Gravação de áudio" data-conversion-state={conversion}>
       <div className="flex flex-wrap gap-2">
         {phase === "recording" ? (
           <Button type="button" variant="outline" className="h-11 w-fit px-3" onClick={stop}>
@@ -144,7 +155,7 @@ export function AudioRecorder({
         />
       </div>
       {notice ? (
-        <p role="status" className="text-sm text-foreground">
+        <p role={conversion === "refused" ? "alert" : "status"} className="text-sm text-foreground">
           {notice}
         </p>
       ) : null}

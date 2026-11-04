@@ -22,7 +22,8 @@ export function mediaBase(mediaType: string): string {
 export function previewKind(mediaType: string): PreviewKind {
   const type = mediaBase(mediaType);
   if (type.length === 0) return "unknown";
-  if (type.includes("svg") || type.includes("html") || type.includes("xml") || type.includes("javascript")) return "refused";
+  // XML de documento não é pré-visualizado. SVG, HTML e script continuam bloqueados.
+  if (type.includes("svg") || type.includes("html") || type.includes("javascript")) return "refused";
   if (type in PREVIEW) return PREVIEW[type as keyof typeof PREVIEW];
   return "unknown";
 }

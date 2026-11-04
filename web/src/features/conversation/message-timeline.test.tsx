@@ -6,6 +6,7 @@ import type {
   ConversationScope,
   DeliveryReceipt,
   LocalSendState,
+  MediaTimelineEntry,
   TextTimelineEntry,
   TimelineEntry,
 } from "@/features/conversation/types";
@@ -28,6 +29,30 @@ function textEntry(
     text,
     localState: options.localState,
     receipt: options.receipt,
+  };
+}
+
+function mediaEntry(id: string, localState: LocalSendState, caption: string, receipt?: DeliveryReceipt): MediaTimelineEntry {
+  return {
+    kind: "media",
+    id,
+    mediaKind: "image",
+    author: "Autora da fixture",
+    caption,
+    filename: "foto.jpg",
+    mime: "image/jpeg",
+    voice: false,
+    locationName: "",
+    address: "",
+    contacts: [],
+    interactiveType: "",
+    replyId: "",
+    title: "",
+    mediaStatus: "stored",
+    mediaError: "",
+    localState,
+    receipt,
+    attachment: { id: `${id}-file`, name: "foto.jpg", mediaType: "image/jpeg", state: "validated", bytes: 4 },
   };
 }
 
@@ -280,6 +305,37 @@ describe("linha do tempo", () => {
     rerender(<MessageTimeline scope={scope} protocol="protocolo-fixture" status="ready" entries={[]} />);
     expect(screen.getByText("Nenhuma mensagem nesta conversa.")).toBeInTheDocument();
     expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
+  });
+
+  it("mostra fila, falha, cancelamento e incerteza da mídia sem tratar o arquivo como entrega", () => {
+    restore = mockViewport();
+    render(
+      <MessageTimeline
+        scope={scope}
+        protocol="protocolo-fixture"
+        status="ready"
+        entries={[
+          mediaEntry("fila", "queued", "mídia na fila"),
+          mediaEntry("falha", "failed", "mídia com falha"),
+          mediaEntry("cancelada", "cancelled", "mídia cancelada"),
+          mediaEntry("incerta", "uncertain", "mídia incerta"),
+          mediaEntry("entregue", "accepted", "mídia entregue", "delivered"),
+        ]}
+      />,
+    );
+
+    const queued = screen.getByRole("listitem", { name: /mídia na fila/ });
+    expect(within(queued).getByText("Na fila local")).toHaveAttribute("data-local-state", "queued");
+    expect(within(queued).getAllByText("Imagem").length).toBeGreaterThan(0);
+    expect(within(queued).queryByText("Entregue ao destinatário")).not.toBeInTheDocument();
+
+    expect(within(screen.getByRole("listitem", { name: /mídia com falha/ })).getByText("Falha no envio")).toHaveAttribute("data-local-state", "failed");
+    expect(within(screen.getByRole("listitem", { name: /mídia cancelada/ })).getByText("Cancelada antes do envio")).toHaveAttribute("data-local-state", "cancelled");
+    expect(within(screen.getByRole("listitem", { name: /mídia incerta/ })).getByText("Envio não confirmado")).toHaveAttribute("data-local-state", "uncertain");
+
+    const delivered = screen.getByRole("listitem", { name: /mídia entregue/ });
+    expect(within(delivered).getByText("Aceita pelo conector")).toHaveAttribute("data-local-state", "accepted");
+    expect(within(delivered).getByText("Entregue ao destinatário")).toHaveAttribute("data-receipt", "delivered");
   });
 
   it("não arrasta a leitura antiga e volta ao fim pelo botão", async () => {
