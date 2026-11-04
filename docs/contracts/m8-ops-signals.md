@@ -4,7 +4,7 @@ Este bloco publica totais de baixa cardinalidade no mesmo registry privado de `d
 
 O coletor só sobe no processo que já tem pool de jobs e pool de plataforma. O modo `api`, sem pool de jobs, não publica estas séries. Ausência não significa zero. Dois processos com pool de jobs publicam o mesmo instantâneo do banco; não some os gauges entre processos.
 
-A leitura usa o papel `chatisp_platform`, com `app.access_scope=platform`, em transação somente leitura. A migração `00046_m8_ops_signals.sql` concede só colunas fechadas: estado, idade, fila e `expected_bytes`. Payload, telefone, credencial, origem remota, texto de erro e corpo continuam revogados. A consulta não devolve identificador de provedor.
+A leitura usa o papel `chatisp_platform`, com `app.access_scope=platform`, em transação somente leitura. A migração `00047_m8_ops_signals.sql` concede só colunas fechadas: estado, idade, fila e `expected_bytes`. Payload, telefone, credencial, origem remota, texto de erro e corpo continuam revogados. A consulta não devolve identificador de provedor.
 
 ## Consulta
 

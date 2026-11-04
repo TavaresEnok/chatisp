@@ -30,7 +30,7 @@ O ensaio de restore e o E2E do lote 2 não foram repetidos como prova nova, salv
 
 ## O que esta frente implementou
 
-- Séries operacionais no registry privado: incerteza de envio, reservas de envio e de trabalho, idade e contagem de webhook, soma de `expected_bytes` dos anexos validados e contagem de conectores. Contrato: `docs/contracts/m8-ops-signals.md`. Migração `00046_m8_ops_signals.sql`. O modo `api` não publica essas séries.
+- Séries operacionais no registry privado: incerteza de envio, reservas de envio e de trabalho, idade e contagem de webhook, soma de `expected_bytes` dos anexos validados e contagem de conectores. Contrato: `docs/contracts/m8-ops-signals.md`. Migração `00047_m8_ops_signals.sql` (na integração, depois da `00046_privacy_subject.sql`). O modo `api` não publica essas séries.
 - `metrics.prom` no diretório temporário do ensaio de restore, com a duração daquele exercício.
 - Guia com os comandos e as URLs conferidos no repositório: `docs/operacao.md`.
 - Revisão operacional reexecutável: `./scripts/ops-security-check.sh` e `docs/contracts/m8-seguranca-operacional.md`.
@@ -80,7 +80,7 @@ Só entram requisitos lidos no plano, na especificação, no código ou na evid�
 | 14-rls | implementado e verificado. `TestTenantIsolationAndCompositeForeignKey` e `TestPoliciesFailClosedWithoutTenantSetting` passaram nesta frente. |
 | 14-csrf | implementado e verificado. `TestPanelRejectsBadOriginCSRFAndRevokedSession` passou nesta frente. |
 | 14-logs | parcial com a lacuna específica: há `slog` JSON e redação de segredo em `backend/internal/platform/logging`; esta frente não provou que corpo de mensagem e CPF ficam de fora em todos os caminhos. |
-| 14-migracoes | implementado e verificado. Goose aplicou as migrações, inclusive `00046`, nos testes de sinais, de carga e de restore desta frente. |
+| 14-migracoes | implementado e verificado. Goose aplicou as migrações nos testes de sinais, de carga e de restore desta frente. Na árvore integrada o arquivo de sinais é `00047_m8_ops_signals.sql`; `00046` fica com a privacidade. |
 | 14-modos | parcial com a lacuna específica: `api`, `worker`, `migrate` e `all` existem; o ensaio subiu só `all`. |
 | 14-cache | não implementado. Não há Ristretto no módulo. |
 | 14-isolamento | parcial com a lacuna específica: RLS entre tenants foi reexecutado; cache por tenant não existe; anexo e fila não foram reexecutados aqui. |
@@ -131,7 +131,7 @@ Para autorizar k6 e um número de capacidade, escreva a resposta da D2-07 em `do
 - `load/perfil-sintetico-local.md`
 - `scripts/ops-security-check.sh`
 - `scripts/ops-load-local.sh`
-- `backend/db/migrations/00046_m8_ops_signals.sql`
+- `backend/db/migrations/00047_m8_ops_signals.sql`
 - `backend/internal/platform/opsignals/`
 - `backend/internal/platform/metrics/ops.go`
 - `backend/internal/platform/metrics/ops_test.go`
