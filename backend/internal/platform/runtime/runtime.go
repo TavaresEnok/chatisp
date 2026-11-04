@@ -20,12 +20,15 @@ import (
 	"chatisp/internal/channelpolicy"
 	"chatisp/internal/collision"
 	"chatisp/internal/contactdirectory"
+	"chatisp/internal/contactdocs"
 	"chatisp/internal/notifications"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/config"
+	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/httpapi"
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/metrics"
+	"chatisp/internal/presence"
 	"chatisp/internal/sectors"
 )
 
@@ -58,6 +61,9 @@ type Options struct {
 	ChannelPolicy   *channelpolicy.Service
 	Attachments     *attachments.Service
 	BusinessHours   businesshours.Service
+	Documents       contactdocs.Service
+	Presence        presence.Service
+	Store           *db.Store
 	JobsClient      Worker
 	Cleanup         func()
 	TrustedOrigins  []string
@@ -110,6 +116,9 @@ func Run(parent context.Context, opts Options) error {
 			ChannelPolicy:  opts.ChannelPolicy,
 			Attachments:    opts.Attachments,
 			BusinessHours:  opts.BusinessHours,
+			Documents:      opts.Documents,
+			Presence:       opts.Presence,
+			Store:          opts.Store,
 			TrustedOrigins: opts.TrustedOrigins,
 		})
 		httpServer = newServer(api.Handler, opts.Logger)

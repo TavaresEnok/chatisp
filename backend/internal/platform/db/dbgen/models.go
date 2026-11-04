@@ -215,6 +215,33 @@ type ContactConsent struct {
 	Sequence  *int64
 }
 
+type ContactDocument struct {
+	TenantID              uuid.UUID
+	ContactID             uuid.UUID
+	Kind                  *string
+	KeyVersion            *string
+	Ciphertext            []byte
+	DocumentHmac          []byte
+	Version               int64
+	UpdatedByMembershipID uuid.UUID
+	UpdatedAt             pgtype.Timestamptz
+}
+
+type ContactDocumentCommand struct {
+	TenantID     uuid.UUID
+	MembershipID uuid.UUID
+	RequestID    uuid.UUID
+	RequestHmac  []byte
+	Response     json.RawMessage
+}
+
+type ContactDocumentPepper struct {
+	TenantID   uuid.UUID
+	KeyVersion string
+	Ciphertext []byte
+	CreatedAt  pgtype.Timestamptz
+}
+
 type Conversation struct {
 	ID                       uuid.UUID
 	TenantID                 uuid.UUID
@@ -341,6 +368,26 @@ type DispatchPolicyDecision struct {
 	Kind           string
 	Purpose        string
 	TemplateID     string
+}
+
+type DistributionCursor struct {
+	TenantID         uuid.UUID
+	SectorID         uuid.UUID
+	LastMembershipID *uuid.UUID
+	Version          int64
+}
+
+type DistributionSectorAuto struct {
+	TenantID uuid.UUID
+	SectorID uuid.UUID
+	Enabled  bool
+	Version  int64
+}
+
+type DistributionSetting struct {
+	TenantID         uuid.UUID
+	WaitAlertSeconds int32
+	Version          int64
 }
 
 type IdempotencyRecord struct {
@@ -555,6 +602,39 @@ type PlatformAuditLog struct {
 	Result        string
 	CorrelationID *string
 	CreatedAt     pgtype.Timestamptz
+}
+
+type PresenceCommand struct {
+	TenantID     uuid.UUID
+	MembershipID uuid.UUID
+	RequestID    uuid.UUID
+	RequestHash  []byte
+	Response     json.RawMessage
+}
+
+type PresenceConnection struct {
+	TenantID     uuid.UUID
+	SessionID    uuid.UUID
+	TabID        uuid.UUID
+	UserID       uuid.UUID
+	MembershipID uuid.UUID
+	HeartbeatAt  pgtype.Timestamptz
+	ExpiresAt    pgtype.Timestamptz
+}
+
+type PresenceOperator struct {
+	TenantID          uuid.UUID
+	UserID            uuid.UUID
+	MembershipID      uuid.UUID
+	Manual            string
+	ExplicitOfflineAt pgtype.Timestamptz
+	Version           int64
+}
+
+type PresenceSetting struct {
+	TenantID                uuid.UUID
+	OfflineToleranceSeconds int32
+	Version                 int64
 }
 
 type ProtocolCounter struct {

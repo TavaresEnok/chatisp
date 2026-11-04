@@ -259,6 +259,10 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 			return err
 		}
 		defer stopM4A()
+	} else {
+		// M3B (and other non-M4A demo modes) still serve GET /api/panel/attendant-signature.
+		// A zero Service returns 503 and the composer aborts before send.
+		cannedSvc = cannedreplies.New(store)
 	}
 	inserts, err := jobs.New(nil, jobs.Handlers{})
 	if err != nil {
