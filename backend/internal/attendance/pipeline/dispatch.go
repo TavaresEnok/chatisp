@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
+	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -96,12 +99,16 @@ func (h *outboundHandler) DispatchOutbound(ctx context.Context, tenantID, attemp
 		messageBody    string
 		recipientPhone string
 		versionText    string
+		contentKind    string
+		contentContext []byte
+		replyProvider  string
 	)
 
 	err = h.dbStore.WithTenantTx(ctx, tenantID, func(ctx context.Context, tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT o.state, c.inbox_id, m.connector_id, m.body,
-			       ci.external_id, cc.version
+			       ci.external_id, cc.version, m.content_kind, m.content_context,
+			       COALESCE(cited.external_message_id, '')
 			FROM outbound_attempts o
 			JOIN conversations c
 			  ON c.tenant_id = o.tenant_id AND c.id = o.conversation_id
@@ -111,12 +118,14 @@ func (h *outboundHandler) DispatchOutbound(ctx context.Context, tenantID, attemp
 			  ON ci.tenant_id = c.tenant_id AND ci.id = c.contact_identity_id
 			JOIN channel_connectors cc
 			  ON cc.tenant_id = c.tenant_id AND cc.id = m.connector_id
+			LEFT JOIN messages cited
+			  ON cited.tenant_id = m.tenant_id AND cited.id = m.reply_to_message_id
 			WHERE o.tenant_id = $1
 			  AND o.tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
 			  AND o.id = $2
 		`, tenantID, attemptID).Scan(
 			&state, &inboxID, &connectorID, &messageBody,
-			&recipientPhone, &versionText,
+			&recipientPhone, &versionText, &contentKind, &contentContext, &replyProvider,
 		)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -485,6 +494,39 @@ func (h *outboundHandler) DispatchOutbound(ctx context.Context, tenantID, attemp
 				Language:      outboundLanguage,
 			})
 		}
+	} else if mediaReq, media := outboundMediaRequest(attemptID, connectorID, recipientPhone, messageBody, contentKind, contentContext, replyProvider); media {
+		sender, ok := driver.(whatsapp.MediaSender)
+		if !ok || mediaReq.AttachmentID == "" {
+			result = whatsapp.Result{
+				AttemptID:     whatsapp.AttemptID(attemptID.String()),
+				Local:         whatsapp.StateFailed,
+				RejectionCode: "midia_sem_contrato",
+				Detail:        "mídia sem contrato de envio",
+			}
+		} else if body, readErr := h.readOutboundMedia(callCtx, tenantID, mediaReq.AttachmentID, mediaReq.Kind); readErr != nil {
+			result = whatsapp.Result{
+				AttemptID:     whatsapp.AttemptID(attemptID.String()),
+				Local:         whatsapp.StateFailed,
+				RejectionCode: "midia_indisponivel",
+				Detail:        "mídia sem bytes para envio",
+			}
+		} else {
+			mediaReq.Body = body
+			var sendErr error
+			result, sendErr = sender.SendMedia(callCtx, mediaReq)
+			if sendErr != nil {
+				code, detail := "envio_recusado", "recusa local antes do despacho"
+				if strings.Contains(sendErr.Error(), "legenda") {
+					code, detail = "legenda_invalida", "legenda inválida"
+				}
+				result = whatsapp.Result{
+					AttemptID:     whatsapp.AttemptID(attemptID.String()),
+					Local:         whatsapp.StateFailed,
+					RejectionCode: code,
+					Detail:        detail,
+				}
+			}
+		}
 	} else {
 		result, _ = driver.SendText(callCtx, whatsapp.TextRequest{
 			AttemptID:     whatsapp.AttemptID(attemptID.String()),
@@ -618,4 +660,78 @@ func (h *outboundHandler) DispatchOutbound(ctx context.Context, tenantID, attemp
 		}
 		return nil
 	}
+}
+
+func outboundMediaRequest(attemptID, connectorID uuid.UUID, recipient, caption, contentKind string, raw []byte, replyProvider string) (whatsapp.MediaRequest, bool) {
+	switch contentKind {
+	case "image", "document", "audio", "video":
+	default:
+		return whatsapp.MediaRequest{}, false
+	}
+	var doc struct {
+		AttachmentID     string `json:"attachment_id"`
+		SendAttachmentID string `json:"send_attachment_id"`
+		MIME             string `json:"mime"`
+		FileName         string `json:"file_name"`
+	}
+	_ = json.Unmarshal(raw, &doc)
+	attachmentID := doc.SendAttachmentID
+	if attachmentID == "" {
+		attachmentID = doc.AttachmentID
+	}
+	mime := doc.MIME
+	if contentKind == "audio" && (mime == "application/ogg" || mime == "video/ogg") {
+		mime = "audio/ogg"
+	}
+	return whatsapp.MediaRequest{
+		AttemptID:         whatsapp.AttemptID(attemptID.String()),
+		ConnectionID:      whatsapp.ConnectionID(connectorID.String()),
+		ConnectorType:     whatsapp.ConnectorMetaCloud,
+		RecipientID:       whatsapp.RecipientID(recipient),
+		CallbackData:      attemptID.String(),
+		Kind:              whatsapp.MediaKind(contentKind),
+		AttachmentID:      attachmentID,
+		Caption:           caption,
+		ReplyToProviderID: replyProvider,
+		MIME:              mime,
+		FileName:          doc.FileName,
+	}, true
+}
+
+// readOutboundMedia loads the validated object when storage is configured.
+// A nil store leaves the body empty: the simulation driver accepts that, and
+// the official driver fails closed without calling Graph.
+func (h *outboundHandler) readOutboundMedia(ctx context.Context, tenantID uuid.UUID, attachmentID string, kind whatsapp.MediaKind) ([]byte, error) {
+	if h.attendance.Files == nil {
+		return nil, nil
+	}
+	id, err := uuid.Parse(attachmentID)
+	if err != nil {
+		return nil, err
+	}
+	var key, version string
+	err = h.dbStore.WithTenantTx(ctx, tenantID, func(ctx context.Context, tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT object_key, object_version
+			  FROM attachments
+			 WHERE tenant_id = $1 AND id = $2 AND state = 'validated' AND direction = 'outgoing'`,
+			tenantID, id).Scan(&key, &version)
+	})
+	if err != nil {
+		return nil, err
+	}
+	reader, err := h.attendance.Files.Read(ctx, key, version)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	limit := 16 << 20
+	if kind == whatsapp.MediaDocument {
+		limit = 100 << 20
+	}
+	body, err := io.ReadAll(io.LimitReader(reader, int64(limit)+1))
+	if err != nil || len(body) == 0 || len(body) > limit {
+		return nil, errors.New("mídia sem bytes para envio")
+	}
+	return body, nil
 }

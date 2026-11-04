@@ -33,9 +33,11 @@ type versionBody struct {
 	ExpectedVersion int64 `json:"expected_version"`
 }
 type sendBody struct {
-	ExpectedVersion int64  `json:"expected_version"`
-	ClientRequestID string `json:"client_request_id"`
-	Body            string `json:"body"`
+	ExpectedVersion  int64      `json:"expected_version"`
+	ClientRequestID  string     `json:"client_request_id"`
+	Body             string     `json:"body"`
+	AttachmentID     *uuid.UUID `json:"attachment_id,omitempty"`
+	ReplyToMessageID *uuid.UUID `json:"reply_to_message_id,omitempty"`
 }
 type templateBody struct {
 	ExpectedVersion int64  `json:"expected_version"`

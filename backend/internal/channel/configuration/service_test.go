@@ -614,8 +614,8 @@ func TestPrivilegesQuarantineAndDiscarded(t *testing.T) {
 
 	// Migration 00035 grants chatisp_platform the counting columns only
 	// (messages.tenant_id/ingested_at, conversations.tenant_id/status).
-	// PostgreSQL allows count(*) with any column privilege, so the denial
-	// checked here is the content those grants explicitly leave revoked.
+	// PostgreSQL allows count(*) with any column privilege, so platform
+	// count(*) stays allowed. Ungranted columns still fail with SQLSTATE 42501.
 	assertDenied(t, execDenied(testPools.Platform, ctx, `SELECT body FROM messages`))
 	assertDenied(t, execDenied(testPools.Platform, ctx, `SELECT contact_id FROM conversations`))
 	assertDenied(t, execDenied(testPools.Platform, ctx, `SELECT ciphertext FROM credential_secrets`))

@@ -21,7 +21,8 @@ import (
 
 // Service orchestrates attendance commands. Repo is stateless.
 // Files and AttachmentLimits are the one private attachment store shared by
-// the panel API and the workers. The process assigns both after New.
+// the panel API and the workers. The runtime must set both after New and
+// before copying this value into the API or the workers.
 type Service struct {
 	DB               *db.Store
 	Repo             store.Repo

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -165,6 +166,201 @@ func (s *Service) transcode(ctx context.Context, original []byte) ([]byte, error
 	if e != nil {
 		return nil, ErrFFmpegMissing
 	}
+	run := s.RunFFmpeg
+	if run == nil {
+		run = defaultRun
+	}
+	return runLocalTranscode(ctx, bin, run, original)
+}
+
+// LookBinary resolves the local ffmpeg. A missing binary is the same refusal
+// the convert endpoint already stores.
+func LookBinary() (string, error) {
+	path, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		return "", ErrFFmpegMissing
+	}
+	return path, nil
+}
+
+// TranscodeRecorded converts one recorded webm/ogg to OGG/Opus.
+// A declared duration above 120s, or a size above the limit, is refused before
+// the binary is resolved. A declaration inside the limit is not trusted: OGG
+// and WebM are measured with a local ffmpeg decode even when Duration is
+// present, and a decoded length above 120s is refused before the output is
+// accepted. Truncated output is not success. A small file without the binary
+// returns ErrFFmpegMissing and the caller keeps the original bytes.
+func TranscodeRecorded(ctx context.Context, mime string, original []byte) ([]byte, error) {
+	if err := recordedWithinLimits(mime, original); err != nil {
+		return nil, err
+	}
+	_, hasDeclared := ContainerDuration(mime, original)
+	bin, err := LookBinary()
+	if err != nil {
+		return nil, err
+	}
+	measure := hasDeclared || needsEffectiveDuration(mime)
+	var inputMS int64
+	if measure {
+		inputMS, err = probeBytesDuration(ctx, bin, original)
+		if err != nil || inputMS <= 0 || inputMS > convertDuration.Milliseconds() {
+			return nil, ErrConvert
+		}
+	}
+	produced, err := runLocalTranscode(ctx, bin, defaultRun, original)
+	if err != nil {
+		return nil, err
+	}
+	if measure {
+		outMS, err := probeBytesDuration(ctx, bin, produced)
+		if err != nil || outMS <= 0 {
+			return nil, ErrConvert
+		}
+		if inputMS > 0 && inputMS-outMS > 2000 {
+			return nil, ErrConvert
+		}
+		if outMS > convertDuration.Milliseconds()+2000 {
+			return nil, ErrConvert
+		}
+	}
+	return produced, nil
+}
+
+func needsEffectiveDuration(mime string) bool {
+	switch strings.ToLower(mime) {
+	case "audio/webm", "video/webm", "audio/ogg", "application/ogg", "video/ogg":
+		return true
+	default:
+		return false
+	}
+}
+
+func probeBytesDuration(ctx context.Context, bin string, body []byte) (int64, error) {
+	dir, err := os.MkdirTemp(os.TempDir(), "chatisp-media-")
+	if err != nil {
+		return 0, ErrConvert
+	}
+	defer os.RemoveAll(dir)
+	in := filepath.Join(dir, "entrada.bin")
+	if err = os.WriteFile(in, body, 0o600); err != nil {
+		return 0, ErrConvert
+	}
+	args, err := probeFFmpegArgs(in)
+	if err != nil {
+		return 0, err
+	}
+	cctx, cancel := context.WithTimeout(ctx, convertTimeout)
+	defer cancel()
+	log, runErr := probeRun(cctx, bin, args)
+	ms, ok := ParseProbeDuration(log)
+	if !ok || ms <= 0 {
+		return 0, ErrConvert
+	}
+	if runErr != nil && cctx.Err() != nil {
+		return 0, ErrConvert
+	}
+	return ms, nil
+}
+
+func probeFFmpegArgs(in string) ([]string, error) {
+	if strings.Contains(in, "://") {
+		return nil, ErrInvalid
+	}
+	inAbs, err := filepath.Abs(in)
+	if err != nil {
+		return nil, ErrInvalid
+	}
+	sink := filepath.Join(filepath.Dir(inAbs), "nulo")
+	return []string{
+		"-hide_banner", "-nostdin",
+		"-protocol_whitelist", "file,crypto",
+		"-i", inAbs,
+		"-f", "null", sink,
+	}, nil
+}
+
+var probeClock = regexp.MustCompile(`(?:Duration: |time=)(\d+):(\d{2}):(\d{2})\.(\d+)`)
+
+// ParseProbeDuration reads the longest clock ffmpeg printed. Duration: N/A is
+// ignored. The value is milliseconds.
+func ParseProbeDuration(log string) (int64, bool) {
+	var best int64
+	found := false
+	for _, match := range probeClock.FindAllStringSubmatch(log, -1) {
+		ms, ok := clockMillis(match[1], match[2], match[3], match[4])
+		if !ok {
+			continue
+		}
+		if !found || ms > best {
+			best = ms
+			found = true
+		}
+	}
+	return best, found
+}
+
+func clockMillis(hour, minute, second, frac string) (int64, bool) {
+	h, err1 := strconv.ParseInt(hour, 10, 64)
+	m, err2 := strconv.ParseInt(minute, 10, 64)
+	s, err3 := strconv.ParseInt(second, 10, 64)
+	if err1 != nil || err2 != nil || err3 != nil || h < 0 || m < 0 || m > 59 || s < 0 || s > 59 {
+		return 0, false
+	}
+	if len(frac) > 3 {
+		frac = frac[:3]
+	}
+	for len(frac) < 3 {
+		frac += "0"
+	}
+	ms, err := strconv.ParseInt(frac, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return ((h*60+m)*60+s)*1000 + ms, true
+}
+
+func probeRun(ctx context.Context, bin string, args []string) (string, error) {
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.Stdin = nil
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "TMPDIR=" + os.TempDir()}
+	var stderr bytes.Buffer
+	cmd.Stdout = io.Discard
+	cmd.Stderr = &limitedBuffer{buf: &stderr, max: 1 << 20}
+	err := cmd.Run()
+	return stderr.String(), err
+}
+
+type limitedBuffer struct {
+	buf *bytes.Buffer
+	max int
+}
+
+func (w *limitedBuffer) Write(p []byte) (int, error) {
+	room := w.max - w.buf.Len()
+	if room > 0 {
+		if len(p) > room {
+			_, _ = w.buf.Write(p[:room])
+		} else {
+			_, _ = w.buf.Write(p)
+		}
+	}
+	return len(p), nil
+}
+
+func recordedWithinLimits(mime string, original []byte) error {
+	if len(original) == 0 || len(original) > convertOutput {
+		return ErrConvert
+	}
+	if ms, ok := ContainerDuration(mime, original); ok && ms > convertDuration.Milliseconds() {
+		return ErrConvert
+	}
+	return nil
+}
+
+func runLocalTranscode(ctx context.Context, bin string, run func(context.Context, string, []string) error, original []byte) ([]byte, error) {
+	if len(original) == 0 || len(original) > convertOutput {
+		return nil, ErrConvert
+	}
 	dir, e := os.MkdirTemp(os.TempDir(), "chatisp-media-")
 	if e != nil {
 		return nil, ErrConvert
@@ -178,10 +374,6 @@ func (s *Service) transcode(ctx context.Context, original []byte) ([]byte, error
 	args, e := localFFmpegArgs(in, out)
 	if e != nil {
 		return nil, e
-	}
-	run := s.RunFFmpeg
-	if run == nil {
-		run = defaultRun
 	}
 	cctx, cancel := context.WithTimeout(ctx, convertTimeout)
 	defer cancel()

@@ -3,8 +3,11 @@ package attachments
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
+	"strings"
 	"time"
 
 	"chatisp/internal/platform/auth"
@@ -152,6 +155,104 @@ func (s *Service) Register(ctx context.Context, p auth.Principal, inbox, conv uu
 		return e
 	})
 	return out, e
+}
+
+// PublishReserved stores an already produced outgoing object and reserves its
+// bytes in the same transaction as Register. The caller has already authorized
+// the conversation. On failure after the object is written, the object is
+// deleted and the transaction must roll the row back. A later ReleaseReserved
+// subtracts the same expected_bytes.
+func (s *Service) PublishReserved(ctx context.Context, tx pgx.Tx, tenant, conv uuid.UUID, name, mediaType string, body []byte, expires time.Time) (uuid.UUID, string, string, error) {
+	if s == nil || s.DB == nil || tx == nil || tenant == uuid.Nil || conv == uuid.Nil || expires.IsZero() {
+		return uuid.Nil, "", "", ErrInvalid
+	}
+	if !storageReady(s.Storage) || s.Limits == nil {
+		if s.Limits == nil && storageReady(s.Storage) {
+			return uuid.Nil, "", "", ErrLimit
+		}
+		return uuid.Nil, "", "", ErrStorage
+	}
+	safe, err := safeName(name)
+	if err != nil || !validMediaType(mediaType) || len(body) == 0 || int64(len(body)) > MaxFileBytes {
+		return uuid.Nil, "", "", ErrInvalid
+	}
+	limits, err := s.Limits(ctx, tx, tenant)
+	if err != nil {
+		return uuid.Nil, "", "", err
+	}
+	size := int64(len(body))
+	if limits.PlanBytes <= 0 || limits.IncomingReserveBytes < 0 || limits.FileBytes <= 0 || limits.FileBytes > MaxFileBytes || size > limits.FileBytes || limits.PlanBytes >= 1<<62 {
+		return uuid.Nil, "", "", ErrLimit
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO attachment_budgets(tenant_id,namespace) VALUES($1,$2) ON CONFLICT DO NOTHING`, tenant, uuid.New()); err != nil {
+		return uuid.Nil, "", "", err
+	}
+	var namespace uuid.UUID
+	var used int64
+	if err = tx.QueryRow(ctx, `SELECT namespace,reserved_bytes FROM attachment_budgets WHERE tenant_id=$1 FOR UPDATE`, tenant).Scan(&namespace, &used); err != nil {
+		return uuid.Nil, "", "", err
+	}
+	if size > limits.PlanBytes || used > limits.PlanBytes-size {
+		return uuid.Nil, "", "", ErrLimit
+	}
+	id := uuid.New()
+	key := namespace.String() + "/" + uuid.NewString()
+	version, err := s.Storage.Create(ctx, key, bytes.NewReader(body), size)
+	if err != nil || version == "" || version == "null" {
+		return uuid.Nil, "", "", ErrStorage
+	}
+	sum := sha256.Sum256(body)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO attachments(
+			tenant_id,id,conversation_id,request_id,direction,name,expected_bytes,
+			object_key,object_version,state,media_type,sha256,expires_at
+		) VALUES ($1,$2,$3,$4,'outgoing',$5,$6,$7,$8,'validated',$9,$10,$11)`,
+		tenant, id, conv, uuid.New(), safe, size, key, version, mediaType, hex.EncodeToString(sum[:]), expires.UTC())
+	if err != nil {
+		_ = s.Storage.Delete(ctx, key, version)
+		return uuid.Nil, "", "", err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE attachment_budgets SET reserved_bytes=reserved_bytes+$2 WHERE tenant_id=$1`, tenant, size); err != nil {
+		_ = s.Storage.Delete(ctx, key, version)
+		return uuid.Nil, "", "", err
+	}
+	return id, key, version, nil
+}
+
+// ReleaseReserved removes one attachment and returns its reserved bytes.
+// The budget row is locked before the attachment, matching Cleanup.
+func (s *Service) ReleaseReserved(ctx context.Context, tx pgx.Tx, tenant, id uuid.UUID) error {
+	if s == nil || tx == nil || tenant == uuid.Nil || id == uuid.Nil || !storageReady(s.Storage) {
+		return ErrStorage
+	}
+	if _, err := tx.Exec(ctx, `SELECT tenant_id FROM attachment_budgets WHERE tenant_id=$1 FOR UPDATE`, tenant); err != nil {
+		return err
+	}
+	var key, version string
+	var size int64
+	err := tx.QueryRow(ctx, `
+		SELECT object_key, object_version, expected_bytes
+		  FROM attachments
+		 WHERE tenant_id=$1 AND id=$2
+		 FOR UPDATE`, tenant, id).Scan(&key, &version, &size)
+	if err != nil {
+		return err
+	}
+	if err = s.Storage.Delete(ctx, key, version); err != nil {
+		return ErrStorage
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM attachments WHERE tenant_id=$1 AND id=$2`, tenant, id); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `UPDATE attachment_budgets SET reserved_bytes=reserved_bytes-$2 WHERE tenant_id=$1`, tenant, size)
+	return err
+}
+
+func validMediaType(value string) bool {
+	if value == "" || len(value) > 128 || strings.ContainsAny(value, " \r\n\x00") {
+		return false
+	}
+	return true
 }
 
 // Upload writes once to a server-generated key. Clients never receive PUT URLs.

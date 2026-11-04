@@ -35,13 +35,17 @@ const FakeDriverName = "simulation"
 // InternalAcceptID is set when the simulation accepted the send, including
 // when that id was withheld because the response was lost.
 type Capture struct {
-	Request          TextRequest
-	TemplateID       string
-	Language         string
-	Dispatched       bool
-	ResponseLost     bool
-	InternalAcceptID string
-	Result           Result
+	Request           TextRequest
+	TemplateID        string
+	Language          string
+	MediaKind         string
+	AttachmentID      string
+	ReplyToProviderID string
+	Caption           string
+	Dispatched        bool
+	ResponseLost      bool
+	InternalAcceptID  string
+	Result            Result
 }
 
 // Fake is an in-memory text driver for tests and named simulations.
@@ -72,9 +76,9 @@ func (f *Fake) Simulation() bool {
 	return true
 }
 
-// Capabilities reports text only. Every other feature is explicitly false.
+// Capabilities reports text and media. Templates stay an explicit gap.
 func (f *Fake) Capabilities() Capabilities {
-	return Capabilities{Text: true}
+	return Capabilities{Text: true, Media: true}
 }
 
 // SetMode changes how the next dispatched attempt is classified.
@@ -213,6 +217,38 @@ func (f *Fake) SendTemplate(ctx context.Context, req TemplateRequest) (Result, e
 	return result, nil
 }
 
+// SendMedia classifies a simulated media outcome. It does not open a
+// connection and does not call Graph. The capture keeps the media class,
+// the internal attachment id and the cited remote id apart from the caption.
+func (f *Fake) SendMedia(ctx context.Context, req MediaRequest) (Result, error) {
+	if err := ValidateMedia(req); err != nil {
+		return Result{}, err
+	}
+	text := req.Caption
+	if strings.TrimSpace(text) == "" {
+		text = req.AttachmentID
+	}
+	result, err := f.SendText(ctx, TextRequest{
+		AttemptID: req.AttemptID, ConnectionID: req.ConnectionID, ConnectorType: req.ConnectorType,
+		RecipientID: req.RecipientID, CallbackData: req.CallbackData, Text: text,
+	})
+	if err != nil || f == nil {
+		return result, err
+	}
+	f.mu.Lock()
+	if n := len(f.captures); n > 0 {
+		last := &f.captures[n-1]
+		if last.Request.AttemptID == req.AttemptID && last.MediaKind == "" {
+			last.MediaKind = string(req.Kind)
+			last.AttachmentID = req.AttachmentID
+			last.ReplyToProviderID = req.ReplyToProviderID
+			last.Caption = req.Caption
+		}
+	}
+	f.mu.Unlock()
+	return result, nil
+}
+
 func (f *Fake) dispatchLocked(req TextRequest) Result {
 	f.seq++
 	seq := f.seq
@@ -298,3 +334,4 @@ func (f *Fake) wakeLocked() {
 
 var _ TextDriver = (*Fake)(nil)
 var _ TemplateSender = (*Fake)(nil)
+var _ MediaSender = (*Fake)(nil)
