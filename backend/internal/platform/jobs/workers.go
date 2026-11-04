@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/riverqueue/river"
@@ -102,6 +103,10 @@ func (OutboundArgs) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{Queue: QueueOutbound, Priority: priorityOutbound, MaxAttempts: MaxAttempts, Metadata: []byte(metadataVersion)}
 }
 
+func (WebhookArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{Queue: QueueWebhooks, MaxAttempts: MaxAttempts, Metadata: []byte(metadataVersion)}
+}
+
 // AutomationArgs carries no customer data. Tenant enumeration uses platform metadata.
 type AutomationArgs struct {
 	V int `json:"v"`
@@ -115,6 +120,40 @@ func (AutomationArgs) InsertOpts() river.InsertOpts {
 type automationWorker struct {
 	river.WorkerDefaults[AutomationArgs]
 	handler AutomationHandler
+}
+
+// webhookTimeout matches the River default used when webhooks had their own
+// client. One attempt posts for at most 20s and a source may have several
+// subscriptions, so the shared client budget of 30s is too small.
+const webhookTimeout = time.Minute
+
+type webhookWorker struct {
+	river.WorkerDefaults[WebhookArgs]
+	handler WebhookHandler
+}
+
+func (w *webhookWorker) Timeout(*river.Job[WebhookArgs]) time.Duration { return webhookTimeout }
+
+func (w *webhookWorker) Work(ctx context.Context, job *river.Job[WebhookArgs]) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := job.Args.validate(); err != nil || !metadataOK(job.Metadata) {
+		return river.JobCancel(errInvalidArgs)
+	}
+	if w.handler == nil {
+		return errHandlerMissing
+	}
+	err := w.handler.DeliverWebhook(ctx, job.Args.TenantID, job.Args.EventType, job.Args.SourceID)
+	var retry RetryAfterError
+	if errors.As(err, &retry) {
+		wait := retry.After
+		if wait < time.Second {
+			wait = time.Second
+		}
+		return river.JobSnooze(wait)
+	}
+	return err
 }
 
 func (w *automationWorker) Work(ctx context.Context, job *river.Job[AutomationArgs]) error {

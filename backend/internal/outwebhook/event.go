@@ -36,12 +36,13 @@ type LocalMessage struct {
 
 // Envelope is the signed JSON body. Attempt count stays out of it.
 type Envelope struct {
-	EventID    string `json:"event_id"`
-	Type       string `json:"type"`
-	TenantID   string `json:"tenant_id"`
-	SourceID   string `json:"source_id"`
-	OccurredAt string `json:"occurred_at"`
-	Replay     string `json:"replay"`
+	EventID        string `json:"event_id"`
+	Type           string `json:"type"`
+	TenantID       string `json:"tenant_id"`
+	SourceID       string `json:"source_id"`
+	ConversationID string `json:"conversation_id"`
+	OccurredAt     string `json:"occurred_at"`
+	Replay         string `json:"replay"`
 }
 
 // Subscription is one outbound endpoint of a tenant.
@@ -67,6 +68,8 @@ type Delivery struct {
 	NextAt         time.Time
 	OccurredAt     time.Time
 	LastStatus     int
+	// Claim is the lease held while this process posts. It is not part of the body.
+	Claim uuid.UUID
 }
 
 // AcceptLocal records a message before any webhook attempt.
@@ -97,11 +100,13 @@ func StableID(tenant, subscription uuid.UUID, eventType string, source uuid.UUID
 }
 
 // Enqueue builds the immutable body for a source. The message text is not included.
-func Enqueue(sub Subscription, eventType string, source uuid.UUID, occurred time.Time) (Delivery, error) {
+// source identifies one occurrence. conversation stays in the envelope when
+// source is an assignment or a close rather than the conversation row.
+func Enqueue(sub Subscription, eventType string, source, conversation uuid.UUID, occurred time.Time) (Delivery, error) {
 	if !sub.Enabled {
 		return Delivery{}, ErrDisabled
 	}
-	if !sub.Events[eventType] {
+	if !sub.Events[eventType] || conversation == uuid.Nil {
 		return Delivery{}, ErrEvent
 	}
 	if occurred.IsZero() {
@@ -112,12 +117,13 @@ func Enqueue(sub Subscription, eventType string, source uuid.UUID, occurred time
 		return Delivery{}, err
 	}
 	body, err := json.Marshal(Envelope{
-		EventID:    id.String(),
-		Type:       eventType,
-		TenantID:   sub.TenantID.String(),
-		SourceID:   source.String(),
-		OccurredAt: occurred.UTC().Truncate(time.Second).Format(time.RFC3339),
-		Replay:     ReplayGuidance,
+		EventID:        id.String(),
+		Type:           eventType,
+		TenantID:       sub.TenantID.String(),
+		SourceID:       source.String(),
+		ConversationID: conversation.String(),
+		OccurredAt:     occurred.UTC().Truncate(time.Second).Format(time.RFC3339),
+		Replay:         ReplayGuidance,
 	})
 	if err != nil {
 		return Delivery{}, ErrEvent

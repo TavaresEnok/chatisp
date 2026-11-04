@@ -33,6 +33,7 @@ import (
 	"chatisp/internal/embed"
 	"chatisp/internal/lifecycle"
 	"chatisp/internal/notifications"
+	"chatisp/internal/outwebhook"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/config"
 	"chatisp/internal/platform/db"
@@ -407,6 +408,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 			return runtimeServices{}, fmt.Errorf("falha ao registrar handlers de workers: %w", err)
 		}
 		handlers.Inbound = arrivalInbound{next: handlers.Inbound, store: store, log: log}
+		handlers.Webhook = outwebhook.JobsHandler{Deps: outwebhook.Deps{Store: store, Ring: cfg.KeyRing, Mode: cfg.Env}}
 		workerClient, err = jobs.New(workerPool, handlers, jobs.WithLogger(log))
 		if err != nil {
 			cleanupAll()

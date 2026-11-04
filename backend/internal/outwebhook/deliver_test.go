@@ -61,7 +61,7 @@ func TestRetryKeepsIDAndDoesNotDropTheMessage(t *testing.T) {
 		Events: map[string]bool{EventMessageCreated: true},
 	}
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
-	delivery, err := Enqueue(sub, EventMessageCreated, msg.ID, now)
+	delivery, err := Enqueue(sub, EventMessageCreated, msg.ID, msg.ID, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestFakeReceiverRejectsReplay(t *testing.T) {
 	}
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	source := uuid.New()
-	delivery, err := Enqueue(sub, EventConversationCreated, source, now)
+	delivery, err := Enqueue(sub, EventConversationCreated, source, source, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,11 +170,11 @@ func TestFakeReceiverRejectsReplay(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized || bad.Applied() != 0 {
 		t.Fatalf("assinatura: %d applied=%d", rec.Code, bad.Applied())
 	}
-	assigned, err := Enqueue(sub, EventConversationAssigned, source, now)
+	assigned, err := Enqueue(sub, EventConversationAssigned, source, source, now)
 	if err != nil || assigned.ID == delivery.ID {
 		t.Fatal("atribuição deveria ser outro evento")
 	}
-	closed, err := Enqueue(sub, EventConversationClosed, source, now)
+	closed, err := Enqueue(sub, EventConversationClosed, source, source, now)
 	if err != nil || closed.ID == delivery.ID || closed.ID == assigned.ID {
 		t.Fatal("encerramento deveria ser outro evento")
 	}

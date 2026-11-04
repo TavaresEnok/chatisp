@@ -25,6 +25,7 @@ const (
 	workersIngress  = 2
 	workersInbound  = 4
 	workersOutbound = 2
+	workersWebhooks = 2
 )
 
 // Option adjusts a client. Production defaults already bound retries, job time
@@ -41,12 +42,19 @@ type settings struct {
 	testOnly   bool
 	leaseWait  time.Duration
 	discardFor time.Duration
+	clientID   string
 }
 
 // WithLogger sets the process logger. Argument, metadata and error values are
 // omitted before they reach it.
 func WithLogger(logger *slog.Logger) Option {
 	return func(s *settings) { s.logger = logger }
+}
+
+// WithClientID pins the River client id used for leader election. Tests use it
+// to tell which process rescued jobs. Production leaves the id empty.
+func WithClientID(id string) Option {
+	return func(s *settings) { s.clientID = id }
 }
 
 // WithTestTiming shortens fetch and retry delays. It is for the package tests.
@@ -98,7 +106,12 @@ func New(pool *pgxpool.Pool, handlers Handlers, opts ...Option) (*Client, error)
 		lease:   handlers.Lease,
 		wait:    cfg.leaseWait,
 	})
+	// The kind is registered even when delivery is not wired. This River version
+	// rescues every running job in the schema and discards a kind missing from
+	// the leader. Periodic lifecycle stays on this same client.
+	river.AddWorker(workers, &webhookWorker{handler: handlers.Webhook})
 	riverCfg := &river.Config{
+		ID:                          cfg.clientID,
 		Schema:                      SchemaName,
 		Workers:                     workers,
 		Logger:                      newLogger(cfg.logger),
@@ -118,8 +131,13 @@ func New(pool *pgxpool.Pool, handlers Handlers, opts ...Option) (*Client, error)
 			QueueOutbound: {MaxWorkers: workersOutbound},
 			"scheduled":   {MaxWorkers: 1},
 		}
+		if handlers.Webhook != nil {
+			riverCfg.Queues[QueueWebhooks] = river.QueueConfig{MaxWorkers: workersWebhooks}
+		}
 		if handlers.Automation != nil {
-			riverCfg.PeriodicJobs = []*river.PeriodicJob{river.NewPeriodicJob(river.PeriodicInterval(10*time.Second), func() (river.JobArgs, *river.InsertOpts) { return AutomationArgs{V: SchemaVersion}, nil }, &river.PeriodicJobOpts{ID: "lifecycle", RunOnStart: true})}
+			riverCfg.PeriodicJobs = []*river.PeriodicJob{river.NewPeriodicJob(river.PeriodicInterval(10*time.Second), func() (river.JobArgs, *river.InsertOpts) {
+				return AutomationArgs{V: SchemaVersion}, &river.InsertOpts{Metadata: []byte(metadataVersion)}
+			}, &river.PeriodicJobOpts{ID: "lifecycle", RunOnStart: true})}
 		}
 		if cfg.poll > 0 {
 			riverCfg.FetchCooldown = cfg.cooldown
