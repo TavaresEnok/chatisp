@@ -21,6 +21,8 @@ import (
 	attendanceHttpAPI "chatisp/internal/attendance/httpapi"
 	attendanceService "chatisp/internal/attendance/service"
 	"chatisp/internal/auditview"
+	"chatisp/internal/bothook"
+	bothookHTTP "chatisp/internal/bothook/httpapi"
 	"chatisp/internal/businesshours"
 	businessHoursHTTP "chatisp/internal/businesshours/httpapi"
 	"chatisp/internal/cannedreplies"
@@ -85,6 +87,7 @@ type Dependencies struct {
 	Lifecycle      lifecycle.Service
 	Triage         triage.Service
 	Embed          embed.Service
+	BotHook        bothook.Service
 	// Store is the application database used by distribution. Nil answers 503.
 	Store *db.Store
 }
@@ -267,6 +270,7 @@ func New(deps Dependencies) *API {
 		DB:             deps.Store,
 		TrustedOrigins: deps.TrustedOrigins,
 	})
+	bothookHTTP.Mount(router, bothookHTTP.Dependencies{Auth: deps.Auth, Hooks: deps.BotHook, TrustedOrigins: deps.TrustedOrigins})
 
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		Write(w, http.StatusNotFound, "o caminho solicitado não existe")

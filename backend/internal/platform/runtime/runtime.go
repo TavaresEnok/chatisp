@@ -14,6 +14,7 @@ import (
 
 	"chatisp/internal/attachments"
 	attendanceService "chatisp/internal/attendance/service"
+	"chatisp/internal/bothook"
 	"chatisp/internal/businesshours"
 	"chatisp/internal/cannedreplies"
 	channelConfig "chatisp/internal/channel/configuration"
@@ -127,6 +128,7 @@ func Run(parent context.Context, opts Options) error {
 			Lifecycle:      opts.Lifecycle,
 			Triage:         opts.Triage,
 			Embed:          opts.Embed,
+			BotHook:        bothook.New(opts.Store),
 			Store:          opts.Store,
 			TrustedOrigins: opts.TrustedOrigins,
 		})
