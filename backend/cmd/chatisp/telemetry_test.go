@@ -30,8 +30,8 @@ func TestAPIWiringDoesNotInventRiverBacklog(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(body)
-	if strings.Contains(text, "chatisp_river_") {
-		t.Fatalf("api publicou backlog global:\n%s", text)
+	if strings.Contains(text, "chatisp_river_") || strings.Contains(text, "chatisp_ops_") || strings.Contains(text, "chatisp_outbound_uncertain") || strings.Contains(text, "chatisp_storage_expected_bytes") {
+		t.Fatalf("api publicou leitura global:\n%s", text)
 	}
 	for _, role := range []string{"app", "platform", "ingress"} {
 		if _, ok := lineValue(text, "chatisp_db_pool_connections", `role="`+role+`"`); !ok {

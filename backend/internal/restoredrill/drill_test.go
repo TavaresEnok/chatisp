@@ -67,6 +67,14 @@ func TestDrillRestoresDumpAndReapplies(t *testing.T) {
 	if report.Duration <= 0 {
 		t.Fatal("duração do ensaio não foi medida")
 	}
+	metric, err := os.ReadFile(filepath.Join(dumpDir, "metrics.prom"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	metricText := string(metric)
+	if !strings.Contains(metricText, "chatisp_restore_drill_duration_seconds ") || strings.Contains(metricText, "{") || strings.Contains(strings.ToLower(metricText), "rpo") || strings.Contains(metricText, report.Database) {
+		t.Fatalf("métrica do ensaio: %s", metricText)
+	}
 	assertReportText(t, report.Text, true)
 	if !dumpStillHoldsRemovedAttachment(t, dumpDir) {
 		t.Fatal("o arquivo de dump perdeu o anexo excluído depois do backup")

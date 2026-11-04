@@ -14,7 +14,7 @@ import (
 	"chatisp/internal/platform/version"
 )
 
-// Metrics records process, HTTP, pool, WebSocket and River series.
+// Metrics records process, HTTP, pool, WebSocket, River and operational series.
 // Labels stay on closed sets. Nil methods are no-ops so tests can omit it.
 type Metrics struct {
 	registry  *prometheus.Registry
@@ -27,6 +27,7 @@ type Metrics struct {
 	jobResults *prometheus.CounterVec
 	pools      *poolCollector
 	river      *riverCollector
+	ops        *opsCollector
 }
 
 // New registers process, runtime and HTTP series on an isolated registry.

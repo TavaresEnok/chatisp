@@ -38,6 +38,7 @@ import (
 	"chatisp/internal/platform/jobs"
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/metrics"
+	"chatisp/internal/platform/opsignals"
 	"chatisp/internal/platform/runtime"
 	"chatisp/internal/platform/testdb"
 	"chatisp/internal/presence"
@@ -367,6 +368,7 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 		})
 		collectors = []func(context.Context){
 			func(collectCtx context.Context) { jobs.CollectRiverBacklog(collectCtx, wp, meter) },
+			func(collectCtx context.Context) { opsignals.Collect(collectCtx, pools.Platform, meter) },
 		}
 	}
 	rt := realtime.NewHandler(realtime.Options{TrustedOrigins: origins, Authenticator: adapter, Attendance: attendance, InboxResolver: adapter, Notifier: notifier, DB: store, Metrics: meter})
