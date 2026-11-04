@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -70,7 +71,7 @@ export function devServerSettings(env = process.env) {
   const host = loopbackHost(env.CHATISP_DEV_VITE_HOST, "127.0.0.1");
   const port = loopbackPort(env.CHATISP_DEV_VITE_PORT, 5173);
   const apiOrigin = loopbackHTTPOrigin(env.CHATISP_DEV_API_ORIGIN, "http://127.0.0.1:8080");
-  return {
+  const settings = {
     host,
     port,
     strictPort: true,
@@ -80,6 +81,16 @@ export function devServerSettings(env = process.env) {
       "/readyz": apiOrigin,
     },
   };
+  if (env.CHATISP_DEV_TLS === "1") {
+    if (!env.CHATISP_DEV_TLS_KEY || !env.CHATISP_DEV_TLS_CERT) {
+      throw new Error("CHATISP_DEV_TLS=1 exige chave e certificado locais");
+    }
+    settings.https = {
+      key: readFileSync(env.CHATISP_DEV_TLS_KEY),
+      cert: readFileSync(env.CHATISP_DEV_TLS_CERT),
+    };
+  }
+  return settings;
 }
 
 export default function chatispDevConfig() {

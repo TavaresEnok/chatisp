@@ -47,6 +47,7 @@ CHATISP_DEV_VITE_PORT=5174 \
 
 - Na primeira subida, o terminal mostra o e-mail `dev.local@example.com` e a senha gerada. Ela não é gravada no repositório. Nas subidas seguintes a senha não muda.
 - O cookie de sessão é `__Host-session` com a flag `Secure`. O launcher local fala HTTP só para desenvolvimento. Em HTTP o navegador não guarda essa sessão, então o painel aberto nesse endereço não fica autenticado. O script não desliga `Secure` e não cria outro tipo de sessão. Para uma sessão real no navegador, use o Compose com Caddy em `https://localhost:8443`.
+- Alternativa sem Docker: `CHATISP_DEV_TLS=1 ./scripts/dev.sh`. O script gera um certificado autoassinado de 1 dia só para loopback (`openssl`, em `/tmp`, apagado ao sair), serve o Vite em HTTPS e passa a origem do painel para `https://`. Abra `https://127.0.0.1:5173/entrar` (ou a porta escolhida), aceite o aviso do certificado e entre; o cookie `__Host-session` continua `Secure`. A API permanece em HTTP loopback atrás do proxy do Vite. Só para desenvolvimento: produção segue com o Caddy.
 
 Atalhos, quando o make existir:
 

@@ -39,6 +39,7 @@ fi
 meta=$(
 	python3 - "$http_addr" "$metrics_addr" "$pg_host" "$pg_port" "$vite_host" "$vite_port" "$ready_timeout" <<'PY'
 import ipaddress
+import os
 import sys
 
 http_raw, metrics_raw, pg_host, pg_port, vite_host, vite_port, timeout = sys.argv[1:]
@@ -113,7 +114,10 @@ emit("vite_host", vite_host)
 emit("vite_port", vite_port)
 emit("ready_timeout", str(int(timeout)))
 emit("api_origin", origin(http_host, http_port))
-emit("panel_origin", origin(vite_host, vite_port))
+panel_origin_value = origin(vite_host, vite_port)
+if os.environ.get("CHATISP_DEV_TLS") == "1":
+    panel_origin_value = panel_origin_value.replace("http://", "https://", 1)
+emit("panel_origin", panel_origin_value)
 PY
 ) || die "use só endereços loopback (127.0.0.0/8 ou ::1), com API, métricas, PostgreSQL e Vite em portas distintas. CHATISP_DEV_READY_TIMEOUT fica entre 1 e 600"
 # shellcheck disable=SC2086
@@ -137,6 +141,7 @@ pg_pid=""
 api_pid=""
 vite_pid=""
 envfile=""
+tls_dir=""
 cleanup_ran=0
 
 child_running() {
@@ -157,6 +162,10 @@ stop_owned() {
 	if [ -n "$envfile" ]; then
 		rm -f -- "$envfile"
 		envfile=""
+	fi
+	if [ -n "$tls_dir" ] && [ -d "$tls_dir" ] && [ ! -L "$tls_dir" ]; then
+		rm -rf -- "$tls_dir"
+		tls_dir=""
 	fi
 	python3 - "$pg_pid" "$api_pid" "$vite_pid" "$pg_data" <<'PY' || true
 import os
@@ -514,7 +523,19 @@ export CHATISP_META_APP_ID="${CHATISP_META_APP_ID:-dev-meta-app-id}"
 
 note "API em ${api_origin} e painel em ${panel_origin}"
 note "Métricas em ${metrics_addr}"
-note "O cookie de sessão permanece Secure. Em HTTP o navegador não guarda essa sessão. Use o Compose com Caddy em https://localhost:8443."
+if [ "${CHATISP_DEV_TLS:-0}" = "1" ]; then
+	command -v openssl >/dev/null 2>&1 || die "CHATISP_DEV_TLS=1 exige openssl"
+	tls_dir=$(mktemp -d /tmp/chatisp-dev-tls-XXXXXX)
+	chmod 700 "$tls_dir"
+	openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=chatisp-dev-loopback" \
+		-addext "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1" \
+		-keyout "$tls_dir/key.pem" -out "$tls_dir/cert.pem" >/dev/null 2>&1 || die "não foi possível gerar o certificado local"
+	export CHATISP_DEV_TLS_KEY="$tls_dir/key.pem"
+	export CHATISP_DEV_TLS_CERT="$tls_dir/cert.pem"
+	note "HTTPS local ligado: certificado autoassinado descartável (1 dia, só loopback, apagado ao sair). O navegador pedirá para aceitá-lo. O cookie Secure funciona nesta origem."
+else
+	note "O cookie de sessão permanece Secure. Em HTTP o navegador não guarda essa sessão. Para uma sessão real use CHATISP_DEV_TLS=1 ./scripts/dev.sh ou o Compose com Caddy em https://localhost:8443."
+fi
 
 setsid go -C backend run -mod=vendor ./cmd/chatisp all &
 api_pid=$!
@@ -549,7 +570,7 @@ if [ "$api_ready" != 1 ]; then
 	die "a API não ficou pronta em ${api_origin}. PostgreSQL, API e Vite deste script foram encerrados"
 fi
 
-note "API pronta em ${api_origin}; painel em ${panel_origin}. O cookie de sessão permanece Secure e em HTTP o navegador não guarda essa sessão."
+note "API pronta em ${api_origin}; painel em ${panel_origin}. $( [ "${CHATISP_DEV_TLS:-0}" = "1" ] && echo "Abra o painel em HTTPS." || echo "O cookie de sessão permanece Secure e em HTTP o navegador não guarda essa sessão.")"
 
 set +e
 wait -n

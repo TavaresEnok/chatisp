@@ -32,6 +32,14 @@ Rotas do painel, nesse host:
 
 O cookie de sessão é `__Host-session` com `Secure`. Em HTTP o navegador não guarda essa sessão, então o painel aberto em `http://127.0.0.1:5173` não permanece autenticado. O script não desliga `Secure`.
 
+Para entrar no navegador sem Docker, suba com HTTPS local:
+
+```
+CHATISP_DEV_TLS=1 ./scripts/dev.sh
+```
+
+O painel passa a ser `https://127.0.0.1:5173` (ou a porta de `CHATISP_DEV_VITE_PORT`) com certificado autoassinado descartável, apagado ao encerrar. Conferido em 04/11/2026: login `POST /api/panel/session` pelo proxy HTTPS retornou 200 com `__Host-session` (`HttpOnly; Secure; SameSite=Lax`) e `__Host-csrf`. Para encerrar, Ctrl+C no terminal do script; ele para só o PostgreSQL, a API e o Vite que iniciou.
+
 Se a porta 8080 estiver ocupada, o próprio `scripts/dev.sh` documenta o conjunto:
 
 ```
