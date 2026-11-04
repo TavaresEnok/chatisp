@@ -268,3 +268,19 @@ O que a jornada mostrou no painel, só com stand-in, ERP fake e receptor loopbac
 Na mesma sessão, `npm --prefix web run test:e2e:m3b` e `npm --prefix web run test:e2e:m4a` terminaram com código 0 no Chromium 140.0.7339.186. M4A usa o rótulo "Arquivo" da mesa de anexos, porque o compositor também expõe um input de arquivo.
 
 Continua fora: Meta, ERP e Evolution reais, API pública de escrita, URL assinada do PDF, conversão ffmpeg, ensaio de restore (`TestDrillRestoresDumpAndReapplies` já falhou nesta baseline por caminho de checkout) e a dívida de ESLint. Mensagens sem citação ainda podem exibir "Mensagem citada indisponível" porque o JSON leva o UUID zero; a correção está fora dos arquivos deste recorte. O marco M4 e o marco M6 não estão concluídos.
+
+## Aceite local do lote 2 M7/M8, 04/11/2026
+
+Jornada `npm --prefix web run test:e2e:m7-ops`, modo `m2demo m7`, sobre o HEAD `76802c6568de8ccca117616558ad918bae43ab54`. Chromium 140.0.7339.186 pelo launcher `/opt/paseo-browser/chromium-launcher`, sem download. A execução A, JSON lido em 04/11 às 14:19, usou API `127.0.0.1:43531`, métricas `127.0.0.1:39117` e painel `https://127.0.0.1:41861`. A execução B, depois do prazo de 330s no launcher, saiu com código 0 e gravou por cima o JSON: API `127.0.0.1:40619`, métricas `127.0.0.1:36661`, painel `https://127.0.0.1:33003`, Vite `127.0.0.1:40997` só no log. Os números 41709, 38969 e 45107 não pertencem a nenhuma das duas. Banco embutido próprio. Não é homologação de M7, M8, V1 nem do piloto.
+
+O que essa jornada mostrou:
+
+- Admin gravou `Provedor M7 Simulado` e um PNG local. O shell mostrou nome e logo.
+- Agente sem editor. `PUT` da identidade retornou 403 e o nome permaneceu.
+- Relatório sintético em `2026-11-04`, fuso `America/Sao_Paulo`: Alfa 2 ciclos e 4 mensagens, Beta 1 ciclo e 1 mensagem. Filtros de setor e caixa, mapa e CSV coincidiram.
+- Depois de revogar o vínculo sintético do setor Beta, o filtro do próprio painel recebeu 403 e a grade e o CSV anteriores saíram.
+- `/metrics` privado trouxe pools `app`, `platform`, `ingress` e `jobs`, WebSocket 1 e River com coleta ok. Sem DSN, senha, e-mail ou token. A API pública não serviu essas séries.
+
+`go -C backend test -count=1 ./cmd/m2demo/` passou nesta correção em 9,010s. `npm --prefix web run build` passou em 9,19s, 2437 módulos. O E2E de mídia e de ERP não foi repetido.
+
+O ensaio de conteúdo e chaves de `ccabd76` (merge `2407824`) não foi reexecutado neste aceite. A prova reutilizada, da sessão da tarefa `m8-restore-content-keys` em 04/11, é `go -C backend test -count=1 ./internal/restoredrill/ ./cmd/restoredrill/` com código 0 (`restoredrill` 8,222s e `cmd/restoredrill` 7,983s). Esse pacote exige conteúdo lido pela referência restaurada, Ring recuperada e segredo decifrado; a falha antiga por caminho de checkout é anterior a esse código. RPO, RTO e metas de piloto não foram medidos.

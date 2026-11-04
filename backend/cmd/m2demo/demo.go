@@ -37,6 +37,7 @@ import (
 	panelapi "chatisp/internal/platform/httpapi"
 	"chatisp/internal/platform/jobs"
 	"chatisp/internal/platform/logging"
+	"chatisp/internal/platform/metrics"
 	"chatisp/internal/platform/runtime"
 	"chatisp/internal/platform/testdb"
 	"chatisp/internal/presence"
@@ -54,14 +55,15 @@ type demoInfo struct {
 	M3B                                       *m3bInfo `json:",omitempty"`
 	M4A                                       *m4aInfo `json:",omitempty"`
 	M4B                                       *m4bInfo `json:",omitempty"`
+	M7                                        *m7Info  `json:",omitempty"`
 }
 
 // runDemo owns a fresh embedded cluster and stops the runtime before removing it.
 func runDemo(ctx context.Context, apiListener, metricsListener, fakeListener net.Listener, ready chan<- demoInfo) error {
-	return runDemoMode(ctx, apiListener, metricsListener, fakeListener, ready, false, false, false)
+	return runDemoMode(ctx, apiListener, metricsListener, fakeListener, ready, false, false, false, false)
 }
 
-func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener net.Listener, ready chan<- demoInfo, m3b, m4a, m4b bool) error {
+func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener net.Listener, ready chan<- demoInfo, m3b, m4a, m4b, m7 bool) error {
 	for _, key := range []string{"CHATISP_TEST_DATABASE_URL", "CHATISP_DATABASE_URL", "CHATISP_APP_DATABASE_URL", "CHATISP_PLATFORM_DATABASE_URL", "CHATISP_INGRESS_DATABASE_URL", "CHATISP_JOBS_DATABASE_URL"} {
 		if _, ok := os.LookupEnv(key); ok {
 			return fmt.Errorf("%s definido: demo recusa DSNs preexistentes", key)
@@ -166,9 +168,11 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 	if m4b {
 		m4a = true
 	}
-	if m4a {
-		// The tenant timezone is the only clock the hours module reads.
+	if m4a || m7 {
+		// The tenant timezone is the only clock the hours module and the report read.
 		timezone = "America/Sao_Paulo"
+	}
+	if m4a {
 		limits = json.RawMessage(`{"attachment_plan_bytes":1048576,"attachment_reserve_bytes":65536,"attachment_file_bytes":1048576}`)
 	}
 	tenant, agent, admin, member, adminMember := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
@@ -255,6 +259,24 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 			return err
 		}
 	}
+	if m7 {
+		info.M7, err = seedM7(ctx, store, ring, sectorService, principal, tenant, admin, adminMember)
+		if err != nil {
+			return err
+		}
+		origin := os.Getenv("CHATISP_M7_PANEL_ORIGIN")
+		parsed, parseErr := url.Parse(origin)
+		host := ""
+		if parseErr == nil {
+			host = parsed.Hostname()
+		}
+		if parseErr != nil || parsed.Scheme != "https" || host != "127.0.0.1" || parsed.Port() == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.User != nil {
+			return errors.New("origem do painel M7 inválida")
+		}
+		info.M7.PanelOrigin = origin
+		info.M7.API = "http://" + apiListener.Addr().String()
+		info.M7.MetricsURL = "http://" + metricsListener.Addr().String() + "/metrics"
+	}
 	var (
 		cannedSvc     cannedreplies.Service
 		policySvc     *channelpolicy.Service
@@ -329,7 +351,25 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 	if m3b || m4a {
 		origins = append(origins, "https://localhost:5174")
 	}
-	rt := realtime.NewHandler(realtime.Options{TrustedOrigins: origins, Authenticator: adapter, Attendance: attendance, InboxResolver: adapter, Notifier: notifier, DB: store})
+	var meter *metrics.Metrics
+	var collectors []func(context.Context)
+	if m7 {
+		if info.M7 == nil || info.M7.PanelOrigin == "" {
+			return errors.New("fixture M7 sem origem do painel")
+		}
+		origins = append(origins, info.M7.PanelOrigin)
+		meter = metrics.New()
+		meter.RegisterPools([]metrics.PoolBinding{
+			{Role: "app", Pool: pools.App},
+			{Role: "platform", Pool: pools.Platform},
+			{Role: "ingress", Pool: pools.Ingress},
+			{Role: "jobs", Pool: wp},
+		})
+		collectors = []func(context.Context){
+			func(collectCtx context.Context) { jobs.CollectRiverBacklog(collectCtx, wp, meter) },
+		}
+	}
+	rt := realtime.NewHandler(realtime.Options{TrustedOrigins: origins, Authenticator: adapter, Attendance: attendance, InboxResolver: adapter, Notifier: notifier, DB: store, Metrics: meter})
 	fake := &http.Server{Handler: fakeHandler, ReadHeaderTimeout: 5 * time.Second}
 	go fake.Serve(fakeListener)
 	defer fake.Shutdown(context.Background())
@@ -342,7 +382,7 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 		runtimeCfg.Env = "development"
 		runtimeCfg.KeyRing = ring
 	}
-	return runtime.Run(ctx, runtime.Options{Mode: config.ModeAll, Config: runtimeCfg, HTTPListener: apiListener, MetricsListener: metricsListener, Auth: identity, Attendance: attendance, Channels: channels, Sectors: sectorService, Contacts: contactdirectory.Service{DB: store, Visibility: panelapi.ContactVisibility{}}, Notifications: notifications.New(store), Realtime: rt, Webhook: wh, CannedReplies: cannedSvc, ChannelPolicy: policySvc, Attachments: attachmentSvc, BusinessHours: hoursSvc, Documents: contactdocs.New(store, ring), Presence: presence.New(store), Lifecycle: lifecycle.New(store), Triage: triage.New(store), Store: store, JobsClient: worker, TrustedOrigins: origins, ReadyChecks: []func(context.Context) error{pools.App.Ping, pools.Platform.Ping, pools.Ingress.Ping, wp.Ping}})
+	return runtime.Run(ctx, runtime.Options{Mode: config.ModeAll, Config: runtimeCfg, HTTPListener: apiListener, MetricsListener: metricsListener, Auth: identity, Attendance: attendance, Channels: channels, Sectors: sectorService, Contacts: contactdirectory.Service{DB: store, Visibility: panelapi.ContactVisibility{}}, Notifications: notifications.New(store), Realtime: rt, Webhook: wh, CannedReplies: cannedSvc, ChannelPolicy: policySvc, Attachments: attachmentSvc, BusinessHours: hoursSvc, Documents: contactdocs.New(store, ring), Presence: presence.New(store), Lifecycle: lifecycle.New(store), Triage: triage.New(store), Store: store, JobsClient: worker, TrustedOrigins: origins, ReadyChecks: []func(context.Context) error{pools.App.Ping, pools.Platform.Ping, pools.Ingress.Ping, wp.Ping}, Metrics: meter, Collectors: collectors})
 }
 
 // panelProxy forwards API upgrades directly to the real server, and assets to Vite.

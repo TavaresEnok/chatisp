@@ -153,7 +153,9 @@ func m3bDemoFlags(m4a, m4b bool) error {
 	go proxy.ServeTLS(listeners[3], "", "")
 	defer proxy.Close()
 	ready, done := make(chan demoInfo, 1), make(chan error, 1)
-	go func() { done <- runDemoMode(ctx, listeners[0], listeners[1], listeners[2], ready, true, m4a, m4b) }()
+	go func() {
+		done <- runDemoMode(ctx, listeners[0], listeners[1], listeners[2], ready, true, m4a, m4b, false)
+	}()
 	select {
 	case info := <-ready:
 		if err = json.NewEncoder(os.Stdout).Encode(info); err != nil {
