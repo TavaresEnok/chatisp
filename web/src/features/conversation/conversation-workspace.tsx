@@ -1,4 +1,5 @@
 import { ContactDocument } from "@/features/contactdocs/contact-document";
+import { ConversationSidebar } from "@/features/conversation/conversation-sidebar";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AttachmentDesk } from "@/features/attachments/attachment-desk";
@@ -226,7 +227,7 @@ function WorkspaceSession({
   }
 
   return (
-    <div ref={workspace} className="grid gap-4 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)] lg:has-[.painel-externo]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)_minmax(18rem,24rem)]" onKeyDown={handleShortcut}>
+    <div ref={workspace} className="grid gap-4 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)] lg:has-[.painel-externo]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)_minmax(18rem,24rem)] lg:has-[.painel-lateral]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)_minmax(18rem,24rem)]" onKeyDown={handleShortcut}>
       {renderQueue ? renderQueue(card?.id ?? null, selectConversation) : <ConversationList
         status={listStatus}
         conversations={conversations}
@@ -287,7 +288,11 @@ function WorkspaceSession({
           </p>
         )}
       </div>
-      {renderSide && card ? <div className="contents">{renderSide(card.id)}</div> : null}
+      {card && (principal || renderSide) ? (
+        <ConversationSidebar principal={principal} conversationId={card.id} protocol={card.protocol}>
+          {renderSide?.(card.id)}
+        </ConversationSidebar>
+      ) : null}
       {closeOpen && card ? (
         <CloseConversationDialog
           protocol={card.protocol}
