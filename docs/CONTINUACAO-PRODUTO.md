@@ -35,7 +35,25 @@ Lacuna restante:
 
 ## Mídia e ffmpeg
 
-Estado: pendente neste arquivo até o bloco seguinte.
+Estado: **implementado e verificado** com o ffmpeg do host (`/usr/bin/ffmpeg` 4.2.7, já instalado; nenhum pacote novo). Não é homologação de envio na Meta.
+
+O que fechou:
+
+- A rota de conversão do painel recusa duração declarada acima de 120 s antes de procurar o ffmpeg e preserva o arquivo original. Sem o binário, um arquivo dentro do limite continua recusado como antes.
+- `audio/mpeg`, `audio/mp4` e WAV passam pelo mesmo conversor limitado já usado para WebM/OGG. O painel avisa que a conversão é no servidor. O navegador continua sem transcodificar.
+- MPEG de 1 s gerado pelo ffmpeg do sistema saiu OGG/Opus. WebM/OGG acima de 120 s, inclusive com duração subdeclarada, foram recusados.
+
+Evidência:
+
+- `go test -count=1 ./internal/media/ -timeout 180s` — ok, 6,956s. Inclui `TestTranscodeRecordedWithFFmpeg`, `TestTranscodeRecordedMPEGWithFFmpeg`, `TestTranscodeRecordedRefusesUnderdeclaredWebM` e `TestTranscodeRecordedRefusesRealUndeclaredOverLimit`, sem skip.
+- `go test -count=1 ./internal/attendance/service/ -run 'TestSendMediaRecordedAudioBudgetReplayAndCompensation|TestSendMediaUnderdeclaredWebMRefusesWithoutOutbox'` — ok, 4,769s.
+- `go vet ./internal/media/ ./internal/attendance/service/` — ok.
+- Vitest `media-panel.test.tsx`, `message-composer.audio.test.tsx`, `message-composer.media.test.tsx` com Node 24.11.0 — 3 arquivos, 15 testes, ok.
+
+Lacuna restante:
+
+- Não houve envio real para a Cloud API. O binário do host não tem limite de CPU/memória imposto pelo cgroup do worker; o processo aplica tempo, duração, tamanho e `-protocol_whitelist file,crypto`.
+- `video/mp4` continua vídeo e não entra no ffmpeg.
 
 ## API pública e integrações
 

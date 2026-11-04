@@ -97,7 +97,15 @@ export function needsServerConversion(mimeType: string): boolean {
     base === "video/webm" ||
     base === "audio/ogg" ||
     base === "video/ogg" ||
-    base === "application/ogg"
+    base === "application/ogg" ||
+    base === "audio/mpeg" ||
+    base === "audio/mp3" ||
+    base === "audio/mp4" ||
+    base === "audio/m4a" ||
+    base === "audio/x-m4a" ||
+    base === "audio/wav" ||
+    base === "audio/wave" ||
+    base === "audio/x-wav"
   );
 }
 

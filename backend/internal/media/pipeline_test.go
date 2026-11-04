@@ -222,6 +222,22 @@ func TestPipelinePreservesOriginalWithoutFFmpeg(t *testing.T) {
 	if strings.Contains(rec.Body.String(), "converted") && strings.Contains(rec.Body.String(), `"conversion_state":"converted"`) {
 		t.Fatal("a resposta fingiu conversão")
 	}
+	longWav := wave(8000, 1, 8, 8000*121)
+	longID := publish(t, ctx, attachmentsSvc, p, inbox, conv, "longo.wav", longWav, "outgoing")
+	longItem, e := svc.Accept(ctx, p, inbox, conv, media.AcceptInput{AttachmentID: longID})
+	if e != nil {
+		t.Fatal(e)
+	}
+	over, e := svc.Convert(ctx, p, inbox, conv, longItem.ID)
+	if !errors.Is(e, media.ErrConvert) || over.ConversionState != "refused" || over.OutputAttachmentID != nil {
+		t.Fatalf("duração declarada acima do limite: %#v %v", over, e)
+	}
+	if errors.Is(e, media.ErrFFmpegMissing) {
+		t.Fatal("o limite foi tratado como ausência de ffmpeg")
+	}
+	if sum := sha256.Sum256(storage.objects[objectKey(t, ctx, store, tenant, longID)]); sum != sha256.Sum256(longWav) {
+		t.Fatal("o original longo mudou")
+	}
 
 	// t.TempDir is on noexec /tmp, so LookPath reports EACCES as not found.
 	// The stand-in must be an absolute path on a filesystem that can execute.

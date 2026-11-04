@@ -317,8 +317,10 @@ func mediaKindOf(mime string) (string, bool) {
 }
 
 func needsOpus(mime string) bool {
-	switch mime {
-	case "audio/webm", "video/webm", "audio/ogg", "application/ogg", "video/ogg":
+	switch strings.ToLower(mime) {
+	case "audio/webm", "video/webm", "audio/ogg", "application/ogg", "video/ogg",
+		"audio/mpeg", "audio/mp3", "audio/mp4", "audio/m4a", "audio/x-m4a",
+		"audio/wav", "audio/wave", "audio/x-wav":
 		return true
 	default:
 		return false

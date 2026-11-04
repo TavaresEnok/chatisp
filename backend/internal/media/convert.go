@@ -43,6 +43,24 @@ func (s *Service) Convert(ctx context.Context, p auth.Principal, inbox, conv, id
 		if item.ConversionState == "converted" {
 			return ErrConflict
 		}
+		src, e := loadAttachment(c, tx, p.TenantID, conv, item.AttachmentID)
+		if e != nil {
+			return e
+		}
+		if src.state != "validated" {
+			return ErrConflict
+		}
+		original, e = readExact(c, s.Attachments.Storage, src)
+		if e != nil {
+			return e
+		}
+		row = src
+		if limErr := recordedWithinLimits(row.mediaType, original); limErr != nil {
+			if e = markRefused(c, tx, p.TenantID, id, FFmpegFailedDetail); e != nil {
+				return e
+			}
+			return ErrConvert
+		}
 		if _, lookErr := s.look(); lookErr != nil {
 			missing = true
 			if item.ConversionState == "refused" && item.ConversionError == FFmpegMissingDetail {
@@ -53,16 +71,7 @@ func (s *Service) Convert(ctx context.Context, p auth.Principal, inbox, conv, id
 			}
 			return ErrFFmpegMissing
 		}
-		src, e := loadAttachment(c, tx, p.TenantID, conv, item.AttachmentID)
-		if e != nil {
-			return e
-		}
-		if src.state != "validated" {
-			return ErrConflict
-		}
-		original, e = readExact(c, s.Attachments.Storage, src)
-		row = src
-		return e
+		return nil
 	})
 	if missing || errors.Is(e, ErrFFmpegMissing) {
 		if e == nil {
@@ -74,6 +83,12 @@ func (s *Service) Convert(ctx context.Context, p auth.Principal, inbox, conv, id
 			out.OutputAttachmentID = nil
 		}
 		return out, ErrFFmpegMissing
+	}
+	if errors.Is(e, ErrConvert) {
+		out.ConversionState = "refused"
+		out.ConversionError = FFmpegFailedDetail
+		out.OutputAttachmentID = nil
+		return out, ErrConvert
 	}
 	if e != nil {
 		return out, e
@@ -228,7 +243,9 @@ func TranscodeRecorded(ctx context.Context, mime string, original []byte) ([]byt
 
 func needsEffectiveDuration(mime string) bool {
 	switch strings.ToLower(mime) {
-	case "audio/webm", "video/webm", "audio/ogg", "application/ogg", "video/ogg":
+	case "audio/webm", "video/webm", "audio/ogg", "application/ogg", "video/ogg",
+		"audio/mpeg", "audio/mp3", "audio/mp4", "audio/m4a", "audio/x-m4a",
+		"audio/wav", "audio/wave", "audio/x-wav":
 		return true
 	default:
 		return false

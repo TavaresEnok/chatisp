@@ -68,6 +68,23 @@ func TestStripWebMDurationDropsDeclaration(t *testing.T) {
 	}
 }
 
+func TestTranscodeRecordedMPEGWithFFmpeg(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg ausente; conversão real não executada neste runner")
+	}
+	mp3 := encodeMPEG(t, wavFixture(8000, 1, 16, 8000))
+	out, err := TranscodeRecorded(context.Background(), "audio/mpeg", mp3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(out, []byte("OggS")) || !bytes.Contains(out, []byte("OpusHead")) {
+		t.Fatal("mpeg não saiu OGG/Opus")
+	}
+	if len(out) == 0 || len(out) > convertOutput {
+		t.Fatalf("mpeg tamanho %d", len(out))
+	}
+}
+
 func TestTranscodeRecordedRefusesUnderdeclaredWebM(t *testing.T) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg ausente; conversão real não executada neste runner")
@@ -322,6 +339,33 @@ func writeVint(dst []byte, width int, value uint64) bool {
 	}
 	dst[0] |= 0x80 >> (width - 1)
 	return true
+}
+
+func encodeMPEG(t *testing.T, wav []byte) []byte {
+	t.Helper()
+	dir := t.TempDir()
+	in := filepath.Join(dir, "in.wav")
+	out := filepath.Join(dir, "out.mp3")
+	if err := os.WriteFile(in, wav, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var last []byte
+	var lastErr error
+	for _, codec := range []string{"libmp3lame", "mp3"} {
+		cmd := exec.Command("ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", in, "-c:a", codec, "-f", "mp3", out)
+		cmd.Env = []string{"PATH=/usr/bin:/bin", "TMPDIR=" + os.TempDir()}
+		msg, err := cmd.CombinedOutput()
+		if err == nil {
+			body, readErr := os.ReadFile(out)
+			if readErr != nil || len(body) < 1 || (!bytes.HasPrefix(body, []byte("ID3")) && body[0] != 0xff) {
+				t.Fatalf("mp3 inválido: %v", readErr)
+			}
+			return body
+		}
+		last, lastErr = msg, err
+	}
+	t.Fatalf("gerar mp3: %v %s", lastErr, last)
+	return nil
 }
 
 func ffmpegEncode(t *testing.T, wav []byte, format string) []byte {
