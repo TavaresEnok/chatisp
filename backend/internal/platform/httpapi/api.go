@@ -51,6 +51,7 @@ import (
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/metrics"
+	"chatisp/internal/platform/tenantcache"
 	"chatisp/internal/platform/version"
 	"chatisp/internal/platformusage"
 	"chatisp/internal/presence"
@@ -98,6 +99,8 @@ type Dependencies struct {
 	ERP *erp.Panel
 	// Store is the application database used by distribution. Nil answers 503.
 	Store *db.Store
+	// Catalog is the process cache for identity, inbox metadata and templates.
+	Catalog *tenantcache.Cache
 	// KeyRing seals outbound webhook secrets. Nil keeps those panel routes at 503.
 	KeyRing *crypto.Ring
 	// Env selects the webhook destination guard: development, test or production.
@@ -263,7 +266,7 @@ func New(deps Dependencies) *API {
 	if deps.Auth != nil {
 		brandingAuth = deps.Auth
 	}
-	branding.Mount(router, branding.Dependencies{Auth: brandingAuth, Store: deps.Store, TrustedOrigins: deps.TrustedOrigins})
+	branding.Mount(router, branding.Dependencies{Auth: brandingAuth, Store: deps.Store, Cache: deps.Catalog, TrustedOrigins: deps.TrustedOrigins})
 	registerRealtimeContract(api)
 	embed.Mount(router, embed.Dependencies{Auth: deps.Auth, Panels: deps.Embed, TrustedOrigins: deps.TrustedOrigins})
 

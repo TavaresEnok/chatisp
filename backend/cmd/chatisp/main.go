@@ -45,6 +45,7 @@ import (
 	"chatisp/internal/platform/migrate"
 	"chatisp/internal/platform/opsignals"
 	"chatisp/internal/platform/runtime"
+	"chatisp/internal/platform/tenantcache"
 	"chatisp/internal/presence"
 	"chatisp/internal/realtime"
 	"chatisp/internal/sectors"
@@ -132,6 +133,7 @@ func run(ctx context.Context, args []string, environ []string, stdout, stderr io
 			Triage:         svcs.Triage,
 			Embed:          svcs.Embed,
 			Store:          svcs.Store,
+			Catalog:        svcs.Catalog,
 			JobsClient:     svcs.JobsClient,
 			ReadyChecks:    svcs.ReadyChecks,
 			Cleanup:        svcs.Cleanup,
@@ -184,6 +186,7 @@ type runtimeServices struct {
 	Triage        triage.Service
 	Embed         embed.Service
 	Store         *db.Store
+	Catalog       *tenantcache.Cache
 	JobsClient    runtime.Worker
 	ReadyChecks   []func(context.Context) error
 	Cleanup       func()
@@ -477,12 +480,21 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 	var documents contactdocs.Service
 	var operatorPresence presence.Service
 	var panels embed.Service
+	var catalog *tenantcache.Cache
 	if store != nil {
+		opened, openErr := tenantcache.New()
+		if openErr != nil {
+			cleanupAll()
+			return runtimeServices{}, openErr
+		}
+		catalog = opened
+		cleanups = append(cleanups, catalog.Close)
 		canned = cannedreplies.New(store)
 		hours = businesshours.New(store)
+		hours.Cache = catalog
 		// No implicit catalog driver. SyncTemplates refuses before any write
 		// until a real driver is injected. An empty fake is not a provider snapshot.
-		policySvc = &channelpolicy.Service{DB: store}
+		policySvc = &channelpolicy.Service{DB: store, Cache: catalog}
 		attachmentSvc = &attachments.Service{DB: store, Storage: privateMedia, Limits: tenantAttachmentLimits}
 		documents = contactdocs.New(store, cfg.KeyRing)
 		operatorPresence = presence.New(store)
@@ -509,6 +521,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		Triage:        triage.New(store),
 		Embed:         panels,
 		Store:         store,
+		Catalog:       catalog,
 		JobsClient:    workerWorker,
 		ReadyChecks:   readyChecks,
 		Cleanup:       cleanupAll,

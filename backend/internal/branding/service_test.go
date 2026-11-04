@@ -18,6 +18,7 @@ import (
 
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/db"
+	"chatisp/internal/platform/tenantcache"
 	"chatisp/internal/platform/testdb"
 )
 
@@ -481,5 +482,58 @@ func prepare(req *http.Request, origin bool) {
 	req.Header.Set("X-CSRF-Token", "csrf")
 	if origin {
 		req.Header.Set("Origin", "https://painel.test")
+	}
+}
+
+func TestIdentityCacheServesTheTenantAndDropsOnWrite(t *testing.T) {
+	s := seed(t)
+	ctx := context.Background()
+	cache, err := tenantcache.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cache.Close)
+	svc := Service{DB: testStore, Cache: cache}
+	saved, err := svc.SaveName(ctx, s.admin, "Antigo")
+	if err != nil || saved.DisplayName != "Antigo" {
+		t.Fatalf("gravação: %+v %v", saved, err)
+	}
+	got, err := svc.Get(ctx, s.admin)
+	if err != nil || got.DisplayName != "Antigo" {
+		t.Fatalf("primeira leitura: %+v %v", got, err)
+	}
+	version, ok := tenantcache.PermissionVersion("admin")
+	var role string
+	if !ok || !cache.Get(s.admin.TenantID.String(), tenantcache.KindPermission, s.admin.MembershipID.String(), version, &role) || role != "admin" {
+		t.Fatalf("permissão versionada: %q %v", role, ok)
+	}
+	if cache.Get(s.admin.TenantID.String(), tenantcache.KindPermission, s.admin.MembershipID.String(), version+1, &role) {
+		t.Fatal("versão divergente da permissão")
+	}
+	if err := testStore.WithTenantTx(ctx, s.tenant, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `UPDATE tenant_retention_profiles SET display_name = 'Trocado' WHERE tenant_id = $1`, s.tenant)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stale, err := svc.Get(ctx, s.admin)
+	if err != nil || stale.DisplayName != "Antigo" {
+		t.Fatalf("cache não segurou a configuração: %+v %v", stale, err)
+	}
+	other, err := svc.Get(ctx, s.otherAdmin)
+	if err != nil || other.DisplayName == "Antigo" || other.DisplayName == "Trocado" {
+		t.Fatalf("outro provedor: %+v %v", other, err)
+	}
+	renamed, err := svc.SaveName(ctx, s.admin, "Corrigido")
+	if err != nil || renamed.DisplayName != "Corrigido" {
+		t.Fatalf("invalidação: %+v %v", renamed, err)
+	}
+	fresh, err := svc.Get(ctx, s.admin)
+	if err != nil || fresh.DisplayName != "Corrigido" {
+		t.Fatalf("leitura depois da gravação: %+v %v", fresh, err)
+	}
+	logo, err := svc.Logo(ctx, s.admin)
+	if err == nil || len(logo.Bytes) != 0 {
+		t.Fatal("o cache da identidade devolveu bytes de logo")
 	}
 }

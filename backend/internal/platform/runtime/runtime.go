@@ -32,6 +32,7 @@ import (
 	"chatisp/internal/platform/httpapi"
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/metrics"
+	"chatisp/internal/platform/tenantcache"
 	"chatisp/internal/presence"
 	"chatisp/internal/sectors"
 	"chatisp/internal/triage"
@@ -73,6 +74,7 @@ type Options struct {
 	Embed           embed.Service
 	ERP             *erp.Panel
 	Store           *db.Store
+	Catalog         *tenantcache.Cache
 	JobsClient      Worker
 	Cleanup         func()
 	TrustedOrigins  []string
@@ -144,6 +146,7 @@ func Run(parent context.Context, opts Options) error {
 			BotHook:        bothook.New(opts.Store),
 			ERP:            erpPanel,
 			Store:          opts.Store,
+			Catalog:        opts.Catalog,
 			KeyRing:        opts.Config.KeyRing,
 			Env:            opts.Config.Env,
 			TrustedOrigins: opts.TrustedOrigins,

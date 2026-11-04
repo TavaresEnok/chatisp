@@ -12,6 +12,7 @@ import (
 
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/db"
+	"chatisp/internal/platform/tenantcache"
 )
 
 // Authenticator is the panel session check already used by the process.
@@ -23,6 +24,7 @@ type Authenticator interface {
 type Dependencies struct {
 	Auth           Authenticator
 	Store          *db.Store
+	Cache          *tenantcache.Cache
 	TrustedOrigins []string
 }
 
@@ -34,7 +36,7 @@ type handler struct {
 // Mount registers the panel routes on the process router.
 // The routes stay outside the generated OpenAPI document.
 func Mount(r chi.Router, d Dependencies) {
-	h := handler{d: d, s: Service{DB: d.Store}}
+	h := handler{d: d, s: Service{DB: d.Store, Cache: d.Cache}}
 	r.Get("/api/panel/branding", h.get)
 	r.Put("/api/panel/branding", h.putName)
 	r.Get("/api/panel/branding/logo", h.getLogo)

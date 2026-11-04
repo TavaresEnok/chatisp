@@ -12,19 +12,33 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"chatisp/internal/platform/db"
+	"chatisp/internal/platform/tenantcache"
 )
+
+const identityCacheID = "identity"
 
 // Service reads and writes the provider mark for one tenant.
 type Service struct {
-	DB *db.Store
+	DB    *db.Store
+	Cache *tenantcache.Cache
 }
 
 // Get returns the retention name and logo metadata for the caller's tenant.
 func (s Service) Get(ctx context.Context, p Principal) (Identity, error) {
 	var out Identity
 	err := s.withTx(ctx, p, false, func(ctx context.Context, tx pgx.Tx) error {
+		if s.Cache != nil {
+			var hit Identity
+			if s.Cache.Get(p.TenantID.String(), tenantcache.KindConfig, identityCacheID, 0, &hit) {
+				out = hit
+				return nil
+			}
+		}
 		row, err := loadIdentity(ctx, tx, p)
 		out = row
+		if err == nil {
+			s.rememberIdentity(p, row)
+		}
 		return err
 	})
 	return out, err
@@ -58,6 +72,9 @@ func (s Service) SaveName(ctx context.Context, p Principal, name string) (Identi
 		out = row
 		return err
 	})
+	if err == nil {
+		s.forgetIdentity(p)
+	}
 	return out, err
 }
 
@@ -89,6 +106,9 @@ func (s Service) SaveLogo(ctx context.Context, p Principal, declared string, raw
 		out = row
 		return err
 	})
+	if err == nil {
+		s.forgetIdentity(p)
+	}
 	return out, err
 }
 
@@ -106,6 +126,9 @@ func (s Service) RemoveLogo(ctx context.Context, p Principal) (Identity, error) 
 		out = row
 		return err
 	})
+	if err == nil {
+		s.forgetIdentity(p)
+	}
 	return out, err
 }
 
@@ -188,6 +211,7 @@ func (s Service) withTx(ctx context.Context, p Principal, write bool, fn func(co
 		if err := authorize(ctx, tx, p, write); err != nil {
 			return err
 		}
+		s.rememberPermission(p)
 		return fn(ctx, tx)
 	})
 	return mapDB(err)
@@ -213,6 +237,31 @@ func authorize(ctx context.Context, tx pgx.Tx, p Principal, write bool) error {
 		return ErrForbidden
 	}
 	return nil
+}
+
+func (s Service) rememberIdentity(p Principal, row Identity) {
+	if s.Cache == nil || p.TenantID == uuid.Nil {
+		return
+	}
+	_ = s.Cache.Set(p.TenantID.String(), tenantcache.KindConfig, identityCacheID, 0, row)
+}
+
+func (s Service) forgetIdentity(p Principal) {
+	if s.Cache == nil || p.TenantID == uuid.Nil {
+		return
+	}
+	s.Cache.Invalidate(p.TenantID.String(), tenantcache.KindConfig, identityCacheID)
+}
+
+func (s Service) rememberPermission(p Principal) {
+	if s.Cache == nil || p.TenantID == uuid.Nil || p.MembershipID == uuid.Nil {
+		return
+	}
+	version, ok := tenantcache.PermissionVersion(p.Role)
+	if !ok {
+		return
+	}
+	_ = s.Cache.Set(p.TenantID.String(), tenantcache.KindPermission, p.MembershipID.String(), version, p.Role)
 }
 
 func audit(ctx context.Context, tx pgx.Tx, p Principal, action string) error {

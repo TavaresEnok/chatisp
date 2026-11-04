@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"chatisp/internal/platform/db"
+	"chatisp/internal/platform/tenantcache"
 	"chatisp/internal/sectors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -22,6 +23,8 @@ type Service struct {
 	DB     *db.Store
 	Clock  func(context.Context, pgx.Tx) (time.Time, error)
 	Driver CatalogDriver
+	// Cache holds the template catalog for display. EvaluateDispatchTx does not read it.
+	Cache *tenantcache.Cache
 }
 type Scope struct {
 	InboxID   uuid.UUID `json:"inbox_id"`

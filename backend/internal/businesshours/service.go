@@ -9,13 +9,17 @@ import (
 	"time"
 
 	"chatisp/internal/platform/db"
+	"chatisp/internal/platform/tenantcache"
 	"chatisp/internal/sectors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
 type Principal = sectors.Principal
-type Service struct{ DB *db.Store }
+type Service struct {
+	DB    *db.Store
+	Cache *tenantcache.Cache
+}
 
 func New(database *db.Store) Service { return Service{DB: database} }
 
@@ -66,8 +70,18 @@ func load(ctx context.Context, tx pgx.Tx, tenant, inbox uuid.UUID) (Configuratio
 func (s Service) Get(ctx context.Context, p Principal, inbox uuid.UUID) (Configuration, error) {
 	var c Configuration
 	e := s.transaction(ctx, p, inbox, false, func(ctx context.Context, tx pgx.Tx) error {
+		if s.Cache != nil {
+			var hit Configuration
+			if s.Cache.Get(p.TenantID.String(), tenantcache.KindInbox, inbox.String(), 0, &hit) {
+				c = hit
+				return nil
+			}
+		}
 		var e error
 		c, e = load(ctx, tx, p.TenantID, inbox)
+		if e == nil && s.Cache != nil {
+			_ = s.Cache.Set(p.TenantID.String(), tenantcache.KindInbox, inbox.String(), c.Version, c)
+		}
 		return e
 	})
 	return c, e
@@ -142,6 +156,9 @@ func (s Service) change(ctx context.Context, p Principal, inbox uuid.UUID, cmd C
 		_, e = tx.Exec(ctx, `INSERT INTO business_hours_commands(tenant_id,membership_id,request_id,request_hash,response) VALUES($1,$2,$3,$4,$5)`, p.TenantID, p.MembershipID, cmd.RequestID, hash[:], response)
 		return e
 	})
+	if e == nil && s.Cache != nil {
+		s.Cache.Invalidate(p.TenantID.String(), tenantcache.KindInbox, inbox.String())
+	}
 	return out, e
 }
 

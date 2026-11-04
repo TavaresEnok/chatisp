@@ -1,12 +1,15 @@
 package channelpolicy
 
 import (
-	"chatisp/internal/sectors"
 	"context"
 	"encoding/json"
 	"errors"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"chatisp/internal/platform/tenantcache"
+	"chatisp/internal/sectors"
 )
 
 func (s Service) RecordConsent(ctx context.Context, p sectors.Principal, in ConsentInput) ([]uuid.UUID, error) {
@@ -46,6 +49,13 @@ func (s Service) ListTemplates(ctx context.Context, p sectors.Principal, inbox u
 		if c.driver != "meta_cloud" {
 			return ErrUnsupported
 		}
+		if s.Cache != nil {
+			var hit []Template
+			if s.Cache.Get(p.TenantID.String(), tenantcache.KindTemplate, c.waba.String(), 0, &hit) {
+				out = hit
+				return nil
+			}
+		}
 		rows, e := tx.Query(ctx, `SELECT external_id,name,language,category,state,components,sync_source FROM wa_templates WHERE tenant_id=$1 AND waba_id=$2 ORDER BY name,language`, p.TenantID, c.waba)
 		if e != nil {
 			return e
@@ -58,7 +68,13 @@ func (s Service) ListTemplates(ctx context.Context, p sectors.Principal, inbox u
 			}
 			out = append(out, t)
 		}
-		return rows.Err()
+		if e = rows.Err(); e != nil {
+			return e
+		}
+		if s.Cache != nil {
+			_ = s.Cache.Set(p.TenantID.String(), tenantcache.KindTemplate, c.waba.String(), 0, out)
+		}
+		return nil
 	})
 	return out, e
 }
@@ -113,7 +129,7 @@ func (s Service) SyncTemplates(ctx context.Context, p sectors.Principal, inbox u
 		seen[t.ExternalID] = true
 		names[key] = true
 	}
-	return s.DB.WithTenantTx(ctx, p.TenantID, func(ctx context.Context, tx pgx.Tx) error {
+	if e = s.DB.WithTenantTx(ctx, p.TenantID, func(ctx context.Context, tx pgx.Tx) error {
 		// Pin the reservation through replacement, including empty snapshots.
 		if e := authorize(ctx, tx); e != nil {
 			return e
@@ -143,7 +159,13 @@ func (s Service) SyncTemplates(ctx context.Context, p sectors.Principal, inbox u
 		}
 		_, e = tx.Exec(ctx, `UPDATE channel_policy_catalog_sync SET applied_generation=$3 WHERE tenant_id=$1 AND waba_id=$2`, p.TenantID, waba, generation)
 		return e
-	})
+	}); e != nil {
+		return e
+	}
+	if s.Cache != nil && waba != uuid.Nil {
+		s.Cache.Invalidate(p.TenantID.String(), tenantcache.KindTemplate, waba.String())
+	}
+	return nil
 }
 
 // SetPendingStateTx mirrors the outbox transition in the same transaction.
