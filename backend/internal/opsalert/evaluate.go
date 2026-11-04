@@ -1,7 +1,6 @@
 package opsalert
 
 import (
-	"regexp"
 	"sort"
 	"strconv"
 	"time"
@@ -83,7 +82,21 @@ type Alert struct {
 	AgeSeconds int64  `json:"age_seconds,omitempty"`
 }
 
-var tokenPattern = regexp.MustCompile(`^[a-z0-9._-]{1,40}$`)
+// Filas e tipos já definidos pelo runtime. Texto livre, CPF e telefone não
+// entram no rótulo mesmo quando parecem um token curto.
+var knownQueues = map[string]struct{}{
+	"ingress":   {},
+	"inbound":   {},
+	"outbound":  {},
+	"scheduled": {},
+}
+
+var knownKinds = map[string]struct{}{
+	"chatisp.ingress.expand.v1":    {},
+	"chatisp.inbound.apply.v1":     {},
+	"chatisp.outbound.dispatch.v1": {},
+	"chatisp.automation.tick.v1":   {},
+}
 
 var openJobStates = map[string]struct{}{
 	"available": {},
@@ -94,7 +107,8 @@ var openJobStates = map[string]struct{}{
 }
 
 // Derive monta os alertas abertos. Idade igual ao limite não alerta: o sinal
-// exige idade acima do limite. Campos livres que não passam no token ficam de fora.
+// exige idade acima do limite. Fila e tipo fora do vocabulário do runtime
+// viram rótulo genérico, sem CPF, telefone ou texto livre.
 func Derive(limits Limits, facts Facts) []Alert {
 	out := make([]Alert, 0)
 	if limits.JobAge > 0 {
@@ -105,7 +119,7 @@ func Derive(limits Limits, facts Facts) []Alert {
 			alert := Alert{
 				Signal:     SignalJobAge,
 				SubjectKey: "job:" + strconv.FormatInt(job.ID, 10),
-				Label:      "Job antigo na fila " + tokenOr(job.Queue, "desconhecida") + ", tipo " + tokenOr(job.Kind, "desconhecido") + ", estado " + tokenOr(job.State, "aberto"),
+				Label:      "Job antigo na fila " + closed(job.Queue, knownQueues, "desconhecida") + ", tipo " + closed(job.Kind, knownKinds, "desconhecido") + ", estado " + closed(job.State, openJobStates, "aberto"),
 				AgeSeconds: int64(job.Age / time.Second),
 			}
 			if acceptable(alert) {
@@ -171,8 +185,8 @@ func webhookPhrase(kind string) string {
 	}
 }
 
-func tokenOr(value, fallback string) string {
-	if tokenPattern.MatchString(value) {
+func closed(value string, allowed map[string]struct{}, fallback string) string {
+	if _, ok := allowed[value]; ok {
 		return value
 	}
 	return fallback

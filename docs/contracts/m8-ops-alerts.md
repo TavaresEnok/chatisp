@@ -4,7 +4,7 @@ Recorte do requisito `14-metricas-alertas` no que já está persistido. O admin 
 
 ## Sinais que viram alerta
 
-A leitura acontece em `GET /api/panel/ops-alerts`. Ela grava ou encerra linhas em `ops_alerts` e devolve só o que continua aberto. O rótulo sai de campos fechados: fila, tipo e estado do job; tipo do conector; classe do item de webhook. Não entra argumento do River, `errors`, payload, corpo, telefone, credencial, CPF ou origem remota.
+A leitura acontece em `GET /api/panel/ops-alerts`. Ela grava ou encerra linhas em `ops_alerts` e devolve só o que continua aberto. O rótulo sai de campos fechados: fila, tipo e estado do job; tipo do conector; classe do item de webhook. Fila e tipo só aparecem quando já são os do runtime (`ingress`, `inbound`, `outbound`, `scheduled` e os kinds `chatisp.*.v1`). Qualquer outro texto, inclusive CPF, telefone ou argumento, vira «desconhecida» ou «desconhecido». Não entra argumento do River, `errors`, payload, corpo, telefone, credencial, CPF ou origem remota.
 
 | Sinal | Quando alerta | Quando não alerta |
 | --- | --- | --- |
