@@ -315,6 +315,8 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 	var attendanceSvc attendanceService.Service
 	if store != nil {
 		attendanceSvc = attendanceService.New(store, insertJobsClient)
+		// The API return value and the worker copy must share this store.
+		// A later assignment does not reach handlers already constructed.
 		attendanceSvc.Files = privateMedia
 		attendanceSvc.AttachmentLimits = tenantAttachmentLimits
 	}

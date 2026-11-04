@@ -26,7 +26,7 @@ func TestFakeIdentifiesSimulationAndCapabilities(t *testing.T) {
 		t.Fatalf("identidade: %s %v", fake.Name(), fake.Simulation())
 	}
 	caps := fake.Capabilities()
-	if !caps.Text || caps.Media || caps.Templates || caps.Interactive || caps.DeliveryReceipts || caps.ReadReceipts || caps.Pricing || caps.OfficialCustomerWindow {
+	if !caps.Text || !caps.Media || caps.Templates || caps.Interactive || caps.DeliveryReceipts || caps.ReadReceipts || caps.Pricing || caps.OfficialCustomerWindow {
 		t.Fatalf("capacidades: %#v", caps)
 	}
 	var driver TextDriver = fake

@@ -1,6 +1,7 @@
-// Package whatsapp is the internal text-send contract for a future WhatsApp
-// worker. It is not a Graph API client: it does not choose a version, call
-// Meta or Evolution, or send media, templates or prices.
+// Package whatsapp is the internal send contract for a WhatsApp worker.
+// It is not a Graph API client: it does not choose a version, call Meta or
+// Evolution, or send prices. Text uses TextDriver. Media uses MediaSender.
+// Templates use TemplateSender.
 //
 // Local outbox states and remote delivery evidence are different types.
 // Acceptance is not delivery. A missing response is not success.
@@ -77,6 +78,8 @@ func (e RemoteEvidence) Valid() bool {
 
 // Capabilities lists features this driver implements.
 // A false field is an explicit gap, not a successful no-op.
+// Media reports whether MediaSender is implemented. Templates stay false
+// until a later batch binds real template delivery.
 type Capabilities struct {
 	Text                   bool
 	Media                  bool
@@ -101,11 +104,57 @@ type TextRequest struct {
 	Text         string
 }
 
-// TextDriver is the send surface a future worker calls.
-// Media and webhooks stay outside this contract. Templates use TemplateSender.
+// TextDriver is the send surface a worker calls for plain text.
+// Media uses MediaSender. Templates use TemplateSender.
 type TextDriver interface {
 	Capabilities() Capabilities
 	SendText(ctx context.Context, req TextRequest) (Result, error)
+}
+
+// MediaKind is the outbound media class handed to a driver.
+type MediaKind string
+
+const (
+	MediaImage    MediaKind = "image"
+	MediaDocument MediaKind = "document"
+	MediaAudio    MediaKind = "audio"
+	MediaVideo    MediaKind = "video"
+)
+
+// Valid reports whether k is one of the four outbound media classes.
+func (k MediaKind) Valid() bool {
+	switch k {
+	case MediaImage, MediaDocument, MediaAudio, MediaVideo:
+		return true
+	default:
+		return false
+	}
+}
+
+// MediaRequest is one local intention to send an already stored attachment.
+// AttachmentID is the internal id. ReplyToProviderID is the remote id of the
+// cited message, when the citation already has one. Link is optional and is
+// not fetched by this package. Body is the bytes a driver may upload.
+type MediaRequest struct {
+	AttemptID         AttemptID
+	ConnectionID      ConnectionID
+	ConnectorType     ConnectorType
+	RecipientID       RecipientID
+	CallbackData      string
+	Kind              MediaKind
+	AttachmentID      string
+	Caption           string
+	ReplyToProviderID string
+	MIME              string
+	FileName          string
+	Link              string
+	Body              []byte
+}
+
+// MediaSender sends one image, document, audio or video.
+// A driver that only implements TextDriver must not receive this call.
+type MediaSender interface {
+	SendMedia(ctx context.Context, req MediaRequest) (Result, error)
 }
 
 // TemplateRequest is one local intention to send an already authorized template.
@@ -122,8 +171,7 @@ type TemplateRequest struct {
 
 // TemplateSender is the identified local template contract.
 // The simulation driver implements it without a network. An official driver
-// must refuse before any remote call. Capabilities.Templates stays false until
-// a later batch binds media and real template delivery.
+// must refuse before any remote call. Capabilities.Templates stays false.
 type TemplateSender interface {
 	SendTemplate(ctx context.Context, req TemplateRequest) (Result, error)
 }
@@ -279,6 +327,79 @@ func Validate(req TextRequest) error {
 		return errors.New("correlação inválida")
 	}
 	return nil
+}
+
+// ValidateMedia checks a media request before any dispatch.
+// It does not read the bytes and does not fetch Link.
+func ValidateMedia(req MediaRequest) error {
+	if !validToken(string(req.AttemptID), 128) {
+		return errors.New("identificador da tentativa inválido")
+	}
+	if !validToken(string(req.ConnectionID), 128) {
+		return errors.New("identificador da conexão inválido")
+	}
+	if !validToken(string(req.RecipientID), 128) {
+		return errors.New("identificador do destinatário inválido")
+	}
+	switch req.ConnectorType {
+	case ConnectorMetaCloud, ConnectorEvolutionWeb:
+	default:
+		return errors.New("conector inválido")
+	}
+	if !req.Kind.Valid() {
+		return errors.New("tipo de mídia inválido")
+	}
+	if !validToken(req.AttachmentID, 128) {
+		return errors.New("anexo inválido")
+	}
+	if err := ValidMediaCaption(req.Caption); err != nil {
+		return err
+	}
+	if req.ReplyToProviderID != "" && !validToken(req.ReplyToProviderID, 256) {
+		return errors.New("citação remota inválida")
+	}
+	if req.CallbackData != "" && !validCallback(req.CallbackData) {
+		return errors.New("correlação inválida")
+	}
+	if req.MIME != "" && !validToken(req.MIME, 128) {
+		return errors.New("tipo do arquivo inválido")
+	}
+	if req.FileName != "" && (len(req.FileName) > 180 || strings.ContainsAny(req.FileName, "/\\\r\n\x00")) {
+		return errors.New("nome do arquivo inválido")
+	}
+	limit := 16 << 20
+	if req.Kind == MediaDocument {
+		limit = 100 << 20
+	}
+	if len(req.Body) > limit {
+		return errors.New("mídia acima do limite")
+	}
+	return nil
+}
+
+// ValidMediaCaption applies the channel caption rules to the text that will
+// be stored and sent. Empty is allowed. A non-empty caption is at most 1024
+// runes and cannot contain a line break or other control character besides tab.
+func ValidMediaCaption(caption string) error {
+	if caption == "" {
+		return nil
+	}
+	if !validCaption(caption) || len([]rune(caption)) > 1024 {
+		return errors.New("legenda inválida")
+	}
+	return nil
+}
+
+func validCaption(value string) bool {
+	if strings.TrimSpace(value) == "" || strings.ContainsRune(value, 0) {
+		return false
+	}
+	for _, r := range value {
+		if r < 0x20 && r != '\t' {
+			return false
+		}
+	}
+	return true
 }
 
 func validToken(value string, max int) bool {

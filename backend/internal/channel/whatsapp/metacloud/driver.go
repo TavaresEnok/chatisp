@@ -45,14 +45,15 @@ func (d *Driver) Simulation() bool {
 }
 
 // Capabilities reports text plus the receipt kinds this decoder understands.
-// Media, templates, interactive messages, pricing and the customer window
-// are explicit gaps: this driver does not implement them.
+// Templates, interactive messages, pricing and the customer window are
+// explicit gaps. Media is implemented by SendMedia.
 func (d *Driver) Capabilities() whatsapp.Capabilities {
 	if d == nil {
 		return whatsapp.Capabilities{}
 	}
 	return whatsapp.Capabilities{
 		Text:             true,
+		Media:            true,
 		DeliveryReceipts: true,
 		ReadReceipts:     true,
 	}
@@ -284,3 +285,4 @@ func (d *Driver) SendTemplate(context.Context, whatsapp.TemplateRequest) (whatsa
 
 var _ whatsapp.TextDriver = (*Driver)(nil)
 var _ whatsapp.TemplateSender = (*Driver)(nil)
+var _ whatsapp.MediaSender = (*Driver)(nil)

@@ -94,10 +94,17 @@ func TestTypeAndNameValidation(t *testing.T) {
 		t.Fatal(typ, e)
 	}
 	mp4 := []byte{0, 0, 0, 24, 'f', 't', 'y', 'p', 'm', 'p', '4', '2', 0, 0, 0, 0, 'm', 'p', '4', '2', 'i', 's', 'o', 'm'}
-	if _, _, e := inspect(mp4, "outgoing"); e == nil {
-		t.Fatal("outgoing video enabled")
+	if typ, _, e := inspect(mp4, "outgoing"); e != nil || typ != "video/mp4" {
+		t.Fatal("outgoing video", typ, e)
 	}
 	if typ, _, e := inspect(mp4, "incoming"); e != nil || typ != "video/mp4" {
 		t.Fatal("incoming video", typ, e)
+	}
+	webm := []byte{0x1a, 0x45, 0xdf, 0xa3, 0x01, 0x00, 0x00, 0x00}
+	if typ, _, e := inspect(webm, "outgoing"); e != nil || typ != "video/webm" {
+		t.Fatal("outgoing webm", typ, e)
+	}
+	if _, _, e := inspect(webm, "incoming"); e == nil {
+		t.Fatal("incoming webm accepted")
 	}
 }

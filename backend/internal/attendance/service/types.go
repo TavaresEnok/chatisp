@@ -13,6 +13,8 @@ import (
 const (
 	// OpSendText is the idempotency operation for one public text send.
 	OpSendText = "send_text"
+	// OpSendMedia is one public media send. It does not share send_text.
+	OpSendMedia = "send_media"
 	// OpSendTemplate is one proactive template. It does not share send_text.
 	OpSendTemplate = "send_template"
 	// OpClose is the idempotency operation for closing a cycle.
@@ -55,6 +57,21 @@ type SendInput struct {
 type SendResult struct {
 	store.OutboundResult
 	JobID int64
+}
+
+// MediaSendInput is one human media message. Body is the caption and may be
+// empty for audio. AttachmentID must already be a validated outgoing file of
+// this conversation. ReplyToMessageID is an internal message of the same
+// conversation. ClientRequestID is scoped by OpSendMedia.
+type MediaSendInput struct {
+	InboxID          uuid.UUID
+	ConversationID   uuid.UUID
+	ExpectedVersion  int64
+	ClientRequestID  string
+	Body             string
+	AttachmentID     uuid.UUID
+	ReplyToMessageID *uuid.UUID
+	At               time.Time
 }
 
 // CloseInput ends the open cycle. FarewellBody is optional and uses its own
