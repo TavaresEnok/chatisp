@@ -215,3 +215,9 @@ M8. Sem chamadas reais a Meta, ERP ou Evolution.
 ## Mídia M4B, integrada em 03/11/2026
 
 Entrou o bloco M4B na `continuation/m5-runtime-panel`, por merge sem rebase de `continuation/m4b-media`: metadados de mídia e recusa da conversão quando não há ffmpeg (`1b13b13`) e o envio do blob original do MediaRecorder com id interno de resposta (`b4bfc60`). A conversão permanece recusada sem ffmpeg; o binário não foi instalado. Testes executados e aprovados: `go test -count=1 ./internal/media/...`, `go vet ./internal/media/...` e o Vitest de `message-composer.audio.test.tsx` (1 teste).
+
+## Uso da plataforma e alertas operacionais
+
+O merge `122e744` trouxe `continuation/m7-platform-usage`: contagens do superadmin sem corpo de conversa, auditoria e o alerta de espera na fila. O conflito em Configurações ficou com o painel externo e o registro de auditoria. `go test -count=1 ./internal/platformusage/` e `go vet ./internal/platformusage/` passaram neste repositório.
+
+O merge `e3daa70` trouxe `continuation/m8-ops-alerts`: job acima do limite gravado, conector desconectado e webhook pendente, só para o admin. Carga e restauração continuam de fora. Configurações também mostra esses alertas. `go test -count=1 ./internal/opsalert/` e `go vet ./internal/opsalert/` passaram. O Vitest dessa tela não foi repetido aqui.
