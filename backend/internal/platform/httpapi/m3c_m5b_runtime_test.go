@@ -203,6 +203,30 @@ func TestM3CM5BComposition(t *testing.T) {
 			t.Fatalf("ocupação %s: %d %s", tc.path, r.Code, r.Body.String())
 		}
 	}
+	reopenPath := "/api/panel/inboxes/" + inbox.String() + "/reopen-window"
+	for _, tc := range []struct {
+		method, cookie, csrf string
+		body                 any
+		want                 int
+		match                string
+	}{
+		{http.MethodGet, adminCookie, "", nil, 200, `"hours":0`},
+		{http.MethodGet, agentCookie, "", nil, 403, ""},
+		{http.MethodPut, agentCookie, "", map[string]any{"hours": 24}, 403, ""},
+		{http.MethodPut, adminCookie, adminCSRF, map[string]any{"hours": 721}, 422, ""},
+		{http.MethodPut, adminCookie, adminCSRF, map[string]any{"hours": 24}, 200, `"hours":24`},
+		{http.MethodGet, adminCookie, "", nil, 200, `"hours":24`},
+		{http.MethodGet, "", "", nil, 401, ""},
+	} {
+		r := panelCall(api.Handler, tc.method, reopenPath, "198.51.100.46", tc.body, tc.cookie, tc.csrf, origin, "")
+		if r.Code != tc.want || (tc.match != "" && !strings.Contains(r.Body.String(), tc.match)) {
+			t.Fatalf("janela de reabertura %s: %d %s", tc.method, r.Code, r.Body.String())
+		}
+	}
+	missing := panelCall(api.Handler, http.MethodGet, "/api/panel/inboxes/"+uuid.NewString()+"/reopen-window", "198.51.100.46", nil, adminCookie, "", origin, "")
+	if missing.Code != http.StatusNotFound {
+		t.Fatalf("caixa inexistente: %d %s", missing.Code, missing.Body.String())
+	}
 	disabled := panelCall(api.Handler, http.MethodPut, "/api/panel/sectors/"+sector.String()+"/distribution", "198.51.100.44", map[string]any{
 		"expected_version": 1, "enabled": false,
 	}, adminCookie, adminCSRF, origin, "")

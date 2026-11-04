@@ -1,6 +1,7 @@
 import { directory } from "@/api/directory";
 import { listHoursInboxes } from "@/api/businesshours";
 import { DistributionSettings } from "@/features/distribution/distribution-settings";
+import { AutomationSettings } from "@/features/automation/automation-settings";
 import { Link } from "react-router";
 import { AreaPage } from "@/components/layout/area-page";
 import { LocalDisplayNameForm } from "@/components/settings/local-display-name-form";
@@ -25,6 +26,7 @@ export function SettingsPage() {
     <AreaPage areaId="settings">
       <SettingsSections />
  {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <DistributionSettings key={principal.sessionId} principal={principal} />}
+      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <AutomationSettings key={principal.sessionId} principal={principal} />}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <Preferences key={JSON.stringify(queryKeys.notificationPreferences(principal))} principal={principal} />}
       {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <Link to="/configuracoes/canais">Caixas Meta</Link> : null}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <Capacity key={principal.sessionId} principal={principal} />}
