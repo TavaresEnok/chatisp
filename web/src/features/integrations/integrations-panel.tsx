@@ -53,6 +53,7 @@ function IntegrationsAdmin({ sessionId }: { sessionId: string }) {
       <TokenSection sessionId={sessionId} />
       <WebhookSection sessionId={sessionId} />
       <ErpConnector />
+      <EvolutionConnector />
     </section>
   );
 }
@@ -308,6 +309,28 @@ function DeliveryStatus({ delivery }: { delivery: WebhookDelivery | null }) {
     <p>
       Status da última entrega: {label} ({delivery.status}), tentativa {delivery.attempt}
     </p>
+  );
+}
+
+function EvolutionConnector() {
+  return (
+    <section aria-label="Conector Evolution" className="rounded-xl bg-card p-4 text-sm ring-1 ring-foreground/10">
+      <h3 className="text-sm font-medium">Conector Evolution</h3>
+      <p>
+        A modalidade Web permanece desligada. Não há QR, sessão gravada nem chamada ao serviço.
+        A decisão D2-04 continua em aberto.
+      </p>
+      <dl className="mt-2">
+        <div>
+          <dt>Situação</dt>
+          <dd>desligada</dd>
+        </div>
+        <div>
+          <dt>QR</dt>
+          <dd>não exibido</dd>
+        </div>
+      </dl>
+    </section>
   );
 }
 

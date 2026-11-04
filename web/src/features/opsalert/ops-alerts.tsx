@@ -61,6 +61,10 @@ export function OpsAlerts({ sessionId }: { sessionId: string }) {
       <h2>Alertas operacionais</h2>
       <p>O registro fica neste painel. Não enviamos e-mail nem chamamos um serviço externo.</p>
       <p>Teste de carga e restauração ficam de fora.</p>
+      <p>
+        Incerteza, reservas, webhook, storage e conectores saem em GET /metrics no listener privado.
+        Este painel não mostra esses totais.
+      </p>
       {query.isPending ? <p>Carregando alertas.</p> : null}
       {query.isError ? <p role="alert">Não foi possível carregar os alertas.</p> : null}
       {query.data && query.data.alerts.length === 0 ? <p>Não há alerta.</p> : null}

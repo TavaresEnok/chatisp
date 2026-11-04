@@ -74,6 +74,9 @@ it("mostra o segredo do token uma vez e permite copiar", async () => {
   expect(screen.getByRole("region", { name: "Conector ERP" })).toHaveTextContent("11-conector-erp");
   expect(screen.getByRole("region", { name: "Conector ERP" })).toHaveTextContent("simulado");
   expect(screen.getByRole("region", { name: "Conector ERP" })).toHaveTextContent("desligado");
+  expect(screen.getByRole("region", { name: "Conector Evolution" })).toHaveTextContent("desligada");
+  expect(screen.getByRole("region", { name: "Conector Evolution" })).toHaveTextContent("não exibido");
+  expect(screen.getByRole("region", { name: "Conector Evolution" })).not.toHaveTextContent("homolog");
   await user.click(screen.getByRole("checkbox", { name: "Leitura de contatos" }));
   await user.click(screen.getByRole("button", { name: "Gerar token" }));
   const reveal = await screen.findByLabelText("Segredo do token");

@@ -22,7 +22,7 @@ Se não houver alerta aberto, a resposta traz `alerts: []`. A tela diz «Não h�
 
 - Teste de carga k6 e qualquer número de capacidade, p95, CPU, RAM ou I/O. A D2-07 continua obrigatória antes de publicar capacidade. O ensaio local posterior está em `load/perfil-sintetico-local.md` e não fecha este item.
 - Restore de banco, anexos e chaves. A duração medida desse exercício fica em `metrics.prom` do ensaio, não neste painel. Ver `docs/contracts/m8-restore-drill.md`.
-- Incerteza, WebSocket, pool, storage e atraso de webhook como séries. Elas não alimentam estes alertas. WebSocket, pool e River estão em `docs/contracts/m8-runtime-telemetry.md`. Incerteza, reservas, webhook, storage e conectores agregados estão em `docs/contracts/m8-ops-signals.md`. O destino desses números é `GET /metrics` no listener privado. O destino destes três alertas continua sendo este painel.
+- Incerteza, WebSocket, pool, storage e atraso de webhook como séries numéricas neste painel. Elas não abrem alerta. WebSocket, pool e River estão em `docs/contracts/m8-runtime-telemetry.md`. Incerteza, reservas, webhook, storage e conectores agregados estão em `docs/contracts/m8-ops-signals.md`. O destino desses números é `GET /metrics` no listener privado. O painel do admin cita esse destino e não mostra os totais, porque a leitura é do banco inteiro e não de um provedor. O destino destes três alertas continua sendo este painel.
 - Conector `degraded` e item de webhook `quarantined`.
 - E-mail, webhook externo e qualquer destino pago.
 - Corpo de mensagem, CPF, segredo, telefone e argumento completo do job.

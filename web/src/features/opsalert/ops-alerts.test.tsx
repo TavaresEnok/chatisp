@@ -33,6 +33,9 @@ it("diz que não há alerta e não inventa exemplo", async () => {
   expect(screen.queryByRole("list", { name: "Alertas abertos" })).not.toBeInTheDocument();
   expect(document.body.textContent ?? "").not.toContain(secret);
   expect(document.body.textContent ?? "").not.toContain("exemplo");
+  expect(screen.getByText(/GET \/metrics/)).toBeInTheDocument();
+  expect(screen.getByText(/não mostra esses totais/)).toBeInTheDocument();
+  expect(document.body.textContent ?? "").not.toContain("aceito_como_capacidade");
   expect(screen.getByLabelText("Idade do job em segundos")).toHaveValue("");
   expect(screen.getByLabelText("Idade do webhook pendente em segundos")).toHaveValue("");
 });
