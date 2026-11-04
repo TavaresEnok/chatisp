@@ -75,6 +75,10 @@ Lacuna restante:
 - Webhook de contato criado ou alterado é V2 e não foi adicionado.
 - Homologação com ERP, Meta ou Evolution reais não foi feita e não deve ser feita com credencial deste ambiente.
 
+## Fechamento da frente
+
+No tree `f7be14d`, a validação conjunta foi `go test -count=1 -timeout 240s ./internal/retention/ ./internal/retention/httpapi/ ./internal/media/ ./internal/publicapi/`. Resultado: ok em 2,010s, 1,940s, 7,245s e 2,290s. A suíte inteira do repositório não rodou.
+
 ## O que a frente de operação não deve sobrescrever
 
 - `backend/db/migrations/00046_privacy_subject.sql`
