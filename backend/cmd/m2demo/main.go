@@ -46,6 +46,9 @@ func handler() http.Handler {
 }
 
 func run(args []string) error {
+	if len(args) > 0 && args[0] == "m7" {
+		return m7Demo(args[1:])
+	}
 	if len(args) > 0 && args[0] == "m4b" {
 		return m4bDemo(args[1:])
 	}

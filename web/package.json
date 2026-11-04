@@ -16,6 +16,7 @@
     "test:e2e:m3b": "node scripts/m3b-e2e.mjs",
     "test:e2e:m4a": "node scripts/m4a-e2e.mjs",
     "test:e2e:m4b-m6": "node scripts/m4b-m6-e2e.mjs",
+    "test:e2e:m7-ops": "node scripts/m7-ops-e2e.mjs",
     "generate:api": "openapi-typescript ../backend/api/openapi.json -o src/api/schema.ts"
   },
   "dependencies": {

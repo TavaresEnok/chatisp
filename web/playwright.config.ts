@@ -9,6 +9,10 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   outputDir: "../.paseo-build-tmp/m3b-browser",
   reporter: "list",
+  projects: [
+    { name: "m3b", testMatch: "m3b*.spec.ts" },
+    { name: "m7-ops", testMatch: "m7-ops*.spec.ts", timeout: 330_000 },
+  ],
   use: {
     baseURL: "https://localhost:5174",
     ignoreHTTPSErrors: true,
