@@ -37,7 +37,7 @@ Cookie `__Host-session`, CSRF `X-CSRF-Token` e `Origin` confiável nas escritas.
 | GET | `/api/panel/api-tokens` | Lista sem segredo. |
 | POST | `/api/panel/api-tokens/{id}/revoke` | Revoga. O Bearer seguinte responde 401. |
 
-Escopos: `read`, `contacts.read`, `contacts.write`, `conversations.read`, `messages.read`, `templates.send`, `directory.read`. O escopo legado `read` cobre leitura de conversas, mensagens, contatos e cadastros. Não cobre `templates.send` nem `contacts.write`.
+Escopos: `read`, `contacts.read`, `contacts.write`, `conversations.read`, `conversations.write`, `messages.read`, `templates.send`, `directory.read`. O escopo legado `read` cobre leitura de conversas, mensagens, contatos e cadastros. Não cobre `templates.send`, `contacts.write` nem `conversations.write`. A migração `00048_public_conversation_write.sql` só inclui `conversations.write` na restrição de `api_tokens` e em `api_token_issue`. Não cria tabela.
 
 ## API pública
 
@@ -52,6 +52,9 @@ Prefixo `/api/public`. Credencial `Authorization: Bearer`. O limite por token e 
 | GET | `/api/public/v1/conversations` | `conversations.read` |
 | GET | `/api/public/v1/conversations/{ref}` | `conversations.read` |
 | GET | `/api/public/v1/conversations/{ref}/messages` | `messages.read` |
+| POST | `/api/public/v1/conversations/{ref}/messages` | `conversations.write` |
+| POST | `/api/public/v1/conversations/{ref}/assignment` | `conversations.write` |
+| POST | `/api/public/v1/conversations/{ref}/state` | `conversations.write` |
 | GET | `/api/public/v1/conversations/{ref}/contact` | `contacts.read` |
 | POST | `/api/public/v1/conversations/{ref}/template` | `templates.send` |
 | GET | `/api/public/v1/agents` | `directory.read` |
@@ -63,6 +66,12 @@ Prefixo `/api/public`. Credencial `Authorization: Bearer`. O limite por token e 
 `PATCH /v1/contacts/{id}` altera só os campos enviados: nome, telefone, e-mail e `external_ref`. Texto vazio em telefone, e-mail ou referência grava nulo. Documento, observações e bloqueio não são aceitos. Outro contato com a mesma referência responde 409. Contato já anonimizado pela exclusão do titular também responde 409 e não volta a ter nome. Escopo `contacts.read` não atualiza.
 
 A leitura de conversa, no detalhe e na lista, inclui `version`. Esse é o `expected_version` do envio. Uma versão diferente da atual responde 409; a releitura traz o valor que o próximo envio novo precisa usar.
+
+`POST /v1/conversations/{ref}/messages` chama `Service.Send` em nome do atendente atual. Sem atendente a resposta é 422. A janela de 24 horas do texto livre é a mesma do painel. A chave `client_request_id` é do token e do tenant, derivada com o espaço `pubapi`, e não se mistura com o painel nem com outro token. Repetir a chave depois de transferir devolve a mesma mensagem. Outro texto na mesma chave responde 409. Não envia mídia.
+
+`POST /v1/conversations/{ref}/assignment` chama `Service.TransferToMember`. O destino é `assignee_id`, uma membership ativa do setor da conversa. O token não tem sessão: o ator operacional é o administrador ativo mais antigo do provedor, ou o autor já gravado naquela chave. Capacidade esgotada responde 409. A mesma chave com outro destino responde 409.
+
+`POST /v1/conversations/{ref}/state` chama `Service.Close` quando `status` é `closed` e `Service.Reopen` quando `status` é `open`. O encerramento exige `reason`, `result` (`resolved`, `no_response`, `referred_external` ou `spam`) e `summary`. Não envia despedida. O ator operacional é o mesmo administrador da atribuição. Reabrir não aceita motivo. O webhook de contato continua de fora.
 
 `POST /v1/conversations/{ref}/template` chama `Service.SendTemplate`. A revalidação é `channelpolicy.EvaluateDispatchTx`: consentimento da finalidade e template aprovado (`sync_source=driver`, `state=APPROVED`) correm antes do ramo de texto livre que aplica a janela de 24 horas. Sem consentimento a resposta é 422 `consent_required`. A finalidade vazia usa `atendimento`.
 

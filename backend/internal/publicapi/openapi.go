@@ -31,6 +31,9 @@ func publicRoutes() []publicRoute {
 		{Method: http.MethodGet, Path: "/v1/conversations/{ref}", OperationID: "getConversation", Summary: "Lê uma conversa pelo UUID ou protocolo", Scope: "conversations.read", Tag: "conversas"},
 		{Method: http.MethodGet, Path: "/v1/conversations/{ref}/messages", OperationID: "listMessages", Summary: "Lista mensagens públicas da conversa", Scope: "messages.read", Tag: "mensagens", Limit: true},
 		{Method: http.MethodGet, Path: "/v1/conversations/{ref}/contact", OperationID: "getConversationContact", Summary: "Lê o contato vinculado à conversa", Scope: "contacts.read", Tag: "contatos"},
+		{Method: http.MethodPost, Path: "/v1/conversations/{ref}/messages", OperationID: "sendMessage", Summary: "Envia uma mensagem de texto pelo atendimento", Scope: "conversations.write", Tag: "mensagens", Body: true},
+		{Method: http.MethodPost, Path: "/v1/conversations/{ref}/assignment", OperationID: "assignConversation", Summary: "Atribui a conversa a um atendente do setor", Scope: "conversations.write", Tag: "conversas", Body: true},
+		{Method: http.MethodPost, Path: "/v1/conversations/{ref}/state", OperationID: "setConversationState", Summary: "Encerra ou reabre a conversa pelo atendimento", Scope: "conversations.write", Tag: "conversas", Body: true},
 		{Method: http.MethodPost, Path: "/v1/conversations/{ref}/template", OperationID: "sendTemplate", Summary: "Envia um template pelo fluxo de consentimento e outbox", Scope: "templates.send", Tag: "mensagens", Body: true},
 		{Method: http.MethodGet, Path: "/v1/agents", OperationID: "listAgents", Summary: "Lista atendentes do provedor", Scope: "directory.read", Tag: "cadastros", Limit: true},
 		{Method: http.MethodGet, Path: "/v1/sectors", OperationID: "listSectors", Summary: "Lista setores do provedor", Scope: "directory.read", Tag: "cadastros", Limit: true},
@@ -62,6 +65,12 @@ func (h *handler) dispatch(operationID string) http.HandlerFunc {
 		return h.messages
 	case "getConversationContact":
 		return h.contact
+	case "sendMessage":
+		return h.sendMessage
+	case "assignConversation":
+		return h.assignConversation
+	case "setConversationState":
+		return h.setConversationState
 	case "sendTemplate":
 		return h.sendTemplate
 	case "listAgents":
@@ -187,6 +196,9 @@ func OpenAPIJSON() []byte {
 	twoHundred := 200
 	twoFiftySix := 256
 	threeTwenty := 320
+	fiveHundred := 500
+	fourThousand := 4000
+	sixteenThousand := 16000
 	schemas := map[string]docSchema{
 		"Problem": {
 			Type: "object", Required: []string{"type", "title", "status", "detail"},
@@ -249,7 +261,7 @@ func OpenAPIJSON() []byte {
 				"assignee_id":       {Type: "string", Format: "uuid", Nullable: true},
 				"controller":        {Type: "string"},
 				"cycle_number":      {Type: "integer", Minimum: &one},
-				"version":           {Type: "integer", Minimum: &one, Description: "Precondição expected_version do envio de template."},
+				"version":           {Type: "integer", Minimum: &one, Description: "Precondição expected_version do texto, da atribuição, do estado e do template."},
 				"external_protocol": {Type: "string", Nullable: true},
 				"created_at":        {Type: "string", Format: "date-time"},
 				"updated_at":        {Type: "string", Format: "date-time"},
@@ -276,6 +288,36 @@ func OpenAPIJSON() []byte {
 			Properties: map[string]docSchema{
 				"conversation_id": {Type: "string", Format: "uuid"},
 				"messages":        {Type: "array", Items: ref("Message")},
+			},
+		},
+		"TextSend": {
+			Type: "object", AdditionalProperties: &falseValue,
+			Required: []string{"body", "client_request_id", "expected_version"},
+			Properties: map[string]docSchema{
+				"body":              {Type: "string", MinLength: &one, MaxLength: &sixteenThousand, Description: "Texto livre. A assinatura do atendente atual é aplicada pelo atendimento."},
+				"client_request_id": {Type: "string", MinLength: &one, MaxLength: &twoHundred, Description: "Idempotência do token e do tenant. Outro token e o painel não compartilham esta chave."},
+				"expected_version":  {Type: "integer", Minimum: &one, Description: "version lida em GET da conversa."},
+			},
+		},
+		"Assignment": {
+			Type: "object", AdditionalProperties: &falseValue,
+			Required: []string{"assignee_id", "client_request_id", "expected_version"},
+			Properties: map[string]docSchema{
+				"assignee_id":       {Type: "string", Format: "uuid", Description: "Membership ativa do setor da conversa."},
+				"client_request_id": {Type: "string", MinLength: &one, MaxLength: &twoHundred},
+				"expected_version":  {Type: "integer", Minimum: &one},
+			},
+		},
+		"ConversationState": {
+			Type: "object", AdditionalProperties: &falseValue,
+			Required: []string{"status", "client_request_id", "expected_version"},
+			Properties: map[string]docSchema{
+				"status":            {Type: "string", Enum: []string{"open", "closed"}, Description: "closed encerra o ciclo. open reabre um ciclo encerrado."},
+				"reason":            {Type: "string", MaxLength: &fiveHundred, Description: "Obrigatório quando status é closed."},
+				"result":            {Type: "string", Enum: []string{"resolved", "no_response", "referred_external", "spam"}, Description: "Obrigatório quando status é closed."},
+				"summary":           {Type: "string", MaxLength: &fourThousand, Description: "Obrigatório quando status é closed."},
+				"client_request_id": {Type: "string", MinLength: &one, MaxLength: &twoHundred},
+				"expected_version":  {Type: "integer", Minimum: &one},
 			},
 		},
 		"TemplateSend": {
@@ -335,7 +377,7 @@ func OpenAPIJSON() []byte {
 		Info: docInfo{
 			Title:       "Chat ISP API pública",
 			Version:     "1.0.0",
-			Description: "Leitura de conversas, contatos e cadastros, criação e atualização de contatos e envio individual de template. O Bearer é um token de API. O documento do painel não inclui estas rotas. A atualização não grava documento nem observações.",
+			Description: "Leitura de conversas, contatos e cadastros, criação e atualização de contatos, envio de texto, atribuição, mudança de estado e envio individual de template. O Bearer é um token de API. O documento do painel não inclui estas rotas. A atualização de contato não grava documento nem observações. Texto, atribuição e estado reutilizam o atendimento do painel.",
 		},
 		Servers: []docServer{{URL: "/api/public", Description: "Prefixo montado"}},
 		Tags: []docTag{
@@ -412,6 +454,31 @@ func OpenAPIJSON() []byte {
 		case "getConversationContact":
 			op.Responses["200"] = jsonResp("Contato da conversa", "Contact")
 			op.Responses["404"] = problemResp("Conversa ou contato não encontrado")
+		case "sendMessage":
+			op.Description = "Escopo exigido: conversations.write. O texto segue Service.Send do atendimento, em nome do atendente atual da conversa. A chave é do token e do tenant. A janela de 24 horas e a assinatura do painel são as mesmas. Não envia mídia nem template."
+			op.RequestBody = bodyRef("TextSend")
+			op.Responses["201"] = jsonResp("Texto aceito na outbox", "TemplateResult")
+			op.Responses["200"] = jsonResp("Replay da mesma chave e do mesmo texto", "TemplateResult")
+			op.Responses["400"] = problemResp("Mensagem inválida")
+			op.Responses["409"] = problemResp("Versão desatualizada, conversa encerrada ou chave reutilizada com outro texto")
+			op.Responses["422"] = problemResp("Janela fechada, política recusada ou conversa sem atendente")
+			op.Responses["503"] = problemResp("Serviço de atendimento indisponível")
+		case "assignConversation":
+			op.Description = "Escopo exigido: conversations.write. A atribuição segue TransferToMember do atendimento. O ator operacional é um administrador ativo do provedor, porque o token não tem sessão. O destino precisa estar no setor da conversa. A mesma chave devolve a mesma atribuição."
+			op.RequestBody = bodyRef("Assignment")
+			op.Responses["200"] = jsonResp("Conversa atribuída", "Conversation")
+			op.Responses["400"] = problemResp("Atribuição inválida")
+			op.Responses["409"] = problemResp("Versão desatualizada, conversa encerrada, capacidade esgotada ou chave reutilizada com outro destino")
+			op.Responses["422"] = problemResp("Comando recusado")
+			op.Responses["503"] = problemResp("Serviço de atendimento indisponível")
+		case "setConversationState":
+			op.Description = "Escopo exigido: conversations.write. closed segue Close e open segue Reopen, sem mensagem de despedida. O ator operacional é um administrador ativo do provedor. reason, result e summary são obrigatórios só no encerramento."
+			op.RequestBody = bodyRef("ConversationState")
+			op.Responses["200"] = jsonResp("Conversa no estado pedido", "Conversation")
+			op.Responses["400"] = problemResp("Estado inválido")
+			op.Responses["409"] = problemResp("Versão desatualizada, transição recusada ou chave reutilizada com outro conteúdo")
+			op.Responses["422"] = problemResp("Comando recusado")
+			op.Responses["503"] = problemResp("Serviço de atendimento indisponível")
 		case "sendTemplate":
 			op.Description = "Escopo exigido: templates.send. A idempotência é do token e do tenant e não se mistura com outro token nem com o painel. expected_version vem do campo version da conversa. Consentimento e template aprovado são revalidados no mesmo fluxo do atendimento."
 			op.RequestBody = bodyRef("TemplateSend")

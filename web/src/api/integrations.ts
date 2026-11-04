@@ -6,6 +6,7 @@ export const API_SCOPES = [
   "contacts.read",
   "contacts.write",
   "conversations.read",
+  "conversations.write",
   "messages.read",
   "templates.send",
   "directory.read",

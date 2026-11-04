@@ -3,7 +3,7 @@
   "info": {
     "title": "Chat ISP API pública",
     "version": "1.0.0",
-    "description": "Leitura de conversas, contatos e cadastros, criação e atualização de contatos e envio individual de template. O Bearer é um token de API. O documento do painel não inclui estas rotas. A atualização não grava documento nem observações."
+    "description": "Leitura de conversas, contatos e cadastros, criação e atualização de contatos, envio de texto, atribuição, mudança de estado e envio individual de template. O Bearer é um token de API. O documento do painel não inclui estas rotas. A atualização de contato não grava documento nem observações. Texto, atribuição e estado reutilizam o atendimento do painel."
   },
   "servers": [
     {
@@ -580,6 +580,137 @@
         "x-required-scope": "conversations.read"
       }
     },
+    "/v1/conversations/{ref}/assignment": {
+      "post": {
+        "operationId": "assignConversation",
+        "summary": "Atribui a conversa a um atendente do setor",
+        "description": "Escopo exigido: conversations.write. A atribuição segue TransferToMember do atendimento. O ator operacional é um administrador ativo do provedor, porque o token não tem sessão. O destino precisa estar no setor da conversa. A mesma chave devolve a mesma atribuição.",
+        "tags": [
+          "conversas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "description": "UUID da conversa ou protocolo",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Assignment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conversa atribuída",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Atribuição inválida",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credencial ausente, inválida ou revogada",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Escopo ausente ou provedor suspenso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conversa não encontrada",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Versão desatualizada, conversa encerrada, capacidade esgotada ou chave reutilizada com outro destino",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Comando recusado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite do token ou do provedor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Serviço de atendimento indisponível",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "conversations.write"
+      }
+    },
     "/v1/conversations/{ref}/contact": {
       "get": {
         "operationId": "getConversationContact",
@@ -771,6 +902,276 @@
           }
         },
         "x-required-scope": "messages.read"
+      },
+      "post": {
+        "operationId": "sendMessage",
+        "summary": "Envia uma mensagem de texto pelo atendimento",
+        "description": "Escopo exigido: conversations.write. O texto segue Service.Send do atendimento, em nome do atendente atual da conversa. A chave é do token e do tenant. A janela de 24 horas e a assinatura do painel são as mesmas. Não envia mídia nem template.",
+        "tags": [
+          "mensagens"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "description": "UUID da conversa ou protocolo",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TextSend"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replay da mesma chave e do mesmo texto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Texto aceito na outbox",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Mensagem inválida",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credencial ausente, inválida ou revogada",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Escopo ausente ou provedor suspenso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conversa não encontrada",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Versão desatualizada, conversa encerrada ou chave reutilizada com outro texto",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Janela fechada, política recusada ou conversa sem atendente",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite do token ou do provedor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Serviço de atendimento indisponível",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "conversations.write"
+      }
+    },
+    "/v1/conversations/{ref}/state": {
+      "post": {
+        "operationId": "setConversationState",
+        "summary": "Encerra ou reabre a conversa pelo atendimento",
+        "description": "Escopo exigido: conversations.write. closed segue Close e open segue Reopen, sem mensagem de despedida. O ator operacional é um administrador ativo do provedor. reason, result e summary são obrigatórios só no encerramento.",
+        "tags": [
+          "conversas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "description": "UUID da conversa ou protocolo",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationState"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conversa no estado pedido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Estado inválido",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credencial ausente, inválida ou revogada",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Escopo ausente ou provedor suspenso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conversa não encontrada",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Versão desatualizada, transição recusada ou chave reutilizada com outro conteúdo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Comando recusado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite do token ou do provedor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Serviço de atendimento indisponível",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "conversations.write"
       }
     },
     "/v1/conversations/{ref}/template": {
@@ -1122,6 +1523,31 @@
         },
         "additionalProperties": false
       },
+      "Assignment": {
+        "type": "object",
+        "required": [
+          "assignee_id",
+          "client_request_id",
+          "expected_version"
+        ],
+        "properties": {
+          "assignee_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Membership ativa do setor da conversa."
+          },
+          "client_request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
       "Contact": {
         "type": "object",
         "required": [
@@ -1295,7 +1721,7 @@
           },
           "version": {
             "type": "integer",
-            "description": "Precondição expected_version do envio de template.",
+            "description": "Precondição expected_version do texto, da atribuição, do estado e do template.",
             "minimum": 1
           }
         },
@@ -1312,6 +1738,54 @@
             "items": {
               "$ref": "#/components/schemas/Conversation"
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConversationState": {
+        "type": "object",
+        "required": [
+          "status",
+          "client_request_id",
+          "expected_version"
+        ],
+        "properties": {
+          "client_request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reason": {
+            "type": "string",
+            "description": "Obrigatório quando status é closed.",
+            "maxLength": 500
+          },
+          "result": {
+            "type": "string",
+            "description": "Obrigatório quando status é closed.",
+            "enum": [
+              "resolved",
+              "no_response",
+              "referred_external",
+              "spam"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "closed encerra o ciclo. open reabre um ciclo encerrado.",
+            "enum": [
+              "open",
+              "closed"
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "description": "Obrigatório quando status é closed.",
+            "maxLength": 4000
           }
         },
         "additionalProperties": false
@@ -1529,6 +2003,34 @@
             "description": "external_id do template aprovado pelo driver.",
             "minLength": 1,
             "maxLength": 256
+          }
+        },
+        "additionalProperties": false
+      },
+      "TextSend": {
+        "type": "object",
+        "required": [
+          "body",
+          "client_request_id",
+          "expected_version"
+        ],
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "Texto livre. A assinatura do atendente atual é aplicada pelo atendimento.",
+            "minLength": 1,
+            "maxLength": 16000
+          },
+          "client_request_id": {
+            "type": "string",
+            "description": "Idempotência do token e do tenant. Outro token e o painel não compartilham esta chave.",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "expected_version": {
+            "type": "integer",
+            "description": "version lida em GET da conversa.",
+            "minimum": 1
           }
         },
         "additionalProperties": false

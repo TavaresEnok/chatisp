@@ -8,6 +8,7 @@ export const SCOPE_LABELS: Record<string, string> = {
   "contacts.read": "Leitura de contatos",
   "contacts.write": "Escrita de contatos",
   "conversations.read": "Leitura de conversas",
+  "conversations.write": "Escrita de conversas",
   "messages.read": "Leitura de mensagens",
   "templates.send": "Envio de template",
   "directory.read": "Leitura de cadastros",
