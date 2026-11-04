@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"chatisp/internal/attendance/store"
+	"chatisp/internal/platform/jobs"
 )
 
 func TestReserveDispatchTenantGateOrder(t *testing.T) {
@@ -194,8 +195,14 @@ func TestSendIdempotencyRaceConflictAndRollback(t *testing.T) {
 	if countQuery(t, ctx, w.tenant, `SELECT count(*) FROM outbound_attempts WHERE tenant_id = $1 AND conversation_id = $2`, w.tenant, assumed.ID) != 1 {
 		t.Fatal("mais de uma outbox")
 	}
-	if countJobs(t, ctx, w.tenant) != 1 {
-		t.Fatalf("jobs: %d", countJobs(t, ctx, w.tenant))
+	// One outbound dispatch survives the race. The four webhook jobs are the
+	// approved capture of conversation.created, the inbound message.created,
+	// conversation.assigned and the outbound message.created.
+	if got := countKindJobs(t, ctx, w.tenant, jobs.KindOutbound, jobs.QueueOutbound); got != 1 {
+		t.Fatalf("jobs: %d", got)
+	}
+	if got := countKindJobs(t, ctx, w.tenant, jobs.KindWebhook, jobs.QueueWebhooks); got != 4 {
+		t.Fatalf("jobs de webhook: %d", got)
 	}
 	replayed := results[0].res.Replayed || results[1].res.Replayed
 	if !replayed {
@@ -221,8 +228,11 @@ func TestSendIdempotencyRaceConflictAndRollback(t *testing.T) {
 	if countQuery(t, ctx, w.tenant, `SELECT count(*) FROM messages WHERE tenant_id = $1 AND body = 'não pode ficar'`, w.tenant) != 0 {
 		t.Fatal("rollback deixou mensagem")
 	}
-	if countJobs(t, ctx, w.tenant) != 1 {
+	if countKindJobs(t, ctx, w.tenant, jobs.KindOutbound, jobs.QueueOutbound) != 1 {
 		t.Fatal("rollback publicou outro job")
+	}
+	if countKindJobs(t, ctx, w.tenant, jobs.KindWebhook, jobs.QueueWebhooks) != 4 {
+		t.Fatal("rollback publicou outro webhook")
 	}
 }
 
@@ -404,13 +414,24 @@ func TestCloseFarewellReopen(t *testing.T) {
 	if done.Closure.Result != "no_response" {
 		t.Fatal(done.Closure.Result)
 	}
-	if countJobs(t, ctx, w2.tenant) != 1 {
-		t.Fatalf("job da despedida: %d", countJobs(t, ctx, w2.tenant))
+	// The farewell is the only outbound job. Webhooks are conversation.created,
+	// the inbound message.created, conversation.assigned, the farewell
+	// message.created and conversation.closed.
+	assertFarewellJobs := func(when string) {
+		t.Helper()
+		if got := countKindJobs(t, ctx, w2.tenant, jobs.KindOutbound, jobs.QueueOutbound); got != 1 {
+			t.Fatalf("job da despedida %s: %d", when, got)
+		}
+		if got := countKindJobs(t, ctx, w2.tenant, jobs.KindWebhook, jobs.QueueWebhooks); got != 5 {
+			t.Fatalf("jobs de webhook %s: %d", when, got)
+		}
 	}
-	reopened, err := svc.Reopen(ctx, p2, ReopenInput{
+	assertFarewellJobs("no encerramento")
+	reopenIn := ReopenInput{
 		InboxID: w2.inbox, ConversationID: owned.ID, ExpectedVersion: done.Conversation.Version,
 		ClientRequestID: "reopen-2", At: at(10),
-	})
+	}
+	reopened, err := svc.Reopen(ctx, p2, reopenIn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -420,6 +441,14 @@ func TestCloseFarewellReopen(t *testing.T) {
 	if reopened.ControllerEpoch == done.Conversation.ControllerEpoch {
 		t.Fatal("epoch não mudou na reabertura")
 	}
+	// Migration 00044 does not capture conversation.reopened or clearing the
+	// assignee, so reopen must not add an outbound or webhook job.
+	assertFarewellJobs("após a reabertura")
+	replayedOpen, err := svc.Reopen(ctx, p2, reopenIn)
+	if err != nil || replayedOpen.ID != reopened.ID || replayedOpen.Version != reopened.Version || replayedOpen.CycleNumber != reopened.CycleNumber {
+		t.Fatalf("replay da reabertura: %v %+v", err, replayedOpen)
+	}
+	assertFarewellJobs("após o replay da reabertura")
 	reserved, err := svc.ReserveDispatch(ctx, ReserveInput{
 		TenantID: w2.tenant, InboxID: w2.inbox, AttemptID: done.Farewell.AttemptID, OwnerID: uuid.New(),
 		ExpiresAt: time.Now().Add(time.Minute), At: at(11),
