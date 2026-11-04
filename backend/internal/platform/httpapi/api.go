@@ -42,6 +42,7 @@ import (
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/metrics"
 	"chatisp/internal/platform/version"
+	"chatisp/internal/platformusage"
 	"chatisp/internal/presence"
 	presenceHTTP "chatisp/internal/presence/httpapi"
 	"chatisp/internal/sectors"
@@ -244,6 +245,7 @@ func New(deps Dependencies) *API {
 	router.Handle("/api/webhooks/meta", webhookHandler)
 	router.Handle("/webhooks/meta", webhookHandler)
 	router.Handle("/meta/webhook", webhookHandler)
+	router.Method(http.MethodGet, "/api/platform/usage", platformusage.NewHandler(deps.Auth, deps.Store))
 
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		Write(w, http.StatusNotFound, "o caminho solicitado não existe")
