@@ -25,6 +25,9 @@ func TestDeriveAlertsOnlyAboveConfiguredThreshold(t *testing.T) {
 			{ID: 3, Kind: "chatisp.outbound.dispatch.v1", Queue: "outbound", State: "completed", Age: limit + time.Hour},
 			{ID: 4, Kind: "chatisp.outbound.dispatch.v1", Queue: "outbound", State: "discarded", Age: limit + time.Hour},
 			{ID: 5, Kind: "chatisp.ingress.expand.v1", Queue: "ingress", State: "scheduled", Age: limit + time.Minute},
+			{ID: 6, Kind: "chatisp.outbound.dispatch.v1", Queue: "outbound", State: "running", Age: limit + time.Second},
+			{ID: 7, Kind: "chatisp.inbound.apply.v1", Queue: "inbound", State: "cancelled", Age: limit + time.Hour},
+			{ID: 10, Kind: "chatisp.inbound.apply.v1", Queue: "inbound", State: "pending", Age: limit + time.Second},
 		},
 		Connectors: []ConnectorFact{
 			{ID: connectorID, Type: "meta_cloud", Status: "disconnected"},
@@ -40,7 +43,7 @@ func TestDeriveAlertsOnlyAboveConfiguredThreshold(t *testing.T) {
 		},
 	})
 
-	if len(alerts) != 4 {
+	if len(alerts) != 6 {
 		t.Fatalf("alertas = %d, corpo %#v", len(alerts), alerts)
 	}
 	got := map[string]Alert{}
@@ -62,6 +65,18 @@ func TestDeriveAlertsOnlyAboveConfiguredThreshold(t *testing.T) {
 	}
 	if _, ok := got["job:4"]; ok {
 		t.Fatal("job descartado gerou alerta")
+	}
+	if _, ok := got["job:6"]; !ok {
+		t.Fatal("job em execução acima do limite deveria alertar")
+	}
+	if _, ok := got["job:7"]; ok {
+		t.Fatal("job cancelado gerou alerta")
+	}
+	if _, ok := got["job:10"]; !ok {
+		t.Fatal("job pendente acima do limite deveria alertar")
+	}
+	if !strings.Contains(got["job:2"].Label, "fila inbound") || !strings.Contains(got["job:2"].Label, "chatisp.inbound.apply.v1") || !strings.Contains(got["job:2"].Label, "retryable") {
+		t.Fatalf("rótulo fechado do job: %s", got["job:2"].Label)
 	}
 	connector, ok := got["connector:"+connectorID.String()]
 	if !ok || connector.Signal != SignalConnectorDisconnected || connector.Label != "Conector meta_cloud desconectado" {
@@ -136,5 +151,49 @@ func TestMessageBodyDoesNotEnterAlert(t *testing.T) {
 	}
 	if !strings.Contains(encoded, "Webhook pendente sem conclusão") {
 		t.Fatalf("webhook sem classe conhecida: %s", encoded)
+	}
+}
+
+func TestCPFShapedTokenStaysOutOfLabel(t *testing.T) {
+	document := "390.533.447-05"
+	phone := "5511999999999"
+	connectorID := uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc")
+	webhookID := uuid.MustParse("dddddddd-dddd-dddd-dddd-dddddddddddd")
+	alerts := Derive(Limits{JobAge: time.Minute, WebhookAge: time.Minute}, Facts{
+		WebhookQueue: true,
+		Jobs: []JobFact{{
+			ID: 7, Kind: document, Queue: phone, State: "available", Age: 2 * time.Minute,
+		}},
+		Connectors: []ConnectorFact{{
+			ID: connectorID, Type: document, Status: "disconnected",
+		}},
+		Webhooks: []WebhookFact{{
+			ID: webhookID, Kind: phone, State: "pending", Age: 2 * time.Minute,
+		}},
+	})
+	raw, err := json.Marshal(alerts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded := string(raw)
+	for _, hidden := range []string{document, phone, "390", "5511"} {
+		if strings.Contains(encoded, hidden) {
+			t.Fatalf("alerta contém %q em %s", hidden, encoded)
+		}
+	}
+	if !strings.Contains(encoded, "fila desconhecida") || !strings.Contains(encoded, "tipo desconhecido") {
+		t.Fatalf("fila e tipo livres deveriam cair no rótulo genérico: %s", encoded)
+	}
+}
+
+func TestValidAgeBounds(t *testing.T) {
+	if ValidAge(MinAgeSeconds-1) || ValidAge(0) || ValidAge(-1) {
+		t.Fatal("limiar abaixo de 60 segundos foi aceito")
+	}
+	if !ValidAge(MinAgeSeconds) || !ValidAge(MaxAgeSeconds) {
+		t.Fatal("limites inclusivos 60 e 604800 devem ser graváveis")
+	}
+	if ValidAge(MaxAgeSeconds + 1) {
+		t.Fatal("limiar acima de 604800 segundos foi aceito")
 	}
 }
