@@ -237,8 +237,21 @@ func countQuery(t *testing.T, ctx context.Context, tenant uuid.UUID, query strin
 
 func countJobs(t *testing.T, ctx context.Context, tenant uuid.UUID) int {
 	t.Helper()
+	return countKindJobs(t, ctx, tenant, "", "")
+}
+
+// countKindJobs counts one River kind and queue for the tenant.
+// Empty kind and queue count every job, including webhook delivery.
+func countKindJobs(t *testing.T, ctx context.Context, tenant uuid.UUID, kind, queue string) int {
+	t.Helper()
 	var n int
-	if err := testPools.App.QueryRow(ctx, `SELECT count(*) FROM river.river_job WHERE args->>'tenant_id' = $1`, tenant.String()).Scan(&n); err != nil {
+	err := testPools.App.QueryRow(ctx, `
+		SELECT count(*) FROM river.river_job
+		WHERE args->>'tenant_id' = $1
+		  AND ($2 = '' OR kind = $2)
+		  AND ($3 = '' OR queue = $3)
+	`, tenant.String(), kind, queue).Scan(&n)
+	if err != nil {
 		t.Fatal(err)
 	}
 	return n

@@ -289,9 +289,9 @@ func TestSmokeAllModeHealthAndLogin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer respPost.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(respPost.Body, 1<<16))
+	respPost.Body.Close()
 	if respPost.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(respPost.Body)
 		t.Fatalf("webhook POST com HMAC válido: esperava 200, obteve %d (%s)", respPost.StatusCode, respBody)
 	}
 
@@ -332,6 +332,8 @@ func TestSmokeAllModeHealthAndLogin(t *testing.T) {
 
 	waitHealthy(t, ctx, errCh, client, base+"/readyz", "ready")
 
+	// Drop keep-alive sockets before cancel so shutdown is not waiting on this client.
+	client.CloseIdleConnections()
 	stop()
 	select {
 	case err := <-errCh:

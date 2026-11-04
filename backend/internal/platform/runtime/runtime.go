@@ -111,6 +111,8 @@ func Run(parent context.Context, opts Options) error {
 	}
 
 	var httpServer *http.Server
+	httpStates := newConnStates()
+	metricsStates := newConnStates()
 	if opts.Mode == config.ModeAPI || opts.Mode == config.ModeAll {
 		api := httpapi.New(httpapi.Dependencies{
 			Ready:          gate.Check,
@@ -142,8 +144,12 @@ func Run(parent context.Context, opts Options) error {
 			TrustedOrigins: opts.TrustedOrigins,
 		})
 		httpServer = newServer(api.Handler, opts.Logger)
+		httpServer.BaseContext = func(net.Listener) context.Context { return ctx }
+		httpServer.ConnState = httpStates.observe
 	}
 	metricsServer := newServer(meter.Handler(), opts.Logger)
+	metricsServer.BaseContext = func(net.Listener) context.Context { return ctx }
+	metricsServer.ConnState = metricsStates.observe
 
 	httpListener, httpOwned, err := listen(opts.HTTPListener, opts.Config.HTTPAddr, httpServer != nil)
 	if err != nil {
@@ -278,15 +284,15 @@ func Run(parent context.Context, opts Options) error {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), timeout)
 	defer shutdownCancel()
 	if httpServer != nil {
-		if err := httpServer.Shutdown(shutdownCtx); err != nil {
-			opts.Logger.Error("falha ao encerrar o servidor HTTP", "component", "api")
+		if err := shutdownHTTP(shutdownCtx, httpServer, httpStates); err != nil {
+			logShutdownErr(opts.Logger, "api", "falha ao encerrar o servidor HTTP", err)
 			if failure == nil {
 				failure = errors.New("falha ao encerrar o servidor HTTP")
 			}
 		}
 	}
-	if err := metricsServer.Shutdown(shutdownCtx); err != nil {
-		opts.Logger.Error("falha ao encerrar o servidor de métricas", "component", "metrics")
+	if err := shutdownHTTP(shutdownCtx, metricsServer, metricsStates); err != nil {
+		logShutdownErr(opts.Logger, "metrics", "falha ao encerrar o servidor de métricas", err)
 		if failure == nil {
 			failure = errors.New("falha ao encerrar o servidor de métricas")
 		}
@@ -321,6 +327,153 @@ func Run(parent context.Context, opts Options) error {
 		}
 	}
 	return failure
+}
+
+// connStates tracks listener sockets so shutdown can close ones net/http
+// refuses to reap. StateNew stays active for five seconds inside Shutdown
+// even when ShutdownTimeout is shorter, which fails the smoke process under load.
+//
+// Quiet sockets are closed only after Server.Shutdown has stored inShutdown.
+// The decision and net.Conn.Close share that mutex: a ConnState hook blocked
+// in observe cannot publish StateActive, return, and enter a handler between
+// the check and the close. A socket already in StateActive, or one that
+// publishes StateActive before the close commits, is left for the handler.
+type connStates struct {
+	mu    sync.Mutex
+	conns map[net.Conn]http.ConnState
+	// armed is set from Server.RegisterOnShutdown, which runs only after
+	// http.Server has stored inShutdown and closed listeners.
+	armed bool
+	// beforeQuietClose, when set, runs after a shutdown-armed scan drops the
+	// mutex and before those sockets are closed. Tests publish StateActive
+	// there. Production leaves it nil, so the check and Close stay in one
+	// critical section. A non-nil hook still closes only sockets that are
+	// still StateNew or StateIdle when the lock is taken again.
+	beforeQuietClose func()
+}
+
+func newConnStates() *connStates {
+	return &connStates{conns: make(map[net.Conn]http.ConnState)}
+}
+
+func (c *connStates) armShutdown() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.armed = true
+	c.mu.Unlock()
+}
+
+func (c *connStates) observe(conn net.Conn, state http.ConnState) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	switch state {
+	case http.StateNew, http.StateActive, http.StateIdle:
+		c.conns[conn] = state
+	default:
+		delete(c.conns, conn)
+	}
+}
+
+// closeQuiet closes sockets that are not inside a handler. Idle keep-alives and
+// accepted connections still waiting for a request header cannot outlive shutdown.
+// Hijacked sockets and handlers still running stay untouched.
+// Before armShutdown, it does nothing: Shutdown has not yet made the server
+// reject new requests, so closing here could drop a handler that already passed
+// the net/http shuttingDown check.
+func (c *connStates) closeQuiet() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	if !c.armed {
+		c.mu.Unlock()
+		return
+	}
+	hold := c.beforeQuietClose
+	pending := make([]net.Conn, 0, len(c.conns))
+	for conn, state := range c.conns {
+		if state == http.StateNew || state == http.StateIdle {
+			pending = append(pending, conn)
+		}
+	}
+	if hold == nil {
+		c.closeStillQuietLocked(pending)
+		c.mu.Unlock()
+		return
+	}
+	c.mu.Unlock()
+	hold()
+	c.mu.Lock()
+	c.closeStillQuietLocked(pending)
+	c.mu.Unlock()
+}
+
+// closeStillQuietLocked closes only the claimed sockets that are still quiet.
+// The caller holds c.mu. Close runs before the unlock so observe cannot record
+// StateActive, return to net/http, and start a handler on a socket this claim
+// is about to close.
+func (c *connStates) closeStillQuietLocked(pending []net.Conn) {
+	for _, conn := range pending {
+		state, ok := c.conns[conn]
+		if !ok || (state != http.StateNew && state != http.StateIdle) {
+			continue
+		}
+		delete(c.conns, conn)
+		_ = conn.Close()
+	}
+}
+
+// shutdownHTTP waits for handlers, whose request contexts are children of the
+// process context, and reaps header-less sockets while that wait runs.
+// Quiet sockets are reaped only after RegisterOnShutdown, so inShutdown is
+// already set and a request that has not entered its handler is not served.
+func shutdownHTTP(ctx context.Context, server *http.Server, states *connStates) error {
+	if server == nil {
+		return nil
+	}
+	armed := make(chan struct{})
+	server.RegisterOnShutdown(func() {
+		states.armShutdown()
+		states.closeQuiet()
+		close(armed)
+	})
+	done := make(chan error, 1)
+	go func() {
+		done <- server.Shutdown(ctx)
+	}()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-armed:
+			armed = nil
+			states.closeQuiet()
+		case err := <-done:
+			states.armShutdown()
+			states.closeQuiet()
+			return err
+		case <-ticker.C:
+			if armed == nil {
+				states.closeQuiet()
+			}
+		}
+	}
+}
+
+func logShutdownErr(logger *slog.Logger, component, message string, err error) {
+	if logger == nil || err == nil {
+		return
+	}
+	if logging.Sensitive(err.Error()) {
+		logger.Error(message, "component", component)
+		return
+	}
+	logger.Error(message, "component", component, "error", err.Error())
 }
 
 func newServer(handler http.Handler, logger *slog.Logger) *http.Server {
