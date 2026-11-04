@@ -13,14 +13,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	attendanceService "chatisp/internal/attendance/service"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/db"
 )
 
-// NewHandler serves the public read routes under /v1.
+// NewHandler serves the public API under /v1.
 // Mount it at /api/public. A nil store answers 503 and does not read data.
+// Template sends need Mount so the attendance service is the same outbox path.
 func NewHandler(store *db.Store) http.Handler {
-	h := &handler{store: store, limit: newLimiter(), now: time.Now}
+	return Mount(store, attendanceService.Service{})
+}
+
+// Mount serves the public API with the attendance service used for templates.
+func Mount(store *db.Store, attendance attendanceService.Service) http.Handler {
+	attendance.Jobs = bindingQueuer{inner: attendance.Jobs}
+	h := &handler{store: store, attendance: attendance, limit: newLimiter(), now: time.Now}
 	router := chi.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -29,9 +37,7 @@ func NewHandler(store *db.Store) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	})
-	router.Get("/v1/conversations/{ref}", h.conversation)
-	router.Get("/v1/conversations/{ref}/messages", h.messages)
-	router.Get("/v1/conversations/{ref}/contact", h.contact)
+	registerPublic(router, h)
 	router.NotFound(func(w http.ResponseWriter, _ *http.Request) {
 		writeProblem(w, http.StatusNotFound, "o caminho solicitado não existe")
 	})
@@ -39,15 +45,17 @@ func NewHandler(store *db.Store) http.Handler {
 }
 
 type handler struct {
-	store *db.Store
-	limit *limiter
-	now   func() time.Time
+	store      *db.Store
+	attendance attendanceService.Service
+	limit      *limiter
+	now        func() time.Time
 }
 
 type principal struct {
 	TokenID      uuid.UUID
 	TenantID     uuid.UUID
 	Scope        string
+	Scopes       []string
 	Revoked      bool
 	RequestLimit int
 	TenantStatus string
@@ -70,6 +78,7 @@ type conversationView struct {
 	AssigneeID       *uuid.UUID `json:"assignee_id"`
 	Controller       string     `json:"controller"`
 	CycleNumber      int        `json:"cycle_number"`
+	Version          int64      `json:"version"`
 	ExternalProtocol *string    `json:"external_protocol"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
@@ -90,15 +99,16 @@ type messageList struct {
 }
 
 type contactView struct {
-	ID      uuid.UUID `json:"id"`
-	Name    string    `json:"name"`
-	Phone   *string   `json:"phone"`
-	Email   *string   `json:"email"`
-	Blocked bool      `json:"blocked"`
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	Phone       *string   `json:"phone"`
+	Email       *string   `json:"email"`
+	Blocked     bool      `json:"blocked"`
+	ExternalRef *string   `json:"external_ref,omitempty"`
 }
 
 func (h *handler) conversation(w http.ResponseWriter, r *http.Request) {
-	p, ref, ok := h.gate(w, r)
+	p, ref, ok := h.gate(w, r, "conversations.read")
 	if !ok {
 		return
 	}
@@ -119,7 +129,7 @@ func (h *handler) conversation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) messages(w http.ResponseWriter, r *http.Request) {
-	p, ref, ok := h.gate(w, r)
+	p, ref, ok := h.gate(w, r, "messages.read")
 	if !ok {
 		return
 	}
@@ -149,7 +159,7 @@ func (h *handler) messages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) contact(w http.ResponseWriter, r *http.Request) {
-	p, ref, ok := h.gate(w, r)
+	p, ref, ok := h.gate(w, r, "contacts.read")
 	if !ok {
 		return
 	}
@@ -176,9 +186,9 @@ func (h *handler) contact(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, view)
 }
 
-func (h *handler) gate(w http.ResponseWriter, r *http.Request) (principal, string, bool) {
-	if h.store == nil {
-		writeProblem(w, http.StatusServiceUnavailable, "serviço indisponível")
+func (h *handler) gate(w http.ResponseWriter, r *http.Request, scope string) (principal, string, bool) {
+	p, ok := h.admit(w, r, scope)
+	if !ok {
 		return principal{}, "", false
 	}
 	ref := chi.URLParam(r, "ref")
@@ -186,12 +196,49 @@ func (h *handler) gate(w http.ResponseWriter, r *http.Request) (principal, strin
 		writeProblem(w, http.StatusBadRequest, "identificador inválido")
 		return principal{}, "", false
 	}
+	return p, ref, true
+}
+
+func (h *handler) admit(w http.ResponseWriter, r *http.Request, scope string) (principal, bool) {
+	if h.store == nil {
+		writeProblem(w, http.StatusServiceUnavailable, "serviço indisponível")
+		return principal{}, false
+	}
 	p, err := h.authenticate(r)
 	if err != nil {
 		writeAccess(w, err)
-		return principal{}, "", false
+		return principal{}, false
 	}
-	return p, ref, true
+	if !p.allows(scope) {
+		writeAccess(w, errScope)
+		return principal{}, false
+	}
+	if err = h.consume(p); err != nil {
+		writeAccess(w, err)
+		return principal{}, false
+	}
+	return p, true
+}
+
+func (p principal) allows(scope string) bool {
+	for _, item := range p.Scopes {
+		if item == scope {
+			return true
+		}
+		if item == "read" && readScope(scope) {
+			return true
+		}
+	}
+	return false
+}
+
+func readScope(scope string) bool {
+	switch scope {
+	case "conversations.read", "messages.read", "contacts.read", "directory.read":
+		return true
+	default:
+		return false
+	}
 }
 
 func (h *handler) authenticate(r *http.Request) (principal, error) {
@@ -199,15 +246,29 @@ func (h *handler) authenticate(r *http.Request) (principal, error) {
 	if err != nil {
 		return principal{}, err
 	}
+	hash := auth.HashSecret(raw)
 	var p principal
 	err = h.store.WithPublicRead(r.Context(), func(ctx context.Context, tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
-			SELECT token_id, tenant_id, scope, revoked, request_limit, tenant_status
-			FROM public_read_resolve($1)
-		`, auth.HashSecret(raw)).Scan(
-			&p.TokenID, &p.TenantID, &p.Scope, &p.Revoked, &p.RequestLimit, &p.TenantStatus,
+			SELECT token_id, tenant_id, scopes, revoked, request_limit, tenant_status
+			FROM api_token_resolve($1)
+		`, hash).Scan(
+			&p.TokenID, &p.TenantID, &p.Scopes, &p.Revoked, &p.RequestLimit, &p.TenantStatus,
 		)
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = h.store.WithPublicRead(r.Context(), func(ctx context.Context, tx pgx.Tx) error {
+			return tx.QueryRow(ctx, `
+				SELECT token_id, tenant_id, scope, revoked, request_limit, tenant_status
+				FROM public_read_resolve($1)
+			`, hash).Scan(
+				&p.TokenID, &p.TenantID, &p.Scope, &p.Revoked, &p.RequestLimit, &p.TenantStatus,
+			)
+		})
+		if err == nil {
+			p.Scopes = []string{p.Scope}
+		}
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return principal{}, errInvalid
 	}
@@ -217,20 +278,24 @@ func (h *handler) authenticate(r *http.Request) (principal, error) {
 	if p.Revoked {
 		return principal{}, errRevoked
 	}
-	if p.Scope != "read" {
-		return principal{}, errScope
-	}
 	if p.TenantStatus != "active" {
 		return principal{}, errSuspended
 	}
-	now := h.now()
-	if ok, retry := h.limit.allow("token:"+p.TokenID.String(), p.RequestLimit, now); !ok {
-		return principal{}, limitError{detail: "limite do token excedido", retry: retry}
-	}
-	if ok, retry := h.limit.allow("tenant:"+p.TenantID.String(), tenantWindowLimit, now); !ok {
-		return principal{}, limitError{detail: "limite do provedor excedido", retry: retry}
+	if len(p.Scopes) == 0 {
+		return principal{}, errScope
 	}
 	return p, nil
+}
+
+func (h *handler) consume(p principal) error {
+	now := h.now()
+	if ok, retry := h.limit.allow("token:"+p.TokenID.String(), p.RequestLimit, now); !ok {
+		return limitError{detail: "limite do token excedido", retry: retry}
+	}
+	if ok, retry := h.limit.allow("tenant:"+p.TenantID.String(), tenantWindowLimit, now); !ok {
+		return limitError{detail: "limite do provedor excedido", retry: retry}
+	}
+	return nil
 }
 
 func bearerToken(r *http.Request) (string, error) {
@@ -279,11 +344,11 @@ func loadConversation(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, ref stri
 	var contact *uuid.UUID
 	err := tx.QueryRow(ctx, `
 		SELECT id, protocol, status, inbox_id, contact_id, sector_id, assignee_id,
-		       controller, cycle_number, external_protocol, created_at, updated_at
+		       controller, cycle_number, version, external_protocol, created_at, updated_at
 		FROM conversations
 		WHERE tenant_id = $1 AND `+column, tenant, arg).Scan(
 		&view.ID, &view.Protocol, &view.Status, &view.InboxID, &contact, &view.SectorID,
-		&view.AssigneeID, &view.Controller, &view.CycleNumber, &view.ExternalProtocol,
+		&view.AssigneeID, &view.Controller, &view.CycleNumber, &view.Version, &view.ExternalProtocol,
 		&view.CreatedAt, &view.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -327,10 +392,10 @@ func loadMessages(ctx context.Context, tx pgx.Tx, tenant, conversation uuid.UUID
 func loadContact(ctx context.Context, tx pgx.Tx, tenant, contact uuid.UUID) (contactView, error) {
 	var view contactView
 	err := tx.QueryRow(ctx, `
-		SELECT id, name, phone, email, blocked
+		SELECT id, name, phone, email, blocked, external_ref
 		FROM contacts
 		WHERE tenant_id = $1 AND id = $2
-	`, tenant, contact).Scan(&view.ID, &view.Name, &view.Phone, &view.Email, &view.Blocked)
+	`, tenant, contact).Scan(&view.ID, &view.Name, &view.Phone, &view.Email, &view.Blocked, &view.ExternalRef)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return contactView{}, errNoContact
 	}
@@ -405,6 +470,10 @@ func problemType(status int) string {
 		return "urn:chatisp:problem:not-found"
 	case http.StatusTooManyRequests:
 		return "urn:chatisp:problem:too-many-requests"
+	case http.StatusConflict:
+		return "urn:chatisp:problem:conflict"
+	case http.StatusUnprocessableEntity:
+		return "urn:chatisp:problem:unprocessable"
 	case http.StatusServiceUnavailable:
 		return "urn:chatisp:problem:unavailable"
 	default:
@@ -424,6 +493,10 @@ func problemTitle(status int) string {
 		return "Recurso não encontrado"
 	case http.StatusTooManyRequests:
 		return "Muitas tentativas"
+	case http.StatusConflict:
+		return "Conflito"
+	case http.StatusUnprocessableEntity:
+		return "Requisição inválida"
 	case http.StatusServiceUnavailable:
 		return "Serviço indisponível"
 	default:

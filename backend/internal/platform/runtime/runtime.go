@@ -137,6 +137,8 @@ func Run(parent context.Context, opts Options) error {
 			BotHook:        bothook.New(opts.Store),
 			ERP:            erpPanel,
 			Store:          opts.Store,
+			KeyRing:        opts.Config.KeyRing,
+			Env:            opts.Config.Env,
 			TrustedOrigins: opts.TrustedOrigins,
 		})
 		httpServer = newServer(api.Handler, opts.Logger)
@@ -157,6 +159,14 @@ func Run(parent context.Context, opts Options) error {
 	var workerStopErr error
 	var workerStopped bool
 	if opts.Mode == config.ModeWorker || opts.Mode == config.ModeAll {
+		// Recover unmarked sources before this client fetches. The same leader
+		// owns ingress, inbound, outbound, inbound_media, webhooks and the lifecycle schedule.
+		if hookErr := startOutboundWebhooks(ctx, opts); hookErr != nil {
+			opts.Logger.Error("falha ao recuperar webhooks de saída", "component", "outwebhook", "error", hookErr.Error())
+			closeOwned(httpListener, httpOwned)
+			closeOwned(metricsListener, metricsOwned)
+			return fmt.Errorf("falha ao recuperar webhooks de saída: %w", hookErr)
+		}
 		if opts.JobsClient != nil {
 			gate.AddCheck(func(context.Context) error {
 				select {

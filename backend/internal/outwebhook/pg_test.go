@@ -69,7 +69,7 @@ func TestWebhookPostgres(t *testing.T) {
 	}
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	source := uuid.New()
-	delivery, err := Enqueue(sub, EventMessageCreated, source, now)
+	delivery, err := Enqueue(sub, EventMessageCreated, source, source, now)
 	if err != nil {
 		t.Fatal(err)
 	}
