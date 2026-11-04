@@ -62,3 +62,10 @@ export type SendTextResult =
   | { outcome: "failed"; detail: string }
   | { outcome: "uncertain"; detail: string }
   | { outcome: "lost" };
+
+export type SendAudioCommand = {
+  intentKey: string;
+  blob: Blob;
+  mimeType: string;
+  replyToMessageId?: string;
+};

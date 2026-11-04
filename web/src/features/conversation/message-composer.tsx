@@ -9,6 +9,7 @@ import { expandedPrefix, insertRendered, repeatsServerPrefix, slashToken } from 
 import { getSignature, type CannedSignature } from "@/api/cannedreplies";
 import { PanelRequestError } from "@/api/problems";
 import { ComposerTools } from "@/features/conversation/composer-tools";
+import { AudioRecorder } from "@/features/conversation/audio-recorder";
 import { draftKey, notifyDraftSettlement, readDraft, subscribeDraftSettlement, writeDraft } from "@/features/conversation/draft-store";
 import { useSessionStore, type PanelPrincipal } from "@/stores/session-store";
 import {
@@ -21,6 +22,7 @@ import {
 import type { IntentSubmitMode } from "@/features/conversation/send-intent";
 import type {
   ConversationScope,
+  SendAudioCommand,
   SendTextCommand,
   SendTextResult,
 } from "@/features/conversation/types";
@@ -33,6 +35,7 @@ export type MessageComposerProps = {
   onTyping?: () => void;
   replyInboxId?: string;
   onSend: (command: SendTextCommand) => Promise<SendTextResult> | SendTextResult;
+  onSendAudio?: (command: SendAudioCommand) => Promise<void> | void;
 };
 
 export function MessageComposer(props: MessageComposerProps) {
@@ -102,6 +105,7 @@ function ComposerSession({
   storageKey,
   onTyping,
   replyInboxId,
+  onSendAudio,
   attendant,
 }: MessageComposerProps & { storageKey: string | null; attendant: PanelPrincipal | null }) {
   const queryClient = useContext(QueryClientContext);
@@ -557,6 +561,16 @@ function ComposerSession({
         {slashNotice ? <p>{slashNotice}</p> : null}
         {prefixBlocksDraft ? <button type="button" onClick={removeRepeatedPrefix}>Retirar prefixo repetido</button> : null}
         <ComposerTools field={field} value={state.draft} onChange={changeDraft} />
+        <AudioRecorder
+          disabled={offline || state.phase === "submitting"}
+          onSend={
+            onSendAudio
+              ? async (capture) => {
+                  await onSendAudio({ intentKey: createKey(), ...capture });
+                }
+              : undefined
+          }
+        />
         <p id={helpId} className="text-sm text-muted-foreground">
           O rascunho fica neste dispositivo. Ctrl+Enter envia; o conector ainda não confirmou.
         </p>
