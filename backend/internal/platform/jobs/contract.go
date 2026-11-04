@@ -44,11 +44,15 @@ const (
 	QueueInbound  = "inbound"
 	QueueOutbound = "outbound"
 	QueueMedia    = "inbound_media"
+	// QueueWebhooks is the outbound webhook queue. It shares this client so the
+	// leader that rescues stuck jobs knows the kind.
+	QueueWebhooks = "webhooks"
 
 	KindIngress  = "chatisp.ingress.expand.v1"
 	KindInbound  = "chatisp.inbound.apply.v1"
 	KindOutbound = "chatisp.outbound.dispatch.v1"
 	KindMedia    = "chatisp.inbound.media.v1"
+	KindWebhook  = "chatisp.webhook.deliver.v1"
 
 	priorityInbound  = 1
 	priorityMedia    = 1
@@ -97,8 +101,23 @@ type OutboundLease interface {
 	AllowOutbound(ctx context.Context, tenantID, attemptID uuid.UUID) (allowed bool, err error)
 }
 
+// WebhookHandler delivers one captured outbound webhook source.
+type WebhookHandler interface {
+	DeliverWebhook(ctx context.Context, tenantID uuid.UUID, eventType string, sourceID uuid.UUID) error
+}
+
+// RetryAfterError tells the webhook worker to snooze. The attempt is kept.
+type RetryAfterError struct {
+	After time.Duration
+}
+
+func (e RetryAfterError) Error() string { return "entrega adiada" }
+
 // Handlers are supplied by ingress and attendance. Nil means that kind is not
 // wired yet. Work then fails closed instead of succeeding as a no-op.
+// Media and Webhook stay registered on every client. A leader that omits either
+// kind discards running jobs of that kind. The webhooks queue is fetched only
+// when Webhook is set. inbound_media stays on every working client.
 type Handlers struct {
 	Ingress    IngressHandler
 	Inbound    InboundHandler
@@ -106,6 +125,7 @@ type Handlers struct {
 	Lease      OutboundLease
 	Automation AutomationHandler
 	Media      MediaHandler
+	Webhook    WebhookHandler
 }
 
 // MediaHandler downloads one inbound media object after the message is stored.
@@ -149,6 +169,24 @@ type MediaArgs struct {
 }
 
 func (MediaArgs) Kind() string { return KindMedia }
+
+// WebhookArgs is one captured source. The JSON shape matches the trigger in
+// migration 00044. The signed body is loaded later from the domain row.
+type WebhookArgs struct {
+	V         int       `json:"v"`
+	TenantID  uuid.UUID `json:"tenant_id"`
+	EventType string    `json:"event_type"`
+	SourceID  uuid.UUID `json:"source_id"`
+}
+
+func (WebhookArgs) Kind() string { return KindWebhook }
+
+func (a WebhookArgs) validate() error {
+	if a.V != SchemaVersion || a.TenantID == uuid.Nil || a.SourceID == uuid.Nil || a.EventType == "" {
+		return errInvalidArgs
+	}
+	return nil
+}
 
 func (a IngressArgs) validate() error {
 	if a.V != SchemaVersion || a.DeliveryID == uuid.Nil {

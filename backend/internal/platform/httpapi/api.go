@@ -44,7 +44,9 @@ import (
 	"chatisp/internal/notifications"
 	notificationHTTP "chatisp/internal/notifications/httpapi"
 	"chatisp/internal/opsalert"
+	"chatisp/internal/outwebhook"
 	"chatisp/internal/platform/auth"
+	"chatisp/internal/platform/crypto"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/logging"
 	"chatisp/internal/platform/metrics"
@@ -94,6 +96,10 @@ type Dependencies struct {
 	ERP *erp.Panel
 	// Store is the application database used by distribution. Nil answers 503.
 	Store *db.Store
+	// KeyRing seals outbound webhook secrets. Nil keeps those panel routes at 503.
+	KeyRing *crypto.Ring
+	// Env selects the webhook destination guard: development, test or production.
+	Env string
 }
 
 // API is the public HTTP handler and its generated OpenAPI document.
@@ -270,9 +276,27 @@ func New(deps Dependencies) *API {
 	router.Handle("/meta/webhook", webhookHandler)
 	router.Method(http.MethodGet, "/api/platform/usage", platformusage.NewHandler(deps.Auth, deps.Store))
 
-	// Public read routes stay outside Huma so the committed OpenAPI document
-	// does not change in this block.
-	router.Mount("/api/public", publicapi.NewHandler(deps.Store))
+	// The public API has its own OpenAPI document and stays outside the panel spec.
+	// Attendance is the same value that already carries Files and AttachmentLimits.
+	router.Mount("/api/public", publicapi.Mount(deps.Store, deps.Attendance))
+	var panelAuth outwebhook.PanelAuth
+	var tokenAuth publicapi.TokenPanelAuth
+	if deps.Auth != nil {
+		panelAuth = deps.Auth
+		tokenAuth = deps.Auth
+	}
+	outwebhook.MountPanel(router, outwebhook.PanelDeps{
+		Auth:           panelAuth,
+		Store:          deps.Store,
+		Ring:           deps.KeyRing,
+		Mode:           deps.Env,
+		TrustedOrigins: deps.TrustedOrigins,
+	})
+	publicapi.MountTokenPanel(router, publicapi.TokenPanelDeps{
+		Auth:           tokenAuth,
+		Store:          deps.Store,
+		TrustedOrigins: deps.TrustedOrigins,
+	})
 
 	opsalert.Mount(router, opsalert.Dependencies{
 		Auth:           deps.Auth,
