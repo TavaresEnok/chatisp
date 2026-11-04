@@ -43,16 +43,95 @@ export type AttendanceReport = {
   csv: string;
 };
 
-export type ReportQuery = { from: string; to: string; group: "day" | "week" | "month" };
+export type ReportQuery = {
+  from: string;
+  to: string;
+  group: "day" | "week" | "month";
+  sectorId?: string;
+  inboxId?: string;
+};
 
-export async function getReport(query: ReportQuery, signal?: AbortSignal): Promise<AttendanceReport> {
-  const params = new URLSearchParams({ from: query.from, to: query.to, group: query.group });
+export type ReportPrincipal = {
+  tenantId: string;
+  sessionId: string;
+  userId: string;
+  membershipId: string;
+  role: string;
+};
+
+export type ReportOption = { id: string; name: string };
+
+type DirectoryRow = { id?: string; name?: string; active?: boolean };
+
+export function reportQueryKey(principal: ReportPrincipal, mode: "live" | "full", query: ReportQuery, generation = 0) {
+  const key = [
+    "reports",
+    principal.tenantId,
+    principal.sessionId,
+    principal.userId,
+    principal.membershipId,
+    principal.role,
+    mode,
+    query.from,
+    query.to,
+    query.group,
+    query.sectorId ?? "",
+    query.inboxId ?? "",
+  ] as const;
+  // Geração 0 é o recorte ainda não recusado. Depois de um 403 da lista, a
+  // geração nova impede reexibir o cache amplo ou filtrado anterior.
+  if (generation === 0) return key;
+  return [...key, generation] as const;
+}
+
+export function reportDirectoryKey(kind: "sectors" | "inboxes", principal: ReportPrincipal) {
+  return [
+    "reports",
+    "directory",
+    kind,
+    principal.tenantId,
+    principal.sessionId,
+    principal.userId,
+    principal.membershipId,
+    principal.role,
+  ] as const;
+}
+
+async function panelGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   const headers = new Headers();
   const csrf = currentCsrfToken();
   if (csrf) headers.set("X-CSRF-Token", csrf);
-  const response = await fetch(`/api/panel/reports?${params}`, { headers, signal, credentials: "same-origin", cache: "no-store" });
+  const response = await fetch(path, { headers, signal, credentials: "same-origin", cache: "no-store" });
   if (!response.ok) {
     throw new PanelRequestError(response.status === 403 ? "Acesso negado." : "Não foi possível carregar o relatório.", response.status);
   }
-  return response.json() as Promise<AttendanceReport>;
+  return response.json() as Promise<T>;
+}
+
+function directoryOptions(rows: DirectoryRow[] | null | undefined, activeOnly: boolean): ReportOption[] {
+  if (!rows) return [];
+  const options: ReportOption[] = [];
+  for (const row of rows) {
+    if (typeof row.id !== "string" || row.id.length === 0 || typeof row.name !== "string" || row.name.trim().length === 0) continue;
+    if (activeOnly && row.active === false) continue;
+    options.push({ id: row.id, name: row.name });
+  }
+  return options;
+}
+
+export async function listReportSectors(signal?: AbortSignal): Promise<ReportOption[]> {
+  const body = await panelGet<{ sectors?: DirectoryRow[] | null }>("/api/panel/sectors", signal);
+  return directoryOptions(body.sectors, true);
+}
+
+export async function listReportInboxes(signal?: AbortSignal): Promise<ReportOption[]> {
+  const body = await panelGet<{ inboxes?: DirectoryRow[] | null }>("/api/panel/inboxes", signal);
+  return directoryOptions(body.inboxes, false);
+}
+
+export async function getReport(query: ReportQuery, signal?: AbortSignal): Promise<AttendanceReport> {
+  const params = new URLSearchParams({ from: query.from, to: query.to, group: query.group });
+  if (query.sectorId) params.set("sector_id", query.sectorId);
+  if (query.inboxId) params.set("inbox_id", query.inboxId);
+  return panelGet<AttendanceReport>(`/api/panel/reports?${params.toString()}`, signal);
 }
