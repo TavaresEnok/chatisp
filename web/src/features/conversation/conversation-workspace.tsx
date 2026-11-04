@@ -40,6 +40,7 @@ export type ConversationWorkspaceProps = {
   onNote?: (conversationId: string) => void;
   renderQueue?: (selectedId: string | null, select: (id: string) => void) => ReactNode;
   renderActions?: (conversationId: string) => ReactNode;
+  renderSide?: (conversationId: string) => ReactNode;
   onTyping?: (conversationId: string) => void;
   inboxId?: string;
   connectorType?: string;
@@ -129,6 +130,7 @@ function WorkspaceSession({
   onNote,
   renderQueue,
   renderActions,
+  renderSide,
   onTyping,
   inboxId,
   connectorType = "",
@@ -224,7 +226,7 @@ function WorkspaceSession({
   }
 
   return (
-    <div ref={workspace} className="grid gap-4 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]" onKeyDown={handleShortcut}>
+    <div ref={workspace} className="grid gap-4 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)] lg:has-[.painel-externo]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)_minmax(18rem,24rem)]" onKeyDown={handleShortcut}>
       {renderQueue ? renderQueue(card?.id ?? null, selectConversation) : <ConversationList
         status={listStatus}
         conversations={conversations}
@@ -285,6 +287,7 @@ function WorkspaceSession({
           </p>
         )}
       </div>
+      {renderSide && card ? <div className="contents">{renderSide(card.id)}</div> : null}
       {closeOpen && card ? (
         <CloseConversationDialog
           protocol={card.protocol}
