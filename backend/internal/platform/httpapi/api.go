@@ -20,6 +20,7 @@ import (
 	attachmentHTTP "chatisp/internal/attachments/httpapi"
 	attendanceHttpAPI "chatisp/internal/attendance/httpapi"
 	attendanceService "chatisp/internal/attendance/service"
+	"chatisp/internal/auditview"
 	"chatisp/internal/businesshours"
 	businessHoursHTTP "chatisp/internal/businesshours/httpapi"
 	"chatisp/internal/cannedreplies"
@@ -225,6 +226,7 @@ func New(deps Dependencies) *API {
 	registerReopenWindow(api, deps)
 	registerDistribution(api, deps)
 	registerReports(api, deps)
+	auditview.Mount(router, auditview.Dependencies{Auth: deps.Auth, Store: deps.Store})
 	registerRealtimeContract(api)
 
 	realtimeHandler := deps.Realtime
