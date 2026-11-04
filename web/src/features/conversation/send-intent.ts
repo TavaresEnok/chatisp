@@ -20,6 +20,7 @@ export type ComposerPhase =
 export type PendingIntent = {
   intentKey: string;
   text: string;
+  replyToMessageId?: string;
 };
 
 export type ComposerState = {
@@ -33,7 +34,7 @@ export type IntentSubmitMode = "reuse-if-pending" | "new-decision";
 
 export type ComposerAction =
   | { type: "edit"; draft: string }
-  | { type: "submit"; offline: boolean; intentKey: string; text: string }
+  | { type: "submit"; offline: boolean; intentKey: string; text: string; replyToMessageId?: string }
   | { type: "result"; intentKey: string; result: SendTextResult };
 
 export function createComposerState(): ComposerState {
@@ -91,7 +92,11 @@ export function reduceComposer(
     case "submit": {
       if (state.phase === "submitting") return state;
       if (action.text.trim() === "") return state;
-      const pending = { intentKey: action.intentKey, text: action.text };
+      const pending: PendingIntent = {
+        intentKey: action.intentKey,
+        text: action.text,
+        ...(action.replyToMessageId ? { replyToMessageId: action.replyToMessageId } : {}),
+      };
       if (action.offline) {
         return {
           draft: action.text,

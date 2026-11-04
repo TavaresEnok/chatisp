@@ -39,6 +39,9 @@ describe("anexos", () => {
   it("recusa HTML e SVG e só mostra mídia validada", async () => {
     expect(previewKind("image/svg+xml")).toBe("refused");
     expect(previewKind("text/html")).toBe("refused");
+    expect(previewKind("text/xml")).toBe("unknown");
+    expect(previewKind("application/xml")).toBe("unknown");
+    expect(previewKind("text/xml; charset=utf-8")).toBe("unknown");
     expect(fileError({ name: "../segredo.svg", size: 10 })).toMatch(/inválido/);
     expect(fileError({ name: "foto\u200b.jpg", size: 10 })).toMatch(/inválido/);
     render(<AttachmentPreview record={{ ...record, media_type: "text/html", name: "pagina.html" }} url="https://arquivos.test/html" />);

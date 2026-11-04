@@ -1,7 +1,9 @@
 import { ContactDocument } from "@/features/contactdocs/contact-document";
 import { ConversationSidebar } from "@/features/conversation/conversation-sidebar";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { QueryClientContext, type QueryClient } from "@tanstack/react-query";
+import { downloadAttachment } from "@/api/attachments";
 import { AttachmentDesk } from "@/features/attachments/attachment-desk";
 import { ConsentForm, TemplateCatalog, WindowIndicator } from "@/features/channelpolicy/channel-panels";
 import { MessageComposer } from "@/features/conversation/message-composer";
@@ -10,7 +12,10 @@ import { MessageTimeline } from "@/features/conversation/message-timeline";
 import { CloseConversationDialog } from "@/features/conversation/close-conversation-dialog";
 import { ConversationHeader } from "@/features/conversation/conversation-header";
 import { ConversationList } from "@/features/conversation/conversation-list";
-import type { SendTextCommand, SendTextResult, TimelineEntry, TimelineViewStatus } from "@/features/conversation/types";
+import type { ReplyTarget, SendAudioCommand, SendMediaCommand, SendTextCommand, SendTextResult, TimelineEntry, TimelineViewStatus } from "@/features/conversation/types";
+import { audioFileName } from "@/features/media/model";
+import { deliverOutboundMedia, UnconfirmedMediaSend } from "@/features/media/send-media";
+import { attendanceQueryBase, invalidateAttendanceQueries } from "@/features/conversation/use-attendance";
 import { readAttendanceResult } from "@/features/conversation/workspace-types";
 import type {
   AttendanceScope,
@@ -65,6 +70,20 @@ type AssumeState = {
   pending: boolean;
   notice: string | null;
 };
+
+function cachedConversationVersion(client: QueryClient, principal: PanelPrincipal, inboxId: string, conversationId: string): number | null {
+  const base = attendanceQueryBase(principal);
+  const histories = client.getQueriesData<{ head?: { id?: string; version?: number } }>({ queryKey: [...base, inboxId, "history", conversationId] });
+  for (const [, data] of histories) {
+    if (data?.head?.id === conversationId && typeof data.head.version === "number") return data.head.version;
+  }
+  const snapshots = client.getQueriesData<{ conversations?: { id?: string; version?: number }[] }>({ queryKey: [...base, inboxId, "snapshot"] });
+  for (const [, data] of snapshots) {
+    const match = data?.conversations?.find((item) => item.id === conversationId);
+    if (match && typeof match.version === "number") return match.version;
+  }
+  return null;
+}
 
 function attendanceScopeKey(scope: AttendanceScope): string {
   return `${scope.tenantId}\u001f${scope.userId}`;
@@ -149,6 +168,10 @@ function WorkspaceSession({
   const alive = useRef(true);
   const workspace = useRef<HTMLDivElement>(null);
   const assumingIds = useRef(new Set<string>());
+  const mediaVersions = useRef(new Map<string, number>());
+  const queryClient = useContext(QueryClientContext);
+  const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
+  const replyConversation = useRef<string | null>(null);
   const synced = syncSession(session, listStatus, conversations);
   if (synced !== session) setSession(synced);
 
@@ -160,9 +183,22 @@ function WorkspaceSession({
   }, []);
 
   const card = synced.card;
+  if ((card?.id ?? null) !== replyConversation.current) {
+    replyConversation.current = card?.id ?? null;
+    if (replyTo) setReplyTo(null);
+  }
   const assumeForCard = card ? assumeStates[card.id] : null;
   const assuming = assumeForCard?.pending ?? false;
   const assumeNotice = assumeForCard && !assumeForCard.pending ? assumeForCard.notice : null;
+  const selectedId = card?.id ?? "";
+  const loadDownload = useCallback(
+    async (attachmentId: string) => {
+      if (!inboxId || !selectedId) throw new Error("A caixa desta conversa não está disponível.");
+      const ticket = await downloadAttachment(inboxId, selectedId, attachmentId);
+      return { url: ticket.url, expiresIn: ticket.expires_in };
+    },
+    [inboxId, selectedId],
+  );
   const detailMatches = card !== null && detailConversationId === card.id;
   const timelineStatus = detailMatches ? detailStatus : "loading";
   const timelineEntries = detailMatches && detailStatus === "ready" ? entries : [];
@@ -200,6 +236,47 @@ function WorkspaceSession({
       const field = workspace.current?.querySelector<HTMLTextAreaElement>('[aria-label="Anotações privadas"] textarea');
       if (onNote || field) { event.preventDefault(); if (onNote) onNote(card.id); else field?.focus(); }
     }
+  }
+
+  function versionFor(conversationId: string, intentKey: string): number | null {
+    const pinned = mediaVersions.current.get(intentKey);
+    if (pinned !== undefined) return pinned;
+    const cached = queryClient && principal && inboxId ? cachedConversationVersion(queryClient, principal, inboxId, conversationId) : null;
+    const fromProp = card && conversationId === card.id && detailConversationId === card.id && typeof conversationVersion === "number" ? conversationVersion : null;
+    const current = cached ?? fromProp;
+    if (current === null) return null;
+    mediaVersions.current.set(intentKey, current);
+    return current;
+  }
+
+  async function sendMedia(conversationId: string, command: SendMediaCommand): Promise<SendTextResult> {
+    if (!inboxId) return { outcome: "failed", detail: "A caixa desta conversa não está disponível para enviar mídia." };
+    const version = versionFor(conversationId, command.intentKey);
+    if (version === null) return { outcome: "failed", detail: "Versão indisponível." };
+    const result = await deliverOutboundMedia({ inboxId, conversationId, version, command });
+    const replayable = result.outcome === "lost" || result.outcome === "uncertain";
+    if (!replayable) mediaVersions.current.delete(command.intentKey);
+    if (result.outcome !== "lost" && queryClient && principal) {
+      try {
+        await invalidateAttendanceQueries(queryClient, principal, inboxId);
+      } catch {
+        // A operação já terminou. Falha ao atualizar a tela não altera a chave nem o resultado.
+      }
+    }
+    return result;
+  }
+
+  async function sendAudio(conversationId: string, command: SendAudioCommand): Promise<void> {
+    const file = new File([command.blob], audioFileName(command.mimeType), { type: command.mimeType || "application/octet-stream" });
+    const result = await sendMedia(conversationId, {
+      intentKey: command.intentKey,
+      caption: "",
+      file,
+      ...(command.replyToMessageId ? { replyToMessageId: command.replyToMessageId } : {}),
+    });
+    if (result.outcome === "accepted") return;
+    if (result.outcome === "lost" || result.outcome === "uncertain") throw new UnconfirmedMediaSend(result);
+    throw new Error(result.detail);
   }
 
   async function assume() {
@@ -253,6 +330,8 @@ function WorkspaceSession({
               protocol={card.protocol}
               status={timelineStatus}
               entries={timelineEntries}
+              onReply={setReplyTo}
+              loadDownload={inboxId ? loadDownload : undefined}
             />
             {principal && inboxId ? (
               <>
@@ -276,8 +355,12 @@ function WorkspaceSession({
                   localQueue={localQueue}
                   createIntentKey={createIntentKey}
                   replyInboxId={inboxId}
+                  replyTo={item.id === card.id ? replyTo : null}
+                  onClearReply={() => setReplyTo(null)}
                   onTyping={() => onTyping?.(item.id)}
                   onSend={(command) => onSend(item.id, command)}
+                  onSendMedia={(command) => sendMedia(item.id, command)}
+                  onSendAudio={(command) => sendAudio(item.id, command)}
                 />
               </div>
             ))}

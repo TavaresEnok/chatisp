@@ -8,6 +8,7 @@ import { chooseSlashReply, isCannedDenial, SlashList, SlashReplySource, type Sla
 import { expandedPrefix, insertRendered, repeatsServerPrefix, slashToken } from "@/features/cannedreplies/rules";
 import { getSignature, type CannedSignature } from "@/api/cannedreplies";
 import { PanelRequestError } from "@/api/problems";
+import { fileError } from "@/features/attachments/media";
 import { ComposerTools } from "@/features/conversation/composer-tools";
 import { AudioRecorder } from "@/features/conversation/audio-recorder";
 import { draftKey, notifyDraftSettlement, readDraft, subscribeDraftSettlement, writeDraft } from "@/features/conversation/draft-store";
@@ -16,16 +17,21 @@ import {
   conversationScopeKey,
   createComposerState,
   createIntentKey,
+  OFFLINE_NOTICE,
   reduceComposer,
   selectClientRequestId,
 } from "@/features/conversation/send-intent";
 import type { IntentSubmitMode } from "@/features/conversation/send-intent";
 import type {
   ConversationScope,
+  ReplyTarget,
   SendAudioCommand,
+  SendMediaCommand,
   SendTextCommand,
   SendTextResult,
 } from "@/features/conversation/types";
+import { needsServerConversion } from "@/features/media/model";
+import { lostMediaDetail, UnconfirmedMediaSend } from "@/features/media/send-media";
 
 export type MessageComposerProps = {
   scope: ConversationScope;
@@ -34,8 +40,11 @@ export type MessageComposerProps = {
   localQueue?: boolean;
   onTyping?: () => void;
   replyInboxId?: string;
+  replyTo?: ReplyTarget | null;
+  onClearReply?: () => void;
   onSend: (command: SendTextCommand) => Promise<SendTextResult> | SendTextResult;
   onSendAudio?: (command: SendAudioCommand) => Promise<void> | void;
+  onSendMedia?: (command: SendMediaCommand) => Promise<SendTextResult> | SendTextResult;
 };
 
 export function MessageComposer(props: MessageComposerProps) {
@@ -105,7 +114,10 @@ function ComposerSession({
   storageKey,
   onTyping,
   replyInboxId,
+  replyTo = null,
+  onClearReply,
   onSendAudio,
+  onSendMedia,
   attendant,
 }: MessageComposerProps & { storageKey: string | null; attendant: PanelPrincipal | null }) {
   const queryClient = useContext(QueryClientContext);
@@ -143,10 +155,26 @@ function ComposerSession({
   const boundedSlash = slashResult.replies.length === 0 ? 0 : Math.min(slashIndex, slashResult.replies.length - 1);
   const activeSlash = slashOpen ? slashResult.replies[boundedSlash] : undefined;
   const activeSlashId = activeSlash ? `${slashListId}-${activeSlash.id}` : undefined;
+  const [file, setFile] = useState<File | null>(null);
+  const [mediaPhase, setMediaPhase] = useState<"idle" | "submitting" | "accepted" | "failed" | "uncertain" | "offline">("idle");
+  const [mediaNotice, setMediaNotice] = useState<string | null>(null);
+  const [outboundBusy, setOutboundBusy] = useState(false);
+  const mediaPending = useRef<{ intentKey: string; caption: string; replyId: string; fileKey: string } | null>(null);
+  const mediaOp = useRef(0);
+  const outboundLock = useRef(false);
+  const audioIntent = useRef<{ intentKey: string; blob: Blob; replyId: string; uncertain: boolean } | null>(null);
+  const fileId = useId();
   const prefixBlocksDraft = prefixHold !== null && state.draft.startsWith(prefixHold);
   const signatureBlocksNew = signatureUnconfirmed && state.draft.trim().length > 0;
+  const mediaBlocked = file !== null && state.draft.trim().length > 0 && (prefixBlocksDraft || signatureBlocksNew);
+  const canSubmitMedia = file !== null && mediaPhase !== "submitting" && !outboundBusy && !mediaBlocked;
   const canStartNewDecision = state.draft.trim().length > 0 && state.phase !== "submitting" && state.pending !== null && !prefixBlocksDraft && !signatureBlocksNew;
-  const canSubmit = state.phase !== "submitting" && (state.pending !== null || (state.draft.trim().length > 0 && !prefixBlocksDraft && !signatureBlocksNew));
+  const canSubmit =
+    !outboundBusy &&
+    mediaPhase !== "submitting" &&
+    (canSubmitMedia ||
+      (state.phase !== "submitting" &&
+        (state.pending !== null || (state.draft.trim().length > 0 && !prefixBlocksDraft && !signatureBlocksNew))));
 
   function setHold(value: string | null) {
     prefixHoldRef.current = value;
@@ -315,10 +343,11 @@ function ComposerSession({
   }
 
   async function send(mode: IntentSubmitMode) {
-    if (state.phase === "submitting") return;
-    // Intenção pendente (perdida/incerta/offline) é repetida com a mesma chave e o mesmo texto;
-    // o rascunho editado só vira outra intenção por decisão explícita.
+    if (state.phase === "submitting" || outboundLock.current) return;
+    // Intenção pendente (perdida/incerta/offline) é repetida com a mesma chave, o mesmo texto e a mesma citação;
+    // o rascunho editado ou outro alvo só viram outra intenção por decisão explícita.
     const replay = mode === "reuse-if-pending" ? state.pending : null;
+    const replyAtClick = replyTo?.id;
     const captured = principalStamp(useSessionStore.getState().principal);
     const snapshot = draftRef.current;
     let requestEpoch = signatureEpoch.current;
@@ -385,17 +414,129 @@ function ComposerSession({
     const intentKey = replay ? replay.intentKey : selectClientRequestId(state, mode, createKey);
     if (!intentKey) return;
     const text = replay ? replay.text : snapshot;
+    const replyToMessageId = replay ? replay.replyToMessageId : replyAtClick;
     const typed = draftRef.current;
     if (stopSend(captured, signatureEpoch.current)) return;
-    dispatch({ type: "submit", offline, intentKey, text });
+    dispatch({ type: "submit", offline, intentKey, text, ...(replyToMessageId ? { replyToMessageId } : {}) });
     // O reducer fixa o rascunho no texto enviado; restaura o que foi digitado.
     if (typed !== text) dispatch({ type: "edit", draft: typed });
     if (offline) return;
     try {
-      const result = await Promise.resolve(onSend({ intentKey, text }));
-      settle(intentKey, isSendTextResult(result) ? result : { outcome: "lost" });
+      const result = await Promise.resolve(
+        onSend(replyToMessageId ? { intentKey, text, replyToMessageId } : { intentKey, text }),
+      );
+      const settled = isSendTextResult(result) ? result : { outcome: "lost" as const };
+      if (settled.outcome === "accepted") onClearReply?.();
+      settle(intentKey, settled);
     } catch {
       settle(intentKey, { outcome: "lost" });
+    }
+  }
+
+  function fileKey(next: File): string {
+    return `${next.name}\u0000${next.size}\u0000${next.lastModified}`;
+  }
+
+  function takeFile(next: File) {
+    if (outboundLock.current) return;
+    const problem = fileError(next);
+    if (problem) {
+      setFile(null);
+      setMediaPhase("failed");
+      setMediaNotice(problem);
+      return;
+    }
+    setFile(next);
+    setMediaPhase("idle");
+    setMediaNotice(null);
+  }
+
+  function removeFile() {
+    if (outboundLock.current) return;
+    setFile(null);
+    mediaPending.current = null;
+    mediaOp.current += 1;
+    setMediaPhase("idle");
+    setMediaNotice(null);
+  }
+
+  function finishMedia(op: number) {
+    if (mediaOp.current !== op) return;
+    outboundLock.current = false;
+    if (alive.current) setOutboundBusy(false);
+  }
+
+  async function sendAttached() {
+    if (outboundLock.current || !file || mediaPhase === "submitting" || state.phase === "submitting") return;
+    if (offline && mediaPhase !== "offline") {
+      setMediaPhase("offline");
+      setMediaNotice(OFFLINE_NOTICE);
+      return;
+    }
+    if (offline) return;
+    if (!canSubmitMedia && mediaPhase !== "uncertain" && mediaPhase !== "offline") return;
+    if (!onSendMedia) {
+      setMediaPhase("failed");
+      setMediaNotice("O envio de mídia não está disponível nesta conversa.");
+      return;
+    }
+    const key = fileKey(file);
+    const replay =
+      mediaPending.current !== null &&
+      mediaPending.current.fileKey === key &&
+      (mediaPhase === "uncertain" || mediaPhase === "offline");
+    if (!replay || !mediaPending.current) {
+      mediaPending.current = { intentKey: createKey(), caption: state.draft, replyId: replyTo?.id ?? "", fileKey: key };
+    }
+    const pending = mediaPending.current;
+    const intentKey = pending.intentKey;
+    const caption = pending.caption;
+    const replyToMessageId = pending.replyId;
+    const sentFile = file;
+    const op = mediaOp.current + 1;
+    mediaOp.current = op;
+    outboundLock.current = true;
+    setOutboundBusy(true);
+    setMediaPhase("submitting");
+    setMediaNotice(
+      needsServerConversion(sentFile.type)
+        ? "Enviando o áudio original para conversão no servidor. O navegador não converte o arquivo."
+        : "Enviando a mídia com a legenda.",
+    );
+    try {
+      const result = await Promise.resolve(
+        onSendMedia({
+          intentKey,
+          caption,
+          file: sentFile,
+          ...(replyToMessageId ? { replyToMessageId } : {}),
+        }),
+      );
+      if (!alive.current || mediaOp.current !== op) return;
+      const settled = isSendTextResult(result) ? result : { outcome: "lost" as const };
+      if (settled.outcome === "accepted") {
+        setFile((current) => (current && fileKey(current) === key ? null : current));
+        if (mediaPending.current?.intentKey === intentKey) mediaPending.current = null;
+        setMediaPhase("accepted");
+        setMediaNotice("Mídia aceita pelo conector. O arquivo armazenado não confirma a entrega; o histórico mostra a fila, a falha ou o cancelamento.");
+        onClearReply?.();
+        if (draftRef.current === caption) dispatch({ type: "edit", draft: "" });
+        return;
+      }
+      if (settled.outcome === "failed") {
+        if (mediaPending.current?.intentKey === intentKey) mediaPending.current = null;
+        setMediaPhase("failed");
+        setMediaNotice(settled.detail);
+        return;
+      }
+      setMediaPhase("uncertain");
+      setMediaNotice(settled.outcome === "uncertain" ? settled.detail : lostMediaDetail());
+    } catch (error) {
+      if (!alive.current || mediaOp.current !== op) return;
+      setMediaPhase("uncertain");
+      setMediaNotice(error instanceof Error && error.message ? error.message : lostMediaDetail());
+    } finally {
+      finishMedia(op);
     }
   }
 
@@ -416,6 +557,10 @@ function ComposerSession({
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (slashOpen) return;
+    if (file) {
+      void sendAttached();
+      return;
+    }
     void send("reuse-if-pending");
   }
 
@@ -518,6 +663,10 @@ function ComposerSession({
     }
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) {
       event.preventDefault();
+      if (file) {
+        void sendAttached();
+        return;
+      }
       void send("reuse-if-pending");
     }
   }
@@ -527,6 +676,15 @@ function ComposerSession({
       aria-label="Compositor de mensagem"
       className="flex flex-col gap-3"
       noValidate
+      onDragOver={(event) => {
+        if ([...event.dataTransfer.types].includes("Files")) event.preventDefault();
+      }}
+      onDrop={(event) => {
+        const dropped = event.dataTransfer.files[0];
+        if (!dropped) return;
+        event.preventDefault();
+        takeFile(dropped);
+      }}
       data-scope={conversationScopeKey(scope)}
       onSubmit={onSubmit}
     >
@@ -547,6 +705,12 @@ function ComposerSession({
           aria-owns={slashOpen ? slashListId : undefined}
           aria-autocomplete={slashOpen ? "list" : undefined}
           aria-activedescendant={activeSlashId}
+          onPaste={(event) => {
+            const pasted = event.clipboardData.files[0];
+            if (!pasted) return;
+            event.preventDefault();
+            takeFile(pasted);
+          }}
           onChange={(event) => { changeDraft(event.target.value); setCursor(event.target.selectionStart ?? event.target.value.length); onTyping?.(); }}
           onKeyUp={(event) => rememberCursor(event.currentTarget)}
           onClick={(event) => rememberCursor(event.currentTarget)}
@@ -575,13 +739,72 @@ function ComposerSession({
         ) : null}
         {slashNotice ? <p>{slashNotice}</p> : null}
         {prefixBlocksDraft ? <button type="button" onClick={removeRepeatedPrefix}>Retirar prefixo repetido</button> : null}
+        {replyTo ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm text-foreground">Respondendo a: {replyTo.preview}</p>
+            <Button type="button" variant="outline" className="h-11 w-fit px-3" onClick={onClearReply}>
+              Cancelar resposta
+            </Button>
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={fileId}>Anexar arquivo</Label>
+          <input
+            id={fileId}
+            type="file"
+            disabled={outboundBusy || mediaPhase === "submitting"}
+            className="block w-full text-sm text-foreground"
+            onChange={(event) => {
+              const selected = event.target.files?.[0];
+              if (selected) takeFile(selected);
+              event.target.value = "";
+            }}
+          />
+          <p className="text-sm text-muted-foreground">Arraste um arquivo ou cole na mensagem para enviar com a legenda.</p>
+          {file ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm text-foreground">Anexo pronto: {file.name}</p>
+              <Button type="button" variant="outline" className="h-11 w-fit px-3" disabled={outboundBusy || mediaPhase === "submitting"} onClick={removeFile}>
+                Remover anexo
+              </Button>
+            </div>
+          ) : null}
+        </div>
         <ComposerTools field={field} value={state.draft} onChange={changeDraft} />
         <AudioRecorder
-          disabled={offline || state.phase === "submitting"}
+          disabled={offline || state.phase === "submitting" || mediaPhase === "submitting" || outboundBusy}
           onSend={
             onSendAudio
               ? async (capture) => {
-                  await onSendAudio({ intentKey: createKey(), ...capture });
+                  if (outboundLock.current || mediaPhase === "submitting" || state.phase === "submitting") {
+                    throw new Error("Já existe um envio de mídia em andamento.");
+                  }
+                  const previous = audioIntent.current;
+                  const replay = previous?.uncertain === true && previous.blob === capture.blob;
+                  const replyId = replay ? previous.replyId : replyTo?.id || capture.replyToMessageId || "";
+                  const intentKey = replay ? previous.intentKey : createKey();
+                  audioIntent.current = { intentKey, blob: capture.blob, replyId, uncertain: false };
+                  const op = mediaOp.current + 1;
+                  mediaOp.current = op;
+                  outboundLock.current = true;
+                  setOutboundBusy(true);
+                  try {
+                    await onSendAudio({
+                      intentKey,
+                      blob: capture.blob,
+                      mimeType: capture.mimeType,
+                      ...(replyId ? { replyToMessageId: replyId } : {}),
+                    });
+                    if (audioIntent.current?.intentKey === intentKey) audioIntent.current = null;
+                    onClearReply?.();
+                  } catch (error) {
+                    const uncertain = error instanceof UnconfirmedMediaSend || (error instanceof Error && error.message === lostMediaDetail());
+                    if (uncertain) audioIntent.current = { intentKey, blob: capture.blob, replyId, uncertain: true };
+                    else if (audioIntent.current?.intentKey === intentKey) audioIntent.current = null;
+                    throw error;
+                  } finally {
+                    finishMedia(op);
+                  }
                 }
               : undefined
           }
@@ -608,6 +831,11 @@ function ComposerSession({
       {state.notice ? (
         <p id={noticeId} role="status" className="text-sm text-foreground">
           {localQueue && state.phase === "accepted" ? "Mensagem enfileirada localmente; a entrega ainda não foi confirmada." : state.notice}
+        </p>
+      ) : null}
+      {mediaNotice ? (
+        <p role={mediaPhase === "failed" ? "alert" : "status"} className="text-sm text-foreground">
+          {mediaNotice}
         </p>
       ) : null}
     </form>

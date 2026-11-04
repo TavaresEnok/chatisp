@@ -8,9 +8,12 @@ import type {
   ConversationScope,
   DeliveryReceipt,
   LocalSendState,
+  ReplyTarget,
   TimelineEntry,
   TimelineViewStatus,
 } from "@/features/conversation/types";
+import { MediaMessage, QuoteButton, ReactionList, type DownloadMedia } from "@/features/media/media-message";
+import { entryPreview, mediaKindLabel } from "@/features/media/model";
 import { formatWhen } from "@/lib/format";
 
 const TAIL_THRESHOLD_PX = 48;
@@ -46,6 +49,8 @@ export type MessageTimelineProps = {
   protocol: string;
   status: TimelineViewStatus;
   entries: readonly TimelineEntry[];
+  onReply?: (target: ReplyTarget) => void;
+  loadDownload?: DownloadMedia;
 };
 
 function isAwayFromTail(element: HTMLElement): boolean {
@@ -91,7 +96,7 @@ export function MessageTimeline(props: MessageTimelineProps) {
   return <TimelineSession key={conversationScopeKey(props.scope)} {...props} />;
 }
 
-function TimelineSession({ scope, protocol, status, entries }: MessageTimelineProps) {
+function TimelineSession({ scope, protocol, status, entries, onReply, loadDownload }: MessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef(new Map<number, HTMLElement>());
   const pendingFocus = useRef<number | null>(null);
@@ -166,6 +171,12 @@ function TimelineSession({ scope, protocol, status, entries }: MessageTimelinePr
       setFrozenCount(readyEntries.length);
     }
     setAway(true);
+  }
+
+  function jumpToMessage(id: string) {
+    const index = readyEntries.findIndex((entry) => entry.id === id);
+    if (index < 0) return;
+    focusEntry(index);
   }
 
   function focusEntry(index: number) {
@@ -249,13 +260,14 @@ function TimelineSession({ scope, protocol, status, entries }: MessageTimelinePr
                   tabIndex={virtualRow.index === activeIndex ? 0 : -1}
                   aria-posinset={virtualRow.index + 1}
                   aria-setsize={readyEntries.length}
+                  id={`mensagem-${entry.id}`}
                   aria-label={entryLabel(entry, protocolLabel)}
                   className="absolute top-0 left-0 flex w-full flex-col gap-1 px-4 py-3 text-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
                   style={{ transform: `translateY(${virtualRow.start}px)` }}
                   onFocus={() => setFocusedIndex(virtualRow.index)}
                   onKeyDown={(event) => onItemKeyDown(event, virtualRow.index)}
                 >
-                  <EntryContent entry={entry} />
+                  <EntryContent entry={entry} onReply={onReply} onQuoteJump={jumpToMessage} loadDownload={loadDownload} />
                 </li>
               );
             })}
@@ -288,10 +300,43 @@ function entryLabel(entry: TimelineEntry, protocol: string): string {
   if (entry.kind === "event") {
     return `Evento de ${author}. Protocolo ${protocol}. ${entry.summary}`;
   }
+  if (entry.kind === "media") {
+    const state = entry.localState ? localStateLabel[entry.localState] : "";
+    const receipt = entry.receipt ? receiptLabel[entry.receipt] : "";
+    return `${mediaKindLabel(entry.mediaKind)} de ${author}. Protocolo ${protocol}. ${state} ${receipt} ${entry.caption}`.trim();
+  }
   return `Tipo não suportado de ${author}. Protocolo ${protocol}. Referência ${entry.reference}.`;
 }
 
-function EntryContent({ entry }: { entry: TimelineEntry }) {
+function DeliveryMarks({ localState, receipt }: { localState?: LocalSendState; receipt?: DeliveryReceipt }) {
+  if (!localState && !receipt) return null;
+  return (
+    <p className="flex flex-wrap gap-2">
+      {localState ? (
+        <span data-local-state={localState} className={localStateClass[localState]}>
+          {localStateLabel[localState]}
+        </span>
+      ) : null}
+      {receipt ? (
+        <span data-receipt={receipt} className="text-foreground">
+          {receiptLabel[receipt]}
+        </span>
+      ) : null}
+    </p>
+  );
+}
+
+function EntryContent({
+  entry,
+  onReply,
+  onQuoteJump,
+  loadDownload,
+}: {
+  entry: TimelineEntry;
+  onReply?: (target: ReplyTarget) => void;
+  onQuoteJump: (id: string) => void;
+  loadDownload?: DownloadMedia;
+}) {
   const author = authorLabel(entry.author);
   return (
     <>
@@ -303,29 +348,36 @@ function EntryContent({ entry }: { entry: TimelineEntry }) {
       </p>
       {entry.kind === "text" ? (
         <>
+          <QuoteButton replyTo={entry.replyTo} onJump={onQuoteJump} />
           <p className="whitespace-pre-wrap break-words text-foreground">{formattedText(entry.text)}</p>
-          <p className="flex flex-wrap gap-2">
-            {entry.localState ? (
-              <span data-local-state={entry.localState} className={localStateClass[entry.localState]}>
-                {localStateLabel[entry.localState]}
-              </span>
-            ) : null}
-            {entry.receipt ? (
-              <span data-receipt={entry.receipt} className="text-foreground">
-                {receiptLabel[entry.receipt]}
-              </span>
-            ) : null}
-          </p>
+          <ReactionList reactions={entry.reactions} />
+          <DeliveryMarks localState={entry.localState} receipt={entry.receipt} />
         </>
       ) : null}
       {entry.kind === "event" ? (
         <p className="whitespace-pre-wrap break-words text-foreground">{entry.summary}</p>
+      ) : null}
+      {entry.kind === "media" ? (
+        <>
+          <MediaMessage entry={entry} loadDownload={loadDownload} onQuoteJump={onQuoteJump} />
+          <DeliveryMarks localState={entry.localState} receipt={entry.receipt} />
+        </>
       ) : null}
       {entry.kind === "unsupported" ? (
         <>
           <p className="text-foreground">Referência: {entry.reference}</p>
           <p className="text-muted-foreground">O painel não interpreta este conteúdo.</p>
         </>
+      ) : null}
+      {onReply && entry.kind !== "event" && entry.kind !== "unsupported" ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11 w-fit px-3"
+          onClick={() => onReply({ id: entry.id, preview: entryPreview(entry) })}
+        >
+          Responder
+        </Button>
       ) : null}
     </>
   );
@@ -334,5 +386,6 @@ function EntryContent({ entry }: { entry: TimelineEntry }) {
 function kindLabel(entry: TimelineEntry): string {
   if (entry.kind === "text") return "Texto";
   if (entry.kind === "event") return "Evento";
+  if (entry.kind === "media") return mediaKindLabel(entry.mediaKind);
   return "Tipo não suportado";
 }
