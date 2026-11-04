@@ -1,47 +1,47 @@
 # Matriz de requisitos V1 e V1 simples
 
-Contagem: A conferir: 248; Implementado e verificado: 3; Implementado, aguardando homologação externa: 3; Parcial, com lacuna concreta: 3.
+Contagem: A conferir: 207; Implementado e verificado: 37; Implementado, aguardando homologação externa: 4; Parcial, com lacuna concreta: 9.
 
-Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Só as linhas com estado explícito em documento de entrega foram classificadas; nenhuma foi marcada como verificada por existência de código.
+Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1/M2 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
 
 | Requisito | Marco | Tipo | Estado | Evidência / documentos que citam |
 | --- | --- | --- | --- | --- |
 | 12-tenants | M1 | V1 | A conferir | — |
-| 12-isolamento | M1 | V1 | A conferir | — |
-| 12-usuarios-convites | M1 | V1 | A conferir | — |
+| 12-isolamento | M1 | V1 | Implementado e verificado | TestSchemaForcesTenantRLSAndCompositeFK; testes tenantB em contactdocs/httpapi, ingress/authmeta, platform/db |
+| 12-usuarios-convites | M1 | V1 | Implementado e verificado | TestInviteAndResetTokensAreSingleUse, TestAgentLimitBlocksExtraInvites, TestFailedMailInvalidatesInvite |
 | 12-papeis | M1 | V1 | A conferir | — |
-| 12-login | M1 | V1 | A conferir | — |
-| 12-reset-senha | M1 | V1 | A conferir | — |
-| 12-mfa | M1 | V1 | A conferir | — |
-| 12-sessoes | M1 | V1 | A conferir | — |
-| 12-bloqueio-login | M1 | V1 | A conferir | — |
-| 12-https | M1 | V1 | A conferir | — |
-| 12-credenciais-cifradas | M1 | V1 | A conferir | — |
+| 12-login | M1 | V1 | Implementado e verificado | TestArgon2idHashIsVersionedAndNotReversible (platform/auth) |
+| 12-reset-senha | M1 | V1 | Implementado e verificado | TestInviteAndResetTokensAreSingleUse |
+| 12-mfa | M1 | V1 | Implementado e verificado | TestMFAAttemptLimit, TestAdminWithoutMFACannotUseProtectedRoutes, TestAdminMustEnrollBeforePanelAndRecoveryIsSingleUse, TestKeyRotationKeepsReadingOldTOTP |
+| 12-sessoes | M1 | V1 | Implementado e verificado | TestSessionCookieFlagsAndHashedSecret, TestPanelRejectsBadOriginCSRFAndRevokedSession; login HTTPS real em 04/11 |
+| 12-bloqueio-login | M1 | V1 | Implementado e verificado | TestProgressiveLockoutByAccountAndIP, TestMFAAttemptLimit |
+| 12-https | M1 | V1 | Parcial, com lacuna concreta | Caddyfile e cookie Secure existem; HTTPS local verificado; Caddy/Compose não executado neste host (sem Docker) |
+| 12-credenciais-cifradas | M1 | V1 | Implementado e verificado | TestSealRejectsTransplantedCiphertext, TestKeyRotationKeepsReadingOldTOTP, TestManualConfigurationIsolationVersionAndSecret |
 | 12-fuso | M1 | V1 | A conferir | — |
 | 12-auditoria | M1 | V1 | A conferir | — |
-| 05-convite | M1 | V1 | A conferir | — |
+| 05-convite | M1 | V1 | Implementado e verificado | mesmos testes de 12-usuarios-convites |
 | 06-fuso | M1 | V1 | A conferir | — |
-| 13-painel-web | M1 | V1 | A conferir | — |
-| 13-responsiva | M1 | V1 | A conferir | — |
+| 13-painel-web | M1 | V1 | Parcial, com lacuna concreta | páginas existem e Vitest passou; jornada no navegador não repetida |
+| 13-responsiva | M1 | V1 | Parcial, com lacuna concreta | sem verificação em navegador nesta rodada |
 | 13-pt-br | M1 | V1 | A conferir | — |
-| 13-a11y | M1 | V1 | A conferir | — |
-| 13-self-host | M1 | V1 | A conferir | — |
-| 13-saas | M1 | V1 | A conferir | — |
-| 13-compose | M1 | V1 | A conferir | — |
-| 14-rls | M1 | V1 | A conferir | — |
-| 14-csrf | M1 | V1 | A conferir | — |
-| 14-cache | M1 | V1 | Implementado e verificado | contracts/m1-tenant-cache.md; CONTINUACAO-CURSOR.md |
-| 14-isolamento | M1 | V1 | A conferir | — |
+| 13-a11y | M1 | V1 | Parcial, com lacuna concreta | sem auditoria em navegador nesta rodada; Vitest com rótulos passou |
+| 13-self-host | M1 | V1 | Parcial, com lacuna concreta | deploy/ existe; não executado sem Docker |
+| 13-saas | M1 | V1 | Implementado e verificado | testes com segundo tenant: platform/db/tenant_status_gate_test.go, ingress/authmeta/handler_test.go |
+| 13-compose | M1 | V1 | Parcial, com lacuna concreta | deploy/compose.yaml existe; não executado sem Docker |
+| 14-rls | M1 | V1 | Implementado e verificado | TestSchemaForcesTenantRLSAndCompositeFK |
+| 14-csrf | M1 | V1 | Implementado e verificado | TestPanelRejectsBadOriginCSRFAndRevokedSession; realtime_test.go (Origin do WebSocket) |
+| 14-cache | M1 | V1 | Implementado e verificado | TestIdentityCacheServesTheTenantAndDropsOnWrite, TestCacheIsolatesTenantAndRejectsMessages |
+| 14-isolamento | M1 | V1 | Implementado e verificado | RLS, cache por tenant (TestCacheIsolatesTenantAndRejectsMessages) e filas/anexos por tenant nos pacotes ingress, attachments; ver testes de dois tenants |
 | 14-logs | M1 | V1 | A conferir | — |
-| 14-migracoes | M1 | V1 | A conferir | — |
-| 14-jobs-restart | M1 | V1 | A conferir | — |
-| 14-modos | M1 | V1 | A conferir | — |
-| 14-provisionamento | M1 | V1 | A conferir | — |
+| 14-migracoes | M1 | V1 | Implementado e verificado | TestBootstrapAndMigrationsAreIdempotent; migrações aplicadas em banco novo pela suíte |
+| 14-jobs-restart | M1 | V1 | Implementado e verificado | TestDispatch_RealHttptest_CrashRecoveryAndRiverRestart; platform/jobs/postgres_test.go |
+| 14-modos | M1 | V1 | Implementado e verificado | platform/runtime/runtime_test.go, cmd/chatisp/smoke_test.go |
+| 14-provisionamento | M1 | V1 | Implementado e verificado | platform/httpapi/panel_test.go; web/src/pages/platform-tenants-page.tsx |
 | 01-cloud-api | M2 | V1 | Implementado, aguardando homologação externa | integracoes/meta.md (D2-03) |
-| 01-config-manual | M2 | V1 | A conferir | — |
-| 01-multi-numeros | M2 | V1 | A conferir | — |
-| 01-multi-caixas | M2 | V1 | A conferir | — |
-| 01-escolher-conector | M2 | V1 | A conferir | — |
+| 01-config-manual | M2 | V1 | Implementado, aguardando homologação externa | TestManualConfigurationIsolationVersionAndSecret; servidor falso, sem Meta real (D2-03) |
+| 01-multi-numeros | M2 | V1 | Implementado e verificado | channel/configuration/service_test.go, shared_app_test.go |
+| 01-multi-caixas | M2 | V1 | Implementado e verificado | channel/configuration/service_test.go |
+| 01-escolher-conector | M2 | V1 | Implementado e verificado | channel/catalog/schema_test.go |
 | 02-receber-texto | M2 | V1 | A conferir | — |
 | 02-enviar-texto | M2 | V1 | A conferir | — |
 | 02-status | M2 | V1 | A conferir | — |
@@ -57,25 +57,25 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 03-protocolo | M2 | V1 | A conferir | — |
 | 03-eventos | M2 | V1 | A conferir | — |
 | 04-encerrar-motivo | M2 | V1 | A conferir | — |
-| 11-websocket | M2 | V1 | A conferir | contracts/m2-realtime.md |
+| 11-websocket | M2 | V1 | Implementado e verificado | realtime/realtime_test.go (Origin, assinatura), TestWebSocketGauge* |
 | 14-id-mensagem | M2 | V1 | A conferir | — |
-| 14-webhook-duravel | M2 | V1 | A conferir | — |
-| 14-assinatura-meta | M2 | V1 | A conferir | — |
-| 14-dedup | M2 | V1 | A conferir | — |
-| 14-outbox | M2 | V1 | A conferir | — |
+| 14-webhook-duravel | M2 | V1 | Implementado e verificado | TestInvalidSignatureDoesNotPersist; ingress/authmeta/handler_test.go |
+| 14-assinatura-meta | M2 | V1 | Implementado e verificado | TestVerifySignatureUsesOriginalBytesAndSecret, TestInvalidSignatureDoesNotPersist |
+| 14-dedup | M2 | V1 | Implementado e verificado | TestStatusDedupLinksWhenMessageArrives, TestBoundedCacheAndDedup |
+| 14-outbox | M2 | V1 | Implementado e verificado | TestFakeIsolatedStatusStaysUncertain, TestClassifyAbsentResponseIsUncertain |
 | 14-fila | M2 | V1 | A conferir | — |
 | 14-filas-limite | M2 | V1 | A conferir | — |
-| 14-retry | M2 | V1 | A conferir | — |
-| 14-dlq | M2 | V1 | A conferir | — |
+| 14-retry | M2 | V1 | Implementado e verificado | TestBackoffJitterAndCap |
+| 14-dlq | M2 | V1 | Implementado e verificado | platform/jobs/telemetry_test.go, opsalert/evaluate_test.go |
 | 14-ordenacao | M2 | V1 | A conferir | — |
-| 14-conciliacao | M2 | V1 | A conferir | — |
-| 14-concorrencia | M2 | V1 | A conferir | — |
-| 14-rate-limit | M2 | V1 | A conferir | — |
-| 14-realtime | M2 | V1 | A conferir | contracts/m2-realtime.md |
-| 14-notify | M2 | V1 | A conferir | contracts/m2-realtime.md |
+| 14-conciliacao | M2 | V1 | Implementado e verificado | TestInbound_MessageAndStatusReconciliation, TestSuccessiveAcceptedReplies_SendAndReconcile |
+| 14-concorrencia | M2 | V1 | Implementado e verificado | lifecycle/service_test.go (versão da conversa, conflito) |
+| 14-rate-limit | M2 | V1 | Implementado e verificado | TestOutboundLeaseAndDiscardedInspection, TestStaleLeaseDoesNotReplaceFence, TestOutbound_ConcurrentLease_Dispute |
+| 14-realtime | M2 | V1 | Implementado e verificado | TestSnapshotCursorRollbackAndResync (realtime) |
+| 14-notify | M2 | V1 | Implementado e verificado | TestPGNotifySignaling |
 | 14-autorizacao | M2 | V1 | A conferir | contracts/m2-realtime.md |
-| 14-alerta-token | M2 | V1 | A conferir | — |
-| 14-limites-recursos | M2 | V1 | A conferir | — |
+| 14-alerta-token | M2 | V1 | Implementado e verificado | channel/configuration/service_test.go, opsalert/evaluate_test.go, metacloud/driver_test.go |
+| 14-limites-recursos | M2 | V1 | Implementado e verificado | TestPublishReservedBudgetAndRelease, TestReserveDispatchTenantGateOrder |
 | 02-nao-lidas | M3 | V1 | A conferir | — |
 | 03-abas | M3 | V1 | A conferir | — |
 | 03-ve-setores | M3 | V1 | A conferir | — |
