@@ -53,9 +53,11 @@ func (b *Breaker) Do(id uuid.UUID, now time.Time, fn func() error) error {
 		b.mu.Unlock()
 		return ErrOpen
 	}
+	probe := false
 	if !g.openUntil.IsZero() {
 		g.probing = true
 		g.openUntil = time.Time{}
+		probe = true
 	}
 	b.mu.Unlock()
 
@@ -67,7 +69,8 @@ func (b *Breaker) Do(id uuid.UUID, now time.Time, fn func() error) error {
 	g.probing = false
 	if err != nil {
 		g.failures++
-		if g.failures >= breakerFailures {
+		// A failed half-open probe reopens at once, like sony/gobreaker.
+		if probe || g.failures >= breakerFailures {
 			g.openUntil = now.Add(breakerOpenFor)
 			g.failures = 0
 		}
