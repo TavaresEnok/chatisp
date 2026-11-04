@@ -37,6 +37,7 @@ import (
 	lifecycleHTTP "chatisp/internal/lifecycle/httpapi"
 	"chatisp/internal/notifications"
 	notificationHTTP "chatisp/internal/notifications/httpapi"
+	"chatisp/internal/opsalert"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/logging"
@@ -244,6 +245,12 @@ func New(deps Dependencies) *API {
 	router.Handle("/api/webhooks/meta", webhookHandler)
 	router.Handle("/webhooks/meta", webhookHandler)
 	router.Handle("/meta/webhook", webhookHandler)
+
+	opsalert.Mount(router, opsalert.Dependencies{
+		Auth:           deps.Auth,
+		DB:             deps.Store,
+		TrustedOrigins: deps.TrustedOrigins,
+	})
 
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		Write(w, http.StatusNotFound, "o caminho solicitado não existe")
