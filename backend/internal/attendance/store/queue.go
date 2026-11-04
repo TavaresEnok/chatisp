@@ -35,6 +35,9 @@ type QueueItem struct {
 	UnreadCount   int64      `json:"unread_count"`
 	WaitSince     time.Time  `json:"wait_since"`
 	LastMessageAt time.Time  `json:"last_message_at"`
+	// WaitAlert is the distribution threshold already stored for the tenant.
+	// Urgent priority and conversations outside an open queue interval stay false.
+	WaitAlert bool `json:"wait_alert"`
 }
 type QueueCounts struct {
 	Mine       int64 `json:"mine"`
@@ -164,6 +167,9 @@ func nullableQueueID(id uuid.UUID) any {
 	return id
 }
 
+// queueSQL adds wait_alert from distribution_settings.wait_alert_seconds.
+// 900 is distribution.DefaultWaitAlertSeconds when the tenant has no row.
+// The flag is not part of the page fingerprint and does not assign anyone.
 const queueSQL = `WITH authorized AS MATERIALIZED (
  SELECT c.*,coalesce(ct.name,'') AS contact_name,coalesce(ct.phone,'') AS phone,
  coalesce(a.priority,'normal') AS priority,coalesce(r.unread,false) AS manual_unread,
@@ -189,6 +195,6 @@ const queueSQL = `WITH authorized AS MATERIALIZED (
  SELECT * FROM selected WHERE $16::timestamptz IS NULL OR ($6='wait' AND (sort_at,id)>($16,$17::uuid)) OR ($6='lastMessage' AND (sort_at,id)<($16,$17::uuid))
  ORDER BY CASE WHEN $6='wait' THEN sort_at END ASC,CASE WHEN $6='wait' THEN id END ASC,CASE WHEN $6='lastMessage' THEN sort_at END DESC,CASE WHEN $6='lastMessage' THEN id END DESC LIMIT $15+1
 )
- SELECT jsonb_build_object('items',coalesce((SELECT jsonb_agg(to_jsonb(p)-'sort_at' ORDER BY CASE WHEN $6='wait' THEN sort_at END ASC,CASE WHEN $6='wait' THEN id END ASC,CASE WHEN $6='lastMessage' THEN sort_at END DESC,CASE WHEN $6='lastMessage' THEN id END DESC) FROM page p),'[]'::jsonb), 'counts',jsonb_build_object('mine',(SELECT count(*) FROM shaped WHERE assignee_id=$3),'unassigned',(SELECT count(*) FROM shaped WHERE assignee_id IS NULL),'all',(SELECT count(*) FROM shaped))),
+ SELECT jsonb_build_object('items',coalesce((SELECT jsonb_agg((to_jsonb(p)-'sort_at') || jsonb_build_object('wait_alert', p.priority='normal' AND EXISTS (SELECT 1 FROM assignment_queue_intervals qi WHERE qi.tenant_id=$1 AND qi.conversation_id=p.id AND qi.ended_at IS NULL AND qi.started_at <= now() - make_interval(secs => coalesce((SELECT wait_alert_seconds FROM distribution_settings WHERE tenant_id=$1), 900)))) ORDER BY CASE WHEN $6='wait' THEN sort_at END ASC,CASE WHEN $6='wait' THEN id END ASC,CASE WHEN $6='lastMessage' THEN sort_at END DESC,CASE WHEN $6='lastMessage' THEN id END DESC) FROM page p),'[]'::jsonb), 'counts',jsonb_build_object('mine',(SELECT count(*) FROM shaped WHERE assignee_id=$3),'unassigned',(SELECT count(*) FROM shaped WHERE assignee_id IS NULL),'all',(SELECT count(*) FROM shaped))),
  coalesce((SELECT md5(string_agg(row_to_json(s)::text,',' ORDER BY id)) FROM shaped s),md5('')),
  coalesce((SELECT seq FROM realtime_tenant_cursors WHERE tenant_id=$1),0)`
