@@ -3141,6 +3141,39 @@
         ],
         "type": "object"
       },
+      "ReopenWindowOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "hours": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "inbox_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "inbox_id",
+          "hours"
+        ],
+        "type": "object"
+      },
+      "ReopenWindowPutInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "hours": {
+            "description": "Janela X em horas; 0 desliga a reabertura automática",
+            "format": "int32",
+            "maximum": 720,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "hours"
+        ],
+        "type": "object"
+      },
       "ResetConfirmInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -11852,6 +11885,238 @@
             "description": "Serviço indisponível"
           }
         },
+        "tags": [
+          "atendimento"
+        ]
+      }
+    },
+    "/api/panel/inboxes/{inbox_id}/reopen-window": {
+      "get": {
+        "operationId": "reopen-window-get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "__Host-session",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "inbox_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReopenWindowOutputBody"
+                }
+              }
+            },
+            "description": "Sucesso",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Não autenticado"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Acesso negado"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Recurso não encontrado"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Dados inválidos"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Erro interno"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Serviço indisponível"
+          }
+        },
+        "summary": "Mostra a janela de reabertura automática da caixa",
+        "tags": [
+          "atendimento"
+        ]
+      },
+      "put": {
+        "operationId": "reopen-window-put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "__Host-session",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "inbox_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReopenWindowPutInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReopenWindowOutputBody"
+                }
+              }
+            },
+            "description": "Sucesso",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Não autenticado"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Acesso negado"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Recurso não encontrado"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Dados inválidos"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Erro interno"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Serviço indisponível"
+          }
+        },
+        "summary": "Altera a janela de reabertura automática da caixa",
         "tags": [
           "atendimento"
         ]

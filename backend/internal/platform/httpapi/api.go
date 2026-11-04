@@ -221,6 +221,7 @@ func New(deps Dependencies) *API {
 	lifecycleHTTP.Register(api, lifecycleHTTP.Dependencies{Auth: deps.Auth, Lifecycle: deps.Lifecycle, TrustedOrigins: deps.TrustedOrigins})
 	triageHTTP.Register(api, triageHTTP.Dependencies{Auth: deps.Auth, Triage: deps.Triage, TrustedOrigins: deps.TrustedOrigins})
 	registerOccupancy(api, deps)
+	registerReopenWindow(api, deps)
 	registerDistribution(api, deps)
 	registerRealtimeContract(api)
 

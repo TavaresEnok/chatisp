@@ -760,6 +760,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panel/inboxes/{inbox_id}/reopen-window": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mostra a janela de reabertura automática da caixa */
+        get: operations["reopen-window-get"];
+        /** Altera a janela de reabertura automática da caixa */
+        put: operations["reopen-window-put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panel/inboxes/{inbox_id}/triage-menu": {
         parameters: {
             query?: never;
@@ -2358,6 +2376,18 @@ export interface components {
             client_request_id: string;
             /** Format: int64 */
             expected_version: number;
+        };
+        ReopenWindowOutputBody: {
+            /** Format: int32 */
+            hours: number;
+            inbox_id: string;
+        };
+        ReopenWindowPutInputBody: {
+            /**
+             * Format: int32
+             * @description Janela X em horas; 0 desliga a reabertura automática
+             */
+            hours: number;
         };
         ResetConfirmInputBody: {
             /** @description Nova senha. */
@@ -8196,6 +8226,171 @@ export interface operations {
             };
             /** @description Conflito */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "reopen-window-get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                inbox_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReopenWindowOutputBody"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "reopen-window-put": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                inbox_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReopenWindowPutInputBody"];
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReopenWindowOutputBody"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

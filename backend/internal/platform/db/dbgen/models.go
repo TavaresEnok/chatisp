@@ -441,14 +441,15 @@ type InactivityWatch struct {
 }
 
 type Inbox struct {
-	ID              uuid.UUID
-	TenantID        uuid.UUID
-	ConnectorID     uuid.UUID
-	Name            string
-	PresentedNumber *string
-	Hours           json.RawMessage
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
+	ID                uuid.UUID
+	TenantID          uuid.UUID
+	ConnectorID       uuid.UUID
+	Name              string
+	PresentedNumber   *string
+	Hours             json.RawMessage
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	ReopenWindowHours int32
 }
 
 type InboxBusinessHour struct {

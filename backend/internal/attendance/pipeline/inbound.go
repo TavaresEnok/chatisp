@@ -215,6 +215,19 @@ func (h *inboundHandler) ApplyInbound(ctx context.Context, tenantID, itemID uuid
 					return e
 				}
 			}
+			// No active attendance: a current message within the inbox reopen
+			// window reopens the last closed one (same protocol, new cycle)
+			// before AcceptInbound looks for an active attendance.
+			if errors.Is(e, pgx.ErrNoRows) {
+				if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM messages WHERE tenant_id=$1 AND connector_id=$2 AND external_message_id=$3)`, tenantID, connectorID, p.ExternalID).Scan(&duplicate); e != nil {
+					return e
+				}
+				if !duplicate {
+					if _, _, e = service.ReopenWithinInboxWindow(ctx, tx, tenantID, inboxID, identityID, trustedAt); e != nil {
+						return e
+					}
+				}
+			}
 			_, err = h.repo.AcceptInbound(ctx, tx, store.InboundInput{
 				TenantID:          tenantID,
 				InboxID:           inboxID,

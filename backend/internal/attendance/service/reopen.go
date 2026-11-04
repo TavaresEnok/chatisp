@@ -62,6 +62,103 @@ func (s Service) reopenForInbound(ctx context.Context, tx pgx.Tx, p Principal, i
 	return true, nil
 }
 
+// MaxReopenWindowHours bounds the per-inbox automatic reopen window.
+const MaxReopenWindowHours = 720
+
+// ReopenWithinInboxWindow reopens the latest closed attendance of the same
+// tenant, inbox and channel identity when a current customer message arrives
+// within the inbox's reopen window after the last closure. It keeps the
+// protocol, appends a cycle and returns the menu controller, exactly as the
+// manual reopen does. It returns false, without error, when the window is
+// disabled, expired, the attendance is not closed, another attendance is
+// active or the message is older than the last customer message; the caller
+// then opens a new attendance as before. The caller must hold the transaction
+// pinned to the tenant and must not pass historical or duplicate messages.
+func ReopenWithinInboxWindow(ctx context.Context, tx pgx.Tx, tenantID, inboxID, identityID uuid.UUID, at time.Time) (store.Conversation, bool, error) {
+	if at.IsZero() {
+		return store.Conversation{}, false, nil
+	}
+	var hours int32
+	err := tx.QueryRow(ctx, `
+		SELECT reopen_window_hours
+		FROM inboxes
+		WHERE tenant_id = $1
+		  AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+		  AND id = $2
+	`, tenantID, inboxID).Scan(&hours)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && hours <= 0) {
+		return store.Conversation{}, false, nil
+	}
+	if err != nil {
+		return store.Conversation{}, false, err
+	}
+	var id uuid.UUID
+	var status string
+	err = tx.QueryRow(ctx, `
+		SELECT id, status
+		FROM conversations
+		WHERE tenant_id = $1
+		  AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+		  AND inbox_id = $2
+		  AND contact_identity_id = $3
+		ORDER BY created_at DESC, id DESC
+		LIMIT 1
+	`, tenantID, inboxID, identityID).Scan(&id, &status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return store.Conversation{}, false, nil
+	}
+	if err != nil {
+		return store.Conversation{}, false, err
+	}
+	if status != store.StatusClosed {
+		return store.Conversation{}, false, nil
+	}
+	conv, err := lockConversation(ctx, tx, tenantID, id)
+	if err != nil {
+		return store.Conversation{}, false, err
+	}
+	if conv.Status != store.StatusClosed {
+		return store.Conversation{}, false, nil
+	}
+	if !conv.LastCustomerMessageAt.IsZero() && !at.After(conv.LastCustomerMessageAt) {
+		return store.Conversation{}, false, nil
+	}
+	var closedAt *time.Time
+	err = tx.QueryRow(ctx, `
+		SELECT closed_at
+		FROM conversation_cycles
+		WHERE tenant_id = $1
+		  AND conversation_id = $2
+		  AND cycle_number = $3
+	`, tenantID, conv.ID, conv.CycleNumber).Scan(&closedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return store.Conversation{}, false, nil
+	}
+	if err != nil {
+		return store.Conversation{}, false, err
+	}
+	// A message racing the closure (channel time before closed_at) reopens too:
+	// it must not disappear into a closed attendance.
+	if closedAt == nil || at.Sub(*closedAt) > time.Duration(hours)*time.Hour {
+		return store.Conversation{}, false, nil
+	}
+	active, err := otherActive(ctx, tx, conv)
+	if err != nil {
+		return store.Conversation{}, false, err
+	}
+	if active {
+		return store.Conversation{}, false, nil
+	}
+	out, err := reopenRow(ctx, tx, conv, uuid.Nil, conv.Version, at)
+	if errors.Is(err, store.ErrStaleVersion) || errors.Is(err, ErrActiveConversation) {
+		return store.Conversation{}, false, nil
+	}
+	if err != nil {
+		return store.Conversation{}, false, err
+	}
+	return out, true, nil
+}
+
 func (s Service) attachHistorical(ctx context.Context, tx pgx.Tx, p Principal, in ReceiveInput, external string) (store.InboundResult, error) {
 	var id uuid.UUID
 	err := tx.QueryRow(ctx, `
