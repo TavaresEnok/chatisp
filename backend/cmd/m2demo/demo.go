@@ -23,11 +23,13 @@ import (
 	"chatisp/internal/businesshours"
 	"chatisp/internal/cannedreplies"
 	"chatisp/internal/channel/configuration"
+	"chatisp/internal/channel/whatsapp"
 	"chatisp/internal/channelpolicy"
 	"chatisp/internal/contactdirectory"
 	"chatisp/internal/contactdocs"
 	"chatisp/internal/lifecycle"
 	"chatisp/internal/notifications"
+	"chatisp/internal/outwebhook"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/config"
 	"chatisp/internal/platform/crypto"
@@ -51,14 +53,15 @@ type demoInfo struct {
 	Email, Password, App, Secret, Waba, Phone string
 	M3B                                       *m3bInfo `json:",omitempty"`
 	M4A                                       *m4aInfo `json:",omitempty"`
+	M4B                                       *m4bInfo `json:",omitempty"`
 }
 
 // runDemo owns a fresh embedded cluster and stops the runtime before removing it.
 func runDemo(ctx context.Context, apiListener, metricsListener, fakeListener net.Listener, ready chan<- demoInfo) error {
-	return runDemoMode(ctx, apiListener, metricsListener, fakeListener, ready, false, false)
+	return runDemoMode(ctx, apiListener, metricsListener, fakeListener, ready, false, false, false)
 }
 
-func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener net.Listener, ready chan<- demoInfo, m3b, m4a bool) error {
+func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener net.Listener, ready chan<- demoInfo, m3b, m4a, m4b bool) error {
 	for _, key := range []string{"CHATISP_TEST_DATABASE_URL", "CHATISP_DATABASE_URL", "CHATISP_APP_DATABASE_URL", "CHATISP_PLATFORM_DATABASE_URL", "CHATISP_INGRESS_DATABASE_URL", "CHATISP_JOBS_DATABASE_URL"} {
 		if _, ok := os.LookupEnv(key); ok {
 			return fmt.Errorf("%s definido: demo recusa DSNs preexistentes", key)
@@ -160,6 +163,9 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 	info := demoInfo{Email: "agente-" + uuid.NewString() + "@example.test", Password: uuid.NewString(), App: "sim-app-" + uuid.NewString(), Secret: uuid.NewString(), Waba: "sim-waba-" + uuid.NewString(), Phone: "5511999990001"}
 	adminEmail, adminPassword := uuid.NewString()+"@example.test", uuid.NewString()
 	timezone, limits := "UTC", json.RawMessage(`{}`)
+	if m4b {
+		m4a = true
+	}
 	if m4a {
 		// The tenant timezone is the only clock the hours module reads.
 		timezone = "America/Sao_Paulo"
@@ -263,6 +269,21 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 			return err
 		}
 		defer stopM4A()
+		if m4b {
+			if info.M3B == nil || len(info.M3B.Actors) == 0 {
+				return errors.New("fixture M4B sem atendente")
+			}
+			if err = seedM4B(ctx, store, tenant, info.M3B.Source, info.M3B.Actors[0].Member); err != nil {
+				return err
+			}
+			info.M4B = &m4bInfo{
+				ImageMediaID: m4bImageMediaID,
+				CustomerID:   "fake-customer-casa",
+				ContractID:   "fake-contract-casa",
+				InvoiceLabel: "fatura simulada em aberto",
+				Simulation:   "ERP fake local e webhook de saída só para loopback de desenvolvimento; sem Meta, ERP ou Evolution reais",
+			}
+		}
 	} else {
 		// M3B (and other non-M4A demo modes) still serve GET /api/panel/attendant-signature.
 		// A zero Service returns 503 and the composer aborts before send.
@@ -278,9 +299,20 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 	if err != nil {
 		return err
 	}
-	handlers, err := pipeline.NewWorkers(pipeline.WorkersConfig{DB: store, IngressPool: pools.Ingress, JobsClient: inserts, AttendanceService: attendance, RouteResolver: server, MaterialResolver: server, CredentialReporter: server, DriverFactory: factory})
+	workerCfg := pipeline.WorkersConfig{DB: store, IngressPool: pools.Ingress, JobsClient: inserts, AttendanceService: attendance, RouteResolver: server, MaterialResolver: server, CredentialReporter: server, DriverFactory: factory}
+	if m4b && attachmentSvc != nil && attachmentSvc.Storage != nil {
+		workerCfg.Simulation = true
+		workerCfg.MediaStorage = attachmentSvc.Storage
+		workerCfg.MediaFetcher = &whatsapp.FakeFetcher{Objects: map[string]whatsapp.MediaBlob{
+			m4bImageMediaID: {MIME: "image/jpeg", Body: append([]byte(nil), m4bJPEG...)},
+		}}
+	}
+	handlers, err := pipeline.NewWorkers(workerCfg)
 	if err != nil {
 		return err
+	}
+	if m4b {
+		handlers.Webhook = outwebhook.JobsHandler{Deps: outwebhook.Deps{Store: store, Ring: ring, Mode: "development"}}
 	}
 	worker, err := jobs.New(wp, handlers, jobs.WithTestTiming(10*time.Millisecond, jobs.Backoff{}, 50*time.Millisecond))
 	if err != nil {
@@ -304,7 +336,13 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 	if ready != nil {
 		ready <- info
 	}
-	return runtime.Run(ctx, runtime.Options{Mode: config.ModeAll, Config: config.Config{LogLevel: "info", ShutdownTimeout: 15 * time.Second}, HTTPListener: apiListener, MetricsListener: metricsListener, Auth: identity, Attendance: attendance, Channels: channels, Sectors: sectorService, Contacts: contactdirectory.Service{DB: store, Visibility: panelapi.ContactVisibility{}}, Notifications: notifications.New(store), Realtime: rt, Webhook: wh, CannedReplies: cannedSvc, ChannelPolicy: policySvc, Attachments: attachmentSvc, BusinessHours: hoursSvc, Documents: contactdocs.New(store, ring), Presence: presence.New(store), Lifecycle: lifecycle.New(store), Triage: triage.New(store), Store: store, JobsClient: worker, TrustedOrigins: origins, ReadyChecks: []func(context.Context) error{pools.App.Ping, pools.Platform.Ping, pools.Ingress.Ping, wp.Ping}})
+	runtimeCfg := config.Config{LogLevel: "info", ShutdownTimeout: 15 * time.Second}
+	if m4b {
+		// Loopback receivers are refused outside test and development.
+		runtimeCfg.Env = "development"
+		runtimeCfg.KeyRing = ring
+	}
+	return runtime.Run(ctx, runtime.Options{Mode: config.ModeAll, Config: runtimeCfg, HTTPListener: apiListener, MetricsListener: metricsListener, Auth: identity, Attendance: attendance, Channels: channels, Sectors: sectorService, Contacts: contactdirectory.Service{DB: store, Visibility: panelapi.ContactVisibility{}}, Notifications: notifications.New(store), Realtime: rt, Webhook: wh, CannedReplies: cannedSvc, ChannelPolicy: policySvc, Attachments: attachmentSvc, BusinessHours: hoursSvc, Documents: contactdocs.New(store, ring), Presence: presence.New(store), Lifecycle: lifecycle.New(store), Triage: triage.New(store), Store: store, JobsClient: worker, TrustedOrigins: origins, ReadyChecks: []func(context.Context) error{pools.App.Ping, pools.Platform.Ping, pools.Ingress.Ping, wp.Ping}})
 }
 
 // panelProxy forwards API upgrades directly to the real server, and assets to Vite.

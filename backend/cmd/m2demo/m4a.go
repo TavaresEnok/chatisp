@@ -359,3 +359,10 @@ func m4aDemo(args []string) error {
 	}
 	return m3bDemoWith(true)
 }
+
+func m4bDemo(args []string) error {
+	if len(args) != 0 {
+		return errors.New("uso: m2demo m4b (fixture descartável loopback)")
+	}
+	return m3bDemoFlags(true, true)
+}
