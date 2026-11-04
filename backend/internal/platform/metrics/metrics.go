@@ -18,6 +18,7 @@ type Metrics struct {
 	registry *prometheus.Registry
 	requests *prometheus.CounterVec
 	duration *prometheus.HistogramVec
+	erp      *prometheus.CounterVec
 }
 
 // New registers process, runtime and HTTP series on an isolated registry.
@@ -34,6 +35,10 @@ func New() *Metrics {
 			Help:    "Duração das requisições HTTP por método e rota.",
 			Buckets: prometheus.DefBuckets,
 		}, []string{"method", "route"}),
+		erp: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "chatisp_erp_connector_calls_total",
+			Help: "Chamadas ao conector de ERP por conector e resultado.",
+		}, []string{"connector", "result"}),
 	}
 	info := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name:        "chatisp_build_info",
@@ -44,6 +49,7 @@ func New() *Metrics {
 	registry.MustRegister(
 		metrics.requests,
 		metrics.duration,
+		metrics.erp,
 		info,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
@@ -68,6 +74,30 @@ func (m *Metrics) Observe(method, route string, status int, elapsed time.Duratio
 	code := sanitizeStatus(status)
 	m.requests.WithLabelValues(method, route, code).Inc()
 	m.duration.WithLabelValues(method, route).Observe(elapsed.Seconds())
+}
+
+// ObserveERP counts one ERP connector result. Labels stay low cardinality.
+func (m *Metrics) ObserveERP(connector, result string) {
+	if m == nil || m.erp == nil {
+		return
+	}
+	m.erp.WithLabelValues(sanitizeConnector(connector), sanitizeERPResult(result)).Inc()
+}
+
+func sanitizeConnector(connector string) string {
+	if connector == "fake" {
+		return connector
+	}
+	return "other"
+}
+
+func sanitizeERPResult(result string) string {
+	switch result {
+	case "ok", "unavailable", "hidden", "uncertain", "not_found", "denied", "conflict":
+		return result
+	default:
+		return "other"
+	}
 }
 
 // Gather returns the current series for tests and scrapes.

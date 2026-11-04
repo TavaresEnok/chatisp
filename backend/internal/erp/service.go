@@ -2,6 +2,7 @@ package erp
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/google/uuid"
@@ -75,7 +76,10 @@ func (s *Service) Consult(ctx context.Context, p Principal, in Consult) (Action,
 	if !knownCapability(in.Capability) {
 		return Action{}, ErrInvalid
 	}
-	if err := Authorize(p, s.Conn); err != nil {
+	s.mu.Lock()
+	conn := s.Conn
+	s.mu.Unlock()
+	if err := Authorize(p, conn); err != nil {
 		return Action{}, err
 	}
 	if err := requireKey(in); err != nil {
@@ -105,7 +109,7 @@ func (s *Service) Consult(ctx context.Context, p Principal, in Consult) (Action,
 
 	action := Action{
 		ID:           uuid.New(),
-		ConnectionID: s.Conn.ID,
+		ConnectionID: conn.ID,
 		Conversation: in.Conversation,
 		Capability:   in.Capability,
 		LocalKey:     in.LocalKey,
@@ -131,10 +135,10 @@ func (s *Service) Consult(ctx context.Context, p Principal, in Consult) (Action,
 		action.View = view
 		return action, nil
 	}
-	if !s.Conn.Enabled || s.Conn.Availability == AvailabilityDown {
+	if !conn.Enabled || conn.Availability == AvailabilityDown {
 		return finish(OutcomeUnavailable, ReasonDown)
 	}
-	if !s.Conn.Capabilities[in.Capability] {
+	if !conn.Capabilities[in.Capability] {
 		return finish(OutcomeUnavailable, ReasonUnavailable)
 	}
 	if sensitive(in.Capability) && in.Verification == "" {
@@ -142,13 +146,18 @@ func (s *Service) Consult(ctx context.Context, p Principal, in Consult) (Action,
 	}
 
 	var called View
-	err := s.Breaker.Do(s.Conn.ID, in.Now, func() error {
+	err := s.Breaker.Do(conn.ID, in.Now, func() error {
 		var callErr error
 		called, callErr = s.Adapter.Call(ctx, in)
 		return callErr
 	})
 	if err != nil {
-		if err == ErrOpen || err == ErrDown {
+		switch {
+		case err == ErrOpen:
+			return finish(OutcomeUnavailable, ReasonCircuit)
+		case errors.Is(err, ErrTimeout):
+			return finish(OutcomeUnavailable, ReasonTimeout)
+		case errors.Is(err, ErrDown):
 			return finish(OutcomeUnavailable, ReasonDown)
 		}
 		if err == ErrAmbiguous {
@@ -185,6 +194,16 @@ func (s *Service) Consult(ctx context.Context, p Principal, in Consult) (Action,
 		s.remember(action)
 	}
 	return action, nil
+}
+
+// SetConnection refreshes the tenant row without resetting the breaker or remembered keys.
+func (s *Service) SetConnection(conn Connection) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.Conn = conn
+	s.mu.Unlock()
 }
 
 func (s *Service) recall(key string) (Action, bool) {
