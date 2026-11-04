@@ -160,7 +160,7 @@ Logs em /tmp são evidência temporária; este documento guarda o resultado dur�
 - `6426a4a` painel: seção "Automação do atendimento" (prazos de inatividade,
   tolerância offline, janela X e editor do menu de triagem por caixa) e botão
   "Adiar" na conversa. Usa APIs M5C que não tinham tela.
-- (a commitar neste bloco) M5: migração 00030 e `pipeline.UnassignOffline` no
+- `a294763` M5: migração 00030 e `pipeline.UnassignOffline` no
   tick de 10 s — devolve à fila conversas `open` de atendente offline além da
   tolerância (evento `offline_unassigned`, sem ator); `waiting_customer` mantém
   o dono por causa do relógio de inatividade. Ocupação separa abertas /
@@ -180,3 +180,33 @@ M4B (mídia/áudio; sem ffmpeg no host), M5 gancho de bot externo, M6, M7, M8 e
 dependências externas conforme a seção de lacunas acima. Próximo bloco sugerido:
 M7 (relatórios e CSV a partir de eventos/intervalos persistidos) ou M6 contrato/fake
 do ERP e API pública; confirmar prioridade com o proprietário.
+
+## Continuação em 03/11/2026 (relatórios)
+
+### Implementado
+Relatórios V1 a partir de ciclos, eventos, mensagens, fila e adiamentos já
+persistidos. `GET /api/panel/reports` (datas civis no fuso do provedor, agrupamento
+dia/semana/mês). A média e a mediana ignoram o que não se aplica. Sem resposta
+humana o tempo não vira zero. O operacional desconta uma vez a união de espera do
+cliente e adiamento. Setor e atendente usam o intervalo real; transferência reparte.
+Motivo principal é único; etiqueta adicional se sobrepõe. Encerramento pelo bot fica
+em linha própria. O CSV repete esses números e diz que não é o histórico do ERP.
+O quadro “agora” alimenta o Painel: fila, atendimento, espera, adiadas, sem
+responsável, presença vigente, maior espera e alerta com o `wait_alert_seconds` já
+gravado (urgente não entra). Atendente não lê outro setor: pedido explícito responde
+403. Contrato em `docs/contracts/m7-reports.md`.
+
+### Verificações executadas
+- `go test -count=1 ./internal/reports/`: passou. Inclui 8h–12h com 3h de espera
+  (4h e 1h), sobreposição descontada uma vez, bot sem resposta humana, leitura
+  PostgreSQL desses dois casos e isolamento do atendente de outro setor.
+- `go vet ./internal/reports/ ./internal/platform/httpapi/`: passou.
+- `tsc -b` e Vitest de `attendance-report` mais `panel.test`: passaram (14).
+- Não rodei `go test ./...`, Vitest completo nem E2E. O ESLint global não foi
+  alterado.
+
+### Lacunas que permanecem
+M4B (sem ffmpeg no host), gancho de bot externo, M6 (API pública, webhooks e
+contrato/fake do ERP), o resto do M7 (retenção, expurgo — continua desligado —,
+exportação e exclusão de contato, histórico de demandas, logo, limites de plano) e
+M8. Sem chamadas reais a Meta, ERP ou Evolution.

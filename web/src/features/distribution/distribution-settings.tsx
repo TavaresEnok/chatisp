@@ -51,7 +51,8 @@ function SectorOperations({ principal, sector, inbox }: { principal: PanelPrinci
     catch { setError("Não foi possível salvar. Atualize a consulta antes de tentar novamente."); setView(null); }
     finally { setBusy(false); }
   }
-  return <div>{view && <><p>Atribuição automática: {view.enabled ? "Ligada" : "Desligada"}</p><p>Conversas na fila: {view.items?.length ?? 0}</p>{principal.role === "admin" && <button type="button" disabled={busy} onClick={() => void toggle()}>{view.enabled ? "Desligar" : "Ligar"} atribuição automática</button>}</>}
+  const late = view?.items?.filter((item) => item.alert).length ?? 0;
+  return <div>{view && <><p>Atribuição automática: {view.enabled ? "Ligada" : "Desligada"}</p><p>Conversas na fila: {view.items?.length ?? 0}</p>{late > 0 && <p>{late === 1 ? "1 conversa na fila passou do tempo de espera." : `${late} conversas na fila passaram do tempo de espera.`}</p>}{principal.role === "admin" && <button type="button" disabled={busy} onClick={() => void toggle()}>{view.enabled ? "Desligar" : "Ligar"} atribuição automática</button>}</>}
     {slots && <ul aria-label="Ocupação do setor">{slots.members?.map(m => { const presence = agents?.agents?.find(a => a.membership_id === m.membership_id); return <li key={m.membership_id}>{operators.find(o => o.membership_id === m.membership_id)?.label ?? "Atendente de outra caixa"}: {m.occupied}/{m.capacity} vagas{occupancyDetail(m)} · {presence?.state === "available" ? "Disponível" : presence?.state === "busy" ? "Ocupado" : "Offline"}</li>; })}</ul>}
     {error && <p role="alert">{error}</p>}
   </div>;

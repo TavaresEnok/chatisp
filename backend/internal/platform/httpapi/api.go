@@ -223,6 +223,7 @@ func New(deps Dependencies) *API {
 	registerOccupancy(api, deps)
 	registerReopenWindow(api, deps)
 	registerDistribution(api, deps)
+	registerReports(api, deps)
 	registerRealtimeContract(api)
 
 	realtimeHandler := deps.Realtime

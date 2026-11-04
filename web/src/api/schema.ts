@@ -1156,6 +1156,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panel/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Relatório do atendimento no período
+         * @description Calcula tempos e volumes a partir de ciclos, eventos e intervalos persistidos. O CSV usa as mesmas definições da resposta. Não é o histórico completo do provedor.
+         */
+        get: operations["panel-reports-get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panel/sectors": {
         parameters: {
             query?: never;
@@ -1553,6 +1573,16 @@ export interface components {
             name: string;
             state: string;
         };
+        AttendantRow: {
+            /** Format: int64 */
+            closures: number;
+            label: string;
+            membership_id: string;
+            /** Format: int64 */
+            messages: number;
+            /** Format: int64 */
+            responsibility_seconds: number;
+        };
         BlockSchema: {
             blocked: boolean;
             reason: string;
@@ -1571,6 +1601,23 @@ export interface components {
             /** Format: int64 */
             version: number;
             waba_id: string;
+        };
+        Bucket: {
+            /** Format: int64 */
+            closed: number;
+            /** Format: int64 */
+            cycles: number;
+            /** Format: int64 */
+            first_response_average_seconds: number | null;
+            /** Format: int64 */
+            first_response_sample: number;
+            key: string;
+            /** Format: int64 */
+            messages: number;
+            /** Format: int64 */
+            operational_average_seconds: number | null;
+            /** Format: int64 */
+            operational_sample: number;
         };
         BusinessHoursCommand: {
             config: components["schemas"]["BusinessHoursConfig"];
@@ -1916,6 +1963,14 @@ export interface components {
         HeartbeatInputBody: {
             tab_id: string;
         };
+        HeatCell: {
+            /** Format: int64 */
+            cycles: number;
+            /** Format: int64 */
+            hour: number;
+            /** Format: int64 */
+            weekday: number;
+        };
         HistoryOutputBody: {
             head: components["schemas"]["Head"];
             messages: components["schemas"]["Message"][] | null;
@@ -1930,6 +1985,14 @@ export interface components {
             id: string;
             name: string;
             presented_number: string | null;
+        };
+        InboxRow: {
+            /** Format: int64 */
+            cycles: number;
+            inbox_id: string;
+            /** Format: int64 */
+            messages: number;
+            name: string;
         };
         InboxesOutputBody: {
             inboxes: components["schemas"]["Inbox"][] | null;
@@ -2043,6 +2106,26 @@ export interface components {
             /** Format: int64 */
             heartbeat_ttl_seconds: number;
             tolerance_note: string;
+        };
+        Live: {
+            /** Format: int64 */
+            in_attendance: number;
+            /** Format: int64 */
+            in_queue: number;
+            /** Format: int64 */
+            longest_queue_wait_seconds: number;
+            /** Format: int64 */
+            online_attendants: number;
+            /** Format: int64 */
+            snoozed: number;
+            /** Format: int64 */
+            unassigned: number;
+            /** Format: int64 */
+            wait_alert_seconds: number;
+            /** Format: int64 */
+            wait_alerts: number;
+            /** Format: int64 */
+            waiting_customer: number;
         };
         LoginInputBody: {
             /** @description Código TOTP ou de recuperação, quando o MFA já está confirmado. */
@@ -2380,6 +2463,12 @@ export interface components {
             items: components["schemas"]["RealtimeStoreQueueItem"][] | null;
             page_cursor: string;
         };
+        ReasonRow: {
+            /** Format: int64 */
+            count: number;
+            name: string;
+            overlap: boolean;
+        };
         RegistrationBody: {
             /** Format: int64 */
             bytes: number;
@@ -2407,6 +2496,35 @@ export interface components {
              */
             hours: number;
         };
+        Report: {
+            attendants: components["schemas"]["AttendantRow"][] | null;
+            buckets: components["schemas"]["Bucket"][] | null;
+            close_operational: components["schemas"]["Stats"];
+            close_total: components["schemas"]["Stats"];
+            /** Format: int64 */
+            conversations: number;
+            csv: string;
+            /** Format: int64 */
+            cycles: number;
+            definitions: string[] | null;
+            first_response: components["schemas"]["Stats"];
+            /** Format: date-time */
+            from: string;
+            group: string;
+            heatmap: components["schemas"]["HeatCell"][] | null;
+            inboxes: components["schemas"]["InboxRow"][] | null;
+            live: components["schemas"]["Live"];
+            /** Format: int64 */
+            messages: number;
+            queue_wait: components["schemas"]["Stats"];
+            reasons: components["schemas"]["ReasonRow"][] | null;
+            results: components["schemas"]["ResultRow"][] | null;
+            sectors: components["schemas"]["SectorRow"][] | null;
+            tags: components["schemas"]["ReasonRow"][] | null;
+            timezone: string;
+            /** Format: date-time */
+            to: string;
+        };
         ResetConfirmInputBody: {
             /** @description Nova senha. */
             password: string;
@@ -2426,6 +2544,13 @@ export interface components {
             /** Format: int64 */
             ttl_seconds: number;
         };
+        ResultRow: {
+            author_kind: string;
+            /** Format: int64 */
+            count: number;
+            label: string;
+            result: string;
+        };
         SearchInputBody: {
             document: string;
         };
@@ -2434,6 +2559,18 @@ export interface components {
             id: string;
             legacy_default: boolean;
             name: string;
+        };
+        SectorRow: {
+            /** Format: int64 */
+            cycles: number;
+            name: string;
+            /** Format: int64 */
+            queue_wait_median_seconds: number | null;
+            /** Format: int64 */
+            queue_waits: number;
+            /** Format: int64 */
+            responsibility_seconds: number;
+            sector_id: string;
         };
         SendBody: {
             body: string;
@@ -2503,6 +2640,16 @@ export interface components {
             messages: components["schemas"]["Message"][] | null;
             /** Format: int64 */
             next_cursor: number;
+        };
+        Stats: {
+            /** Format: int64 */
+            average_seconds: number | null;
+            /** Format: int64 */
+            median_seconds: number | null;
+            /** Format: int64 */
+            not_applicable: number;
+            /** Format: int64 */
+            sample: number;
         };
         StatusOutputBody: {
             alerts: components["schemas"]["Alert"][] | null;
@@ -10596,6 +10743,85 @@ export interface operations {
             };
             /** @description Conflito */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "panel-reports-get": {
+        parameters: {
+            query?: {
+                /** @description Data inicial, inclusive, no fuso do provedor */
+                from?: string;
+                /** @description Data final, inclusive, no fuso do provedor */
+                to?: string;
+                /** @description Agrupamento no fuso do provedor */
+                group?: "day" | "week" | "month";
+                /** @description Limita à caixa, quando informado */
+                inbox_id?: string;
+                /** @description Limita ao setor, quando informado */
+                sector_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Report"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

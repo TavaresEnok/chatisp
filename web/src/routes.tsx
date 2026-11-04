@@ -1,6 +1,5 @@
 import { Navigate, Route, Routes } from "react-router";
 import { AppShell } from "@/components/layout/app-shell";
-import { AreaPage } from "@/components/layout/area-page";
 import { AcceptInvitePage } from "@/pages/accept-invite-page";
 import { LoginPage } from "@/pages/login-page";
 import { MfaPage } from "@/pages/mfa-page";
@@ -14,6 +13,8 @@ import { ConversationsPage } from "@/pages/conversations-page";
 import { UnknownPage } from "@/pages/unknown-page";
 import { TeamsPage } from "@/pages/teams-page";
 import { ContactsPage } from "@/pages/contacts-page";
+import { DashboardPage } from "@/pages/dashboard-page";
+import { ReportsPage } from "@/pages/reports-page";
 
 export function AppRoutes() {
   return (
@@ -25,11 +26,11 @@ export function AppRoutes() {
       <Route path="/recuperar-senha/confirmar" element={<PasswordResetConfirmPage />} />
       <Route element={<AppShell />}>
         <Route index element={<Navigate to="/painel" replace />} />
-        <Route path="painel" element={<AreaPage areaId="dashboard" />} />
+        <Route path="painel" element={<DashboardPage />} />
         <Route path="conversas" element={<ConversationsPage />} />
         <Route path="contatos" element={<ContactsPage />} />
         <Route path="equipes" element={<TeamsPage />} />
-        <Route path="relatorios" element={<AreaPage areaId="reports" />} />
+        <Route path="relatorios" element={<ReportsPage />} />
         <Route path="configuracoes" element={<SettingsPage />} />
         <Route path="configuracoes/canais" element={<ChannelSettingsPage />} />
         <Route path="configuracoes/usuarios" element={<ProviderUsersPage />} />
