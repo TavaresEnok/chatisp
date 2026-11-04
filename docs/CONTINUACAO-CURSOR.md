@@ -1,150 +1,115 @@
-# Continuidade — frente de operação
+# Integração — produto e operação
 
-Data: 04/11/2026. Esta frente não conclui M8, V1 nem o piloto. Não houve deploy, banco real, credencial externa, k6 nem expurgo.
+Data: 04/11/2026. Esta branch junta as duas frentes já concluídas e fecha a escrita que faltava na API pública. Não conclui M8, V1 nem o piloto. Não houve push, deploy, banco real, credencial externa, Meta, ERP, Evolution nem expurgo. Nenhum item está em 100%.
 
-## Partida
+A worktree antiga `/home/enok/srv_projetos/workspace/chat-isp-cursor-integracao` e a branch `continuation/cursor-integracao` já existiam e não foram apagadas.
+
+## Onde está
 
 | | |
 | --- | --- |
-| Repositório de leitura | `/home/enok/srv_projetos/workspace/chat-isp-paseo` |
-| Branch conferida e não alterada | `orchestration/eec2118bdf14` |
-| Commit de partida | `54febe97b69ff131d80ff3cc880eac33f832e958` |
-| Worktree desta frente | `/home/enok/srv_projetos/workspace/chat-isp-cursor-operacao` |
-| Branch desta frente | `continuation/cursor-operacao` |
+| Worktree | `/home/enok/srv_projetos/workspace/chat-isp-cursor-integracao-2` |
+| Branch | `continuation/cursor-integracao-2` |
+| Base | `54febe97b69ff131d80ff3cc880eac33f832e958` em `orchestration/eec2118bdf14` |
+| Repositório de leitura | `/home/enok/srv_projetos/workspace/chat-isp-paseo` permaneceu nesse commit |
 
-Os commits desta branch estão na seção final. A branch de orquestração não recebeu commit nem push.
+O Paseo segue pausado. Filas, daemon e `/home/enok/srv_projetos/orchestration` não foram alterados.
 
-## Já concluído antes desta frente
+## Commits desta integração
 
-Evidência no próprio repositório, em `docs/m7-m8-lote2-entrega.md` e nos contratos citados. Não foi reimplementado aqui.
+A branch parte de `continuation/cursor-produto` (`5668602`) e incorpora `continuation/cursor-operacao` por merge.
 
-| Entrega | Commit de origem | Evidência |
-| --- | --- | --- |
-| Filtros, grade e mapa de calor | `eacd1af` (merge `f7c0bee`) | `docs/contracts/m7-report-panel.md` e o aceite integrado do lote 2 |
-| Nome e logo do provedor | `f6183fc` (merge `76802c6`) | `docs/contracts/m7-provider-identity.md` |
-| Séries de pool, WebSocket e River | `51888f4` (merge `e0327d3`) | `docs/contracts/m8-runtime-telemetry.md` |
-| Ensaio de restore com conteúdo e chaves | `ccabd76` (merge `2407824`) | `docs/contracts/m8-restore-drill.md`; `go test` do pacote `restoredrill` registrado naquele documento |
-| Aceite integrado local do lote 2 | `6afc370` (merge `54febe9`) | Chromium `140.0.7339.186`, `npm --prefix web run test:e2e:m7-ops`, frase `M7-OPS E2E passou (simulação local, sem skip)` |
+- `f112a258338ed3dc6c8f9dd15e6afe1f7b46fd93` — Merge branch 'continuation/cursor-operacao' into continuation/cursor-integracao-2.
+- `b2e3b5b0135ebf23a50116f790d621dc8edf22cc` — Renumerar os sinais operacionais para 00047 e deixar 00046 com a privacidade.
+- `498c87d966d44b51a6f90d3d7b2e87b0b8c8d794` — Expor texto, atribuição e estado da conversa na API pública pelo atendimento do painel.
+- O commit que grava este arquivo vem logo depois de `498c87d`. Não houve push.
 
-O ensaio de restore e o E2E do lote 2 não foram repetidos como prova nova, salvo o teste `TestDrillRestoresDumpAndReapplies`, reexecutado nesta frente porque o ensaio passou a gravar `metrics.prom`.
+## Frente de produto
 
-## O que esta frente implementou
+Worktree `/home/enok/srv_projetos/workspace/chat-isp-cursor-produto`, branch `continuation/cursor-produto`. O relato longo está em `docs/CONTINUACAO-PRODUTO.md`.
 
-- Séries operacionais no registry privado: incerteza de envio, reservas de envio e de trabalho, idade e contagem de webhook, soma de `expected_bytes` dos anexos validados e contagem de conectores. Contrato: `docs/contracts/m8-ops-signals.md`. Migração `00047_m8_ops_signals.sql` (na integração, depois da `00046_privacy_subject.sql`). O modo `api` não publica essas séries.
-- `metrics.prom` no diretório temporário do ensaio de restore, com a duração daquele exercício.
-- Guia com os comandos e as URLs conferidos no repositório: `docs/operacao.md`.
-- Revisão operacional reexecutável: `./scripts/ops-security-check.sh` e `docs/contracts/m8-seguranca-operacional.md`.
-- Ensaio de carga só local: `./scripts/ops-load-local.sh` e `load/perfil-sintetico-local.md`. O relatório recusa capacidade.
+- `66f6676fe03ab33bd7260088ef6de378b61e1c59` — Permitir ao admin exportar e excluir os dados de um titular sem ligar o expurgo.
+- `1a13ae54e1fa1c285699217bd7e73d6c379469fc` — Converter MPEG, M4A e WAV no mesmo ffmpeg limitado e recusar áudio longo antes do binário.
+- `f7be14d162e8dc23df04d82999f91236b2356273` — Atualizar contato pela API pública sem gravar documento nem reabrir titular excluído.
+- `5668602e0d875999b78185b908bdc5d9115cfc2a` — Registrar o fechamento da frente de produto com a validação conjunta dos pacotes tocados.
 
-## Lacunas, em ordem de dependência
+Privacidade, ffmpeg e `PATCH /v1/contacts/{id}` entraram inteiros. `automatic_purge` continua falso. O webhook de contato (V2) não foi reaberto.
 
-Funcionalidade ainda ausente, que não espera credencial:
+## Frente de operação
 
-1. O painel de alertas não mostra as séries novas. O destino delas é `GET /metrics`. Os três alertas antigos continuam em `/configuracoes`.
-2. Cache com Ristretto e invalidação de permissão. Não há uso no módulo.
-3. Circuit breaker do ERP (`sony/gobreaker` não é usado no código do produto).
-4. Carga multi-tenant com k6, p95 de aceite, CPU, RAM e E/S do banco. O ensaio desta frente é um processo, duas rotas de saúde e um login sintético.
-5. Passagem de um operador no navegador autenticado. Em HTTP o cookie `Secure` não fica gravado; o Compose em `https://localhost:8443` não foi executado neste host, que não tem Docker.
-6. Backup de produção, agenda mensal e RPO/RTO. O ensaio descartável não substitui isso.
-
-Integração já encaminhada que só espera credencial ou homologação:
-
-- Meta real, número e app. O modo simulado existe; a D2-03 continua aberta.
-- ERP real. O fake não é homologação. A D2-01 continua aberta.
-- Evolution. A flag permanece desligada. A D2-04 continua aberta.
-- Perfil de carga e metas do piloto. A D2-07 continua aberta. Instrução na seção de pendências.
-- Retenção e expurgo. A D2-06 continua aberta. O expurgo automático permanece desligado.
-
-Outra frente, não implementada aqui. O detalhe deve ir para `docs/CONTINUACAO-PRODUTO.md`, arquivo que esta frente não cria:
-
-- Privacidade, exportação e exclusão de contato, além do que já existe sob a política com expurgo desligado.
-- Mídia, ffmpeg e limites de conversão.
-- Lacunas de API pública e integrações de produto.
-
-## Próxima entrega funcional
-
-Mostrar no painel do admin, só leitura, os totais que `GET /metrics` já publica (incertos, reservas, webhook pendente, bytes esperados e conectores), sem inventar limite e sem tratar o número como capacidade. Isso não depende de credencial externa. k6 fica para depois da D2-07.
-
-## Dependências externas e limites
-
-- Não reativar o Paseo, não alterar fila, daemon nem `/home/enok/srv_projetos/orchestration`.
-- Não fazer deploy, não usar credencial externa, não abrir banco real, não executar expurgo.
-- PostgreSQL de teste instalado nesta worktree: `npm ci --prefix backend/tools/pg --no-audit --no-fund` (1 pacote, `@embedded-postgres/linux-x64` `18.4.0-beta.17`). O diretório `node_modules` não entra no Git.
-
-## Matriz conferida
-
-Só entram requisitos lidos no plano, na especificação, no código ou na evidência desta frente. Não é a lista das 257 linhas. Nenhum item está em 100%. Simulação não conta como homologação de Meta, ERP ou Evolution.
-
-| ID | Estado |
-| --- | --- |
-| 14-rls | implementado e verificado. `TestTenantIsolationAndCompositeForeignKey` e `TestPoliciesFailClosedWithoutTenantSetting` passaram nesta frente. |
-| 14-csrf | implementado e verificado. `TestPanelRejectsBadOriginCSRFAndRevokedSession` passou nesta frente. |
-| 14-logs | parcial com a lacuna específica: há `slog` JSON e redação de segredo em `backend/internal/platform/logging`; esta frente não provou que corpo de mensagem e CPF ficam de fora em todos os caminhos. |
-| 14-migracoes | implementado e verificado. Goose aplicou as migrações nos testes de sinais, de carga e de restore desta frente. Na árvore integrada o arquivo de sinais é `00047_m8_ops_signals.sql`; `00046` fica com a privacidade. |
-| 14-modos | parcial com a lacuna específica: `api`, `worker`, `migrate` e `all` existem; o ensaio subiu só `all`. |
-| 14-cache | não implementado. Não há Ristretto no módulo. |
-| 14-isolamento | parcial com a lacuna específica: RLS entre tenants foi reexecutado; cache por tenant não existe; anexo e fila não foram reexecutados aqui. |
-| 14-webhook-duravel | parcial com a lacuna específica: `TestWebhook_VerificationAndPersist` passou; a prova não cobre produção. |
-| 14-assinatura-meta | implementado mas dependente de homologação externa. A verificação local passou no teste de webhook; o segredo real da Meta não foi usado. |
-| 14-outbox | parcial com a lacuna específica: o estado `uncertain` agora tem gauge; o teste de processo caído depois da chamada remota não foi reexecutado. |
-| 14-s3 | parcial com a lacuna específica: o plano registra objeto local simulado no recorte M4A; não há S3 de operação. |
-| 14-upload | parcial com a lacuna específica: `TestTypeAndNameValidation` recusou HTML e SVG nesta frente; duração de mídia não foi medida. |
-| 14-ffmpeg | não implementado. Permanece para a frente de produto. |
-| 14-uso-meta | implementado mas dependente de homologação externa. O agregado local não vê uso reportado por uma WABA real. |
-| 14-circuit-breaker | não implementado. `sony/gobreaker` não aparece no código do produto. |
-| 14-observabilidade | parcial com a lacuna específica: desconexão entra no alerta local; número real, Evolution e credencial segregada em produção não foram homologados. |
-| 14-retencao | parcial com a lacuna específica: classes e recusa de expurgo existem; a D2-06 segue aberta e o expurgo permanece desligado. |
-| 14-backup | parcial com a lacuna específica: o ensaio descartável restaura dump, bytes, chave e reaplica exclusão, e agora grava a duração; não há backup de produção nem RPO/RTO. |
-| 14-carga | parcial com a lacuna específica: 200 pedidos locais passaram e o relatório marca capacidade como falsa; não houve k6 nem carga multi-tenant. |
-| 14-metricas-alertas | parcial com a lacuna específica: idade de job, erro de worker, pool, WebSocket, incerteza, reserva, webhook, storage e duração do ensaio existem; o painel só alerta job, conector desconectado e webhook incompleto; não há meta de latência. |
-| M8-guia | implementado e verificado. `docs/operacao.md` repete os comandos e as portas de `scripts/dev.sh` e do Compose. O Compose não foi executado. |
-| M8-revisao-seguranca | parcial com a lacuna específica: RLS, CSRF, webhook, SSRF e mídia ativa passaram no script local; cache, ffmpeg e homologação externa ficam de fora. |
-| M8-piloto | não implementado. Nenhum operador percorreu o fluxo autenticado no navegador nesta frente. |
-
-## Evidência desta frente
-
-Comandos executados na worktree, com código 0:
-
-- `npm ci --prefix backend/tools/pg --no-audit --no-fund` — 1 pacote.
-- `go test -count=1 -timeout 60s ./internal/platform/metrics/ ./internal/loadlocal/ ./cmd/chatisp/ -run 'TestOps|TestAPIWiring|TestJobsPool|TestPercentile|TestRefuse|TestReadProcess|TestFormat'`
-- `go test -count=1 -timeout 180s ./internal/platform/opsignals/` — `ok` em 2,005s.
-- `go test -count=1 -timeout 240s -run 'TestDrillRestoresDumpAndReapplies$' ./internal/restoredrill/` — `ok` em 3,692s.
-- `go test -count=1 -timeout 360s -run 'TestSyntheticLocalLoad$' -v ./cmd/chatisp/` — 200 pedidos, 0 falhas, p95 1,648 ms, RSS 97345536 bytes, E/S de leitura e escrita 0 na janela, 12 ticks de CPU. `aceito_como_capacidade` falso. Isso não é capacidade.
-- `go vet` nos pacotes alterados — sem diagnóstico.
-- `./scripts/ops-security-check.sh` — RLS, CSRF, webhook, SSRF e mídia ativa passaram.
-
-Não rodei a suíte ampla do plano.
-
-## Pendência externa — instrução
-
-Para autorizar k6 e um número de capacidade, escreva a resposta da D2-07 em `docs/perguntas.md` com provedores, atendentes simultâneos, números, mensagens, mídia, retenção, p95, RPO e RTO do piloto real. Até lá, não publique o p95 1,648 ms nem qualquer outro número deste ensaio como capacidade. O expurgo só liga depois da resposta da D2-06 em `docs/legal/`, com o perfil do provedor. Meta, ERP e Evolution só saem de simulação com a credencial e o aceite correspondentes (D2-03, D2-01 e D2-04).
-
-## Arquivos que a frente de produto não deve sobrescrever
-
-- `docs/CONTINUACAO-CURSOR.md`
-- `docs/operacao.md`
-- `docs/contracts/m8-ops-signals.md`
-- `docs/contracts/m8-seguranca-operacional.md`
-- `docs/contracts/m8-ops-alerts.md`
-- `docs/contracts/m8-runtime-telemetry.md`
-- `docs/contracts/m8-restore-drill.md`
-- `load/perfil-sintetico-local.md`
-- `scripts/ops-security-check.sh`
-- `scripts/ops-load-local.sh`
-- `backend/db/migrations/00047_m8_ops_signals.sql`
-- `backend/internal/platform/opsignals/`
-- `backend/internal/platform/metrics/ops.go`
-- `backend/internal/platform/metrics/ops_test.go`
-- `backend/internal/loadlocal/`
-- `backend/internal/restoredrill/metric.go`
-- `backend/cmd/chatisp/loadlocal_test.go`
-
-Se a outra frente editar `backend/cmd/chatisp/main.go` ou `backend/cmd/m2demo/demo.go`, precisa conservar a chamada de `opsignals.Collect` no processo que já coleta o River.
-
-## Commits desta frente
-
-Branch `continuation/cursor-operacao`, a partir de `54febe97b69ff131d80ff3cc880eac33f832e958`.
+Worktree `/home/enok/srv_projetos/workspace/chat-isp-cursor-operacao`, branch `continuation/cursor-operacao`. O guia de subida continua em `docs/operacao.md`.
 
 - `55e907ebc25268f4f4b0050e938430347bfe2f1a` — Medir incerteza, reservas, webhook e storage no registry privado.
 - `47789b56f7a4f0fc7e0713f19967b0bd25f9771b` — Registrar o guia de operação e o ensaio local de carga.
-- O commit imediatamente posterior a `47789b5` grava esta lista. Não houve push.
+- `fa956b341ad0d733a4e09062475d1523f6f0ec57` — Registrar os commits da frente de operação.
+
+Séries no registry privado, `metrics.prom` do ensaio de restore, `scripts/ops-security-check.sh`, `scripts/ops-load-local.sh` e o perfil sintético entraram inteiros. `opsignals.Collect` permanece em `backend/cmd/chatisp/main.go` e em `backend/cmd/m2demo/demo.go`. O ensaio local continua recusado como capacidade.
+
+## Migrações
+
+As duas frentes criaram um arquivo `00046` com nomes diferentes. O merge não conflitou no Git. A de privacidade ficou em `00046`. A de sinais operacionais foi renomeada, com o mesmo SQL, para o próximo número livre.
+
+- `backend/db/migrations/00046_privacy_subject.sql` — privacidade do titular.
+- `backend/db/migrations/00047_m8_ops_signals.sql` — sinais operacionais. Referências ao nome antigo foram atualizadas em `docs/contracts/m8-ops-signals.md` e neste arquivo.
+- `backend/db/migrations/00048_public_conversation_write.sql` — só acrescenta o escopo `conversations.write` na restrição de `api_tokens` e em `api_token_issue`. Não cria tabela.
+
+## API pública nova
+
+Escopo `conversations.write`. O legado `read` não o cobre. O painel de integrações passa a oferecer o escopo. Contrato: `docs/contracts/m6-public-api.md`. Documento: `backend/api/public-openapi.json`.
+
+| Método | Caminho | Atendimento reutilizado |
+| --- | --- | --- |
+| POST | `/api/public/v1/conversations/{ref}/messages` | `Service.Send`, em nome do atendente atual |
+| POST | `/api/public/v1/conversations/{ref}/assignment` | `Service.TransferToMember` |
+| POST | `/api/public/v1/conversations/{ref}/state` | `Service.Close` ou `Service.Reopen`, sem despedida |
+
+A chave é do token e do tenant. Texto livre continua na janela de 24 horas. Atribuição e estado usam um administrador ativo do provedor como ator, porque o token não tem sessão. Teste só com PostgreSQL embutido e dados sintéticos. Não houve chamada a Meta, ERP ou Evolution.
+
+## Evidência desta integração
+
+Comandos na worktree, saída 0:
+
+- `npm ci --prefix backend/tools/pg --no-audit --no-fund` — 1 pacote.
+- `go test -count=1 -timeout 240s ./internal/publicapi/ ./internal/retention/ ./internal/retention/httpapi/ ./internal/media/` — ok em 2,983s, 2,551s, 2,426s e 8,258s. Inclui `TestPublicConversationTextAssignAndState`.
+- `go test -count=1 -timeout 240s ./internal/platform/opsignals/ ./internal/platform/metrics/ ./internal/loadlocal/` — ok em 2,395s, 0,078s e 0,022s.
+- `go test -count=1 -timeout 240s ./cmd/chatisp/ -run 'TestOps|TestAPIWiring|TestSyntheticLocalLoad|TestJobsPool|TestPercentile|TestRefuse|TestReadProcess|TestFormat'` — ok em 3,864s. O relatório do ensaio continua com `aceito_como_capacidade` falso. Isso não é capacidade.
+- `go vet` desses pacotes — sem diagnóstico.
+- `./scripts/ops-security-check.sh` — RLS, CSRF, webhook, SSRF e mídia ativa passaram.
+
+A suíte inteira do repositório não rodou. O Vitest do painel e o ensaio de restore não foram repetidos aqui.
+
+## Como subir
+
+Na worktree integrada:
+
+```
+./scripts/dev.sh
+```
+
+Portas padrão, conferidas em `scripts/dev.sh` e `docs/operacao.md`:
+
+- API `http://127.0.0.1:8080`
+- Painel `http://127.0.0.1:5173`
+- Métricas `http://127.0.0.1:9090/metrics`
+
+O script recusa endereço que não seja loopback. O cookie de sessão continua `Secure`; em HTTP o navegador não guarda a sessão. Não fazer deploy.
+
+## Pendências externas — instrução
+
+Estas decisões continuam fora desta branch. Enquanto não forem respondidas, o código fica como está.
+
+- D2-06, expurgo. Escreva o enquadramento do provedor em `docs/legal/` antes de ativar expurgo. Não grave `automatic_purge=true` e não trate o `POST /api/panel/retention/purge` como ligado. O caminho enquanto a decisão não chega está em `docs/perguntas.md`, seção D2-06.
+- D2-07, capacidade. Escreva em `docs/perguntas.md`, seção D2-07, o perfil real do piloto: provedores, atendentes simultâneos, números, mensagens, mídia, retenção, p95, RPO e RTO. Só depois disso rode k6. Até lá, não publique o ensaio local nem qualquer p95 deste repositório como capacidade.
+- D2-03, Meta. Homologue com app, WABA, número, permissões e credencial reais, e registre a versão da Graph API em `docs/integracoes/` quando a documentação vigente for fixada. O servidor falso não é essa homologação.
+- D2-01, ERP. Documente versão, API e autenticação do ERP usado em `docs/integracoes/erp-existente.md` e substitua o fake pelo adaptador dessa interface. O fake não é homologação.
+- D2-04, Evolution. Fixe a release, a licença e o aceite antes de ligar a flag. Ela permanece desligada.
+
+## O que continua fora de alcance
+
+- Painel de alertas ainda não mostra as séries novas. Elas saem em `GET /metrics`.
+- Cache com Ristretto não existe no módulo.
+- Circuit breaker do ERP não está ligado ao código do produto.
+- Carga multi-tenant com k6, backup de produção e RPO/RTO não foram feitos.
+- Passagem de um operador no navegador autenticado não foi refeita nesta integração.
+- Webhook de contato criado ou alterado continua V2.
+- Expurgo automático permanece desligado.
