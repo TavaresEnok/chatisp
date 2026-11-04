@@ -104,12 +104,33 @@ Estas decisões continuam fora desta branch. Enquanto não forem respondidas, o 
 - D2-01, ERP. Documente versão, API e autenticação do ERP usado em `docs/integracoes/erp-existente.md` e substitua o fake pelo adaptador dessa interface. O fake não é homologação.
 - D2-04, Evolution. Fixe a release, a licença e o aceite antes de ligar a flag. Ela permanece desligada.
 
+## Fechamento desta continuação
+
+O HEAD anterior era `101ab8729488a7258473aff9e3b94bfc53a99595`. Estes commits fecham lacunas que ainda eram código, teste, contrato ou guia. Nenhum item está em 100%. Não houve push, banco real, credencial, Meta, ERP, Evolution nem expurgo.
+
+- `b6e95e88522c96c91eb28bf1639f6b00b891cbbb` — Guardar configuração, caixa e catálogo no cache por tenant.
+- `413a2100e98d98bbd25a6b52909c0265527d3e8d` — Registrar a Evolution local desligada e o destino das séries.
+- O commit que grava este arquivo vem logo depois de `413a2100e98d98bbd25a6b52909c0265527d3e8d`.
+
+| Requisito | Estado |
+| --- | --- |
+| 14-cache | implementado e verificado |
+| 01-evolution | implementado mas dependente de homologação externa |
+| 01-cloud-api e o restante do driver Meta já existente | implementado mas dependente de homologação externa |
+| 08-conector-erp e 14-circuit-breaker | parcial: disjuntor, tempo limite e concorrência já estão no painel e no teste local; o módulo sony/gobreaker não entrou no go.mod |
+| 14-metricas-alertas | implementado e verificado no listener privado; o painel cita `GET /metrics` e não mostra os totais do banco inteiro |
+| 12-retencao e 14-retencao | implementado e verificado no caminho que recusa o expurgo; `automatic_purge` continua falso |
+| 14-carga | parcial: o ensaio local e o registro de que não é capacidade já existiam e não foram repetidos; falta a resposta da D2-07 |
+
+Contratos novos: `docs/contracts/m1-tenant-cache.md`, `docs/contracts/m6-evolution.md`, `docs/integracoes/meta.md` e `docs/integracoes/erp-existente.md`.
+
 ## O que continua fora de alcance
 
-- Painel de alertas ainda não mostra as séries novas. Elas saem em `GET /metrics`.
-- Cache com Ristretto não existe no módulo.
-- Circuit breaker do ERP não está ligado ao código do produto.
-- Carga multi-tenant com k6, backup de produção e RPO/RTO não foram feitos.
-- Passagem de um operador no navegador autenticado não foi refeita nesta integração.
+- Ligar a Evolution. Falta a release, a licença e o aceite da D2-04, registrados em `docs/perguntas.md` e em `docs/contracts/m6-evolution.md`.
+- Homologar a Meta. Falta app, WABA, número, permissão, credencial e a versão da Graph API. O lugar é `docs/integracoes/meta.md` e a D2-03 em `docs/perguntas.md`.
+- Trocar o fake do ERP pelo adaptador do fornecedor. Falta versão, API e autenticação na D2-01, em `docs/integracoes/erp-existente.md`. A verificação do cliente (D2-02) também falta; a ação sensível continua oculta.
+- Ativar expurgo. Falta o enquadramento em `docs/legal/`, como diz a D2-06 em `docs/perguntas.md`. `automatic_purge` permanece falso.
+- Publicar capacidade. Falta o perfil do piloto na D2-07 em `docs/perguntas.md`. O ensaio local não é esse número. k6, backup de produção, RPO e RTO continuam sem esse perfil.
+- Passagem de um operador no navegador autenticado não foi refeita.
 - Webhook de contato criado ou alterado continua V2.
-- Expurgo automático permanece desligado.
+- O módulo sony/gobreaker não substitui o disjuntor já testado do pacote.
