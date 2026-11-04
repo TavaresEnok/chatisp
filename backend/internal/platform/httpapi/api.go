@@ -35,6 +35,7 @@ import (
 	contactDocsHTTP "chatisp/internal/contactdocs/httpapi"
 	"chatisp/internal/lifecycle"
 	lifecycleHTTP "chatisp/internal/lifecycle/httpapi"
+	mediaHTTP "chatisp/internal/media/httpapi"
 	"chatisp/internal/notifications"
 	notificationHTTP "chatisp/internal/notifications/httpapi"
 	"chatisp/internal/platform/auth"
@@ -143,6 +144,8 @@ func New(deps Dependencies) *API {
 			return "ChannelPolicy" + t.Name()
 		case strings.Contains(t.PkgPath(), "chatisp/internal/attachments"):
 			return "Attachment" + t.Name()
+		case strings.Contains(t.PkgPath(), "chatisp/internal/media"):
+			return "Media" + t.Name()
 		case strings.Contains(t.PkgPath(), "chatisp/internal/businesshours"):
 			return "BusinessHours" + t.Name()
 		case strings.Contains(t.PkgPath(), "chatisp/internal/contactdocs"):
@@ -215,6 +218,7 @@ func New(deps Dependencies) *API {
 	cannedreplies.Register(api, cannedreplies.Dependencies{Auth: deps.Auth, CannedReplies: deps.CannedReplies, TrustedOrigins: deps.TrustedOrigins})
 	channelPolicyHTTP.Register(api, channelPolicyHTTP.Dependencies{Auth: deps.Auth, Policy: deps.ChannelPolicy, TrustedOrigins: deps.TrustedOrigins})
 	attachmentHTTP.Register(api, attachmentHTTP.Dependencies{Auth: deps.Auth, Attachments: deps.Attachments, TrustedOrigins: deps.TrustedOrigins})
+	mediaHTTP.Register(api, mediaHTTP.Dependencies{Auth: deps.Auth, Store: deps.Store, Attachments: deps.Attachments, TrustedOrigins: deps.TrustedOrigins})
 	businessHoursHTTP.Register(api, businessHoursHTTP.Dependencies{Auth: deps.Auth, BusinessHours: deps.BusinessHours, TrustedOrigins: deps.TrustedOrigins})
 	contactDocsHTTP.Register(api, contactDocsHTTP.Dependencies{Auth: deps.Auth, Documents: deps.Documents, TrustedOrigins: deps.TrustedOrigins})
 	presenceHTTP.Register(api, presenceHTTP.Dependencies{Auth: deps.Auth, Presence: deps.Presence, TrustedOrigins: deps.TrustedOrigins})
