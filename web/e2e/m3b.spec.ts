@@ -69,7 +69,7 @@ async function session(browser: Browser, actor: Actor, inbox: string) {
 }
 async function receive(f: Fixture, from: string, text: string) {
   const body = JSON.stringify({ object: "whatsapp_business_account", entry: [{ id: f.Waba, changes: [{ field: "messages", value: { messaging_product: "whatsapp", metadata: { phone_number_id: f.Phone, display_phone_number: f.Phone }, messages: [{ from, id: `wamid.simulation.${randomUUID()}`, timestamp: String(Math.floor(Date.now()/1000)), type: "text", text: { body: text } }] } }] }] });
-  const response = await fetch(`http://127.0.0.1:8080/api/webhooks/meta?app_id=${encodeURIComponent(f.App)}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Hub-Signature-256": `sha256=${createHmac("sha256",f.Secret).update(body).digest("hex")}` }, body });
+  const response = await fetch(`http://127.0.0.1:${process.env.CHATISP_E2E_API_PORT ?? "8080"}/api/webhooks/meta?app_id=${encodeURIComponent(f.App)}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Hub-Signature-256": `sha256=${createHmac("sha256",f.Secret).update(body).digest("hex")}` }, body });
   expect(response.status).toBe(200);
 }
 function rows(page: Page) { return page.getByRole("list", { name: "Conversas encontradas" }).getByRole("button"); }

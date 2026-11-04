@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -127,7 +128,11 @@ func m3bDemoWith(m4a bool) error {
 			l.Close()
 		}
 	}()
-	for _, addr := range []string{"127.0.0.1:8080", "127.0.0.1:9090", "127.0.0.1:18081", "127.0.0.1:5174"} {
+	apiAddr, err := e2eAPIAddr()
+	if err != nil {
+		return err
+	}
+	for _, addr := range []string{apiAddr, "127.0.0.1:9090", "127.0.0.1:18081", "127.0.0.1:5174"} {
 		l, e := net.Listen("tcp", addr)
 		if e != nil {
 			return e
@@ -136,7 +141,7 @@ func m3bDemoWith(m4a bool) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	api, _ := url.Parse("http://127.0.0.1:8080")
+	api, _ := url.Parse("http://" + apiAddr)
 	vite, _ := url.Parse("http://127.0.0.1:5173")
 	// ServeTLS negotiates HTTP/2. A raw TLS listener stays on HTTP/1.1, and three
 	// panel contexts then stall behind Chromium's per-host connection cap.
@@ -156,4 +161,17 @@ func m3bDemoWith(m4a bool) error {
 	case err = <-done:
 		return err
 	}
+}
+
+// Keep disposable browser proofs independent from services occupying port 8080.
+func e2eAPIAddr() (string, error) {
+	port := os.Getenv("CHATISP_E2E_API_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	number, err := strconv.Atoi(port)
+	if err != nil || number < 1 || number > 65535 {
+		return "", errors.New("CHATISP_E2E_API_PORT inválida")
+	}
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(number)), nil
 }

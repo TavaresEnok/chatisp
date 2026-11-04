@@ -155,7 +155,7 @@ async function receive(fixture: Fixture, from: string, text: string) {
       }],
     }],
   });
-  const response = await fetch(`http://127.0.0.1:8080/api/webhooks/meta?app_id=${encodeURIComponent(fixture.App)}`, {
+  const response = await fetch(`http://127.0.0.1:${process.env.CHATISP_E2E_API_PORT ?? "8080"}/api/webhooks/meta?app_id=${encodeURIComponent(fixture.App)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Hub-Signature-256": `sha256=${createHmac("sha256", fixture.Secret).update(body).digest("hex")}`, "User-Agent": "chatisp-metacloud-simulation" },
     body,
