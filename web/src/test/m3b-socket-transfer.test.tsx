@@ -53,6 +53,8 @@ function setup(deferred = false) {
     if (path.endsWith("/sectors")) return response({ sectors: [] });
     if (path.endsWith("/annotation-tags")) return response([]);
     if (path.endsWith("/annotations")) return response({ priority: "normal", tags: [], notes: [], events: [] });
+    // The composer requires a complete signature contract before any send.
+    if (path === "/api/panel/attendant-signature") return response({ enabled: false, prefix: "", version: 1 });
     return response({});
   }));
   useSessionStore.getState().applySession(principal, "csrf");

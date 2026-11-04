@@ -21,6 +21,11 @@ it("opera atendimento simulado pelo contrato do painel", async () => {
     requests.push({ path, body });
     let data: unknown = {};
     if (path.endsWith("/inboxes")) data = { inboxes: [{ id: "i1", name: "SIMULAÇÃO", channel_status: "connected" }] };
+    // The current queue contract lists conversation heads through /queue.
+    else if (path.endsWith("/queue")) data = { items: [{ ...head, inbox_id: "i1", contact_label: "cliente", sector_id: "s1", priority: "normal", unread: false }], counts: { mine: 1, all: 1, unassigned: 0 } };
+    else if (path === "/api/panel/attendant-signature") data = { enabled: false, prefix: "", version: 1 };
+    else if (path.endsWith("/annotations")) data = { priority: "normal", tags: [], notes: [], events: [] };
+    else if (path.endsWith("/annotation-tags") || path.endsWith("/transfer-sectors")) data = [];
     else if (path.endsWith("/history")) data = { head, messages: [], timeline: [], next_cursor: 1 };
     else if (path.endsWith("/conversations")) data = { conversations: [head], messages: [], next_cursor: 1 };
     else if (path.endsWith("/messages")) data = { message_id: "m1", attempt_id: "a1", idempotency_id: "k1", state: "queued", replayed: false };
@@ -31,7 +36,7 @@ it("opera atendimento simulado pelo contrato do painel", async () => {
   const user = userEvent.setup();
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><ConversationsPage /></MemoryRouter></QueryClientProvider>);
   await user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
-  await user.click(await screen.findByRole("option", { name: /Protocolo SIM-001/ }));
+  await user.click(await screen.findByRole("button", { name: /Protocolo SIM-001/ }));
   await user.click(screen.getByRole("button", { name: "Assumir" }));
   await waitFor(() => expect(requests.some((r) => r.path.endsWith("/assume"))).toBe(true));
   await user.type(await screen.findByLabelText("Mensagem"), "Resposta simulada");

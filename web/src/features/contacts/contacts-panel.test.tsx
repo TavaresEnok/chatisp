@@ -27,6 +27,8 @@ it("impede trocar contato durante bloqueio atrasado e salva no alvo selecionado"
   const pending = new Promise<void>(resolve => { release = resolve; });
   vi.stubGlobal("fetch", vi.fn(async (req: Request) => {
     const path = new URL(req.url).pathname;
+    // Presence heartbeat belongs to the authenticated layout, not to contact writes.
+    if (path.startsWith("/api/panel/presence")) return new Response(JSON.stringify(path.endsWith("/occupancy") ? { members: [] } : { connected: true, manual: "available", state: "available", tab_count: 1 }), { headers: { "content-type": "application/json" } });
     if (req.method === "GET") return new Response(JSON.stringify({ items: contacts, next_offset: null }), { headers: { "content-type": "application/json" } });
     const body = await req.json(); writes.push({ path, body });
     if (path.endsWith("/block")) { await pending; contacts[0]!.blocked = true; return new Response(JSON.stringify(contacts[0]), { headers: { "content-type": "application/json" } }); }
