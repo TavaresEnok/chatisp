@@ -134,3 +134,24 @@ Contratos novos: `docs/contracts/m1-tenant-cache.md`, `docs/contracts/m6-evoluti
 - Passagem de um operador no navegador autenticado não foi refeita.
 - Webhook de contato criado ou alterado continua V2.
 - O módulo sony/gobreaker não substitui o disjuntor já testado do pacote.
+
+## Rodada de 04/11/2026 (noite) — HTTPS local, disjuntor, matriz e validação
+
+Base: `d525f90`. Worktree `chat-isp-cursor-integracao-2`, branch `continuation/cursor-integracao-2`. Não houve push, deploy, banco real, Meta, ERP, Evolution nem expurgo. Paseo não foi tocado. A pasta `chat-isp` (branch `continuation/m5-runtime-panel`, `428627b`) está 52 commits atrás desta e não deve ser usada como base.
+
+Entregas:
+- `71d0cda` — `CHATISP_DEV_TLS=1 ./scripts/dev.sh`: certificado autoassinado descartável, Vite em HTTPS, origem `https://`. Login real pelo proxy retornou 200 com cookies `__Host-session` e `__Host-csrf` `Secure`. Detalhe em `README.md` e `docs/operacao.md`.
+- `6b6e315` — disjuntor do ERP reabre na hora quando a sondagem meio-aberta falha (antes só contava 1 falha); `breaker_test.go` novo. Decisão sobre `sony/gobreaker` em `docs/integracoes/erp-existente.md`: manter o pacote próprio, equivalente.
+- `6b6e315` — `docs/matriz-requisitos.md` com as 257 linhas. Só 9 têm estado explícito; as outras 248 estão **A conferir**. Não é conclusão.
+- Commit seguinte — ESLint limpo nos specs E2E.
+
+Evidência desta rodada (HEAD com esses commits, Go 1.27.3; Node 20 para `tsc`, Node 24.11.0 em `/tmp/chatisp-node24` para Vitest e ESLint):
+- `go vet ./...` — 0.
+- `go test -count=1 ./...` — 0; 63 pacotes ok, incluindo `restoredrill` e `erp`, sem falha.
+- `tsc -b` — 0. `eslint .` — 0 (depois das correções). Vitest completo — 53 arquivos, 273 testes ok.
+- Migrações em banco novo: aplicadas pelos testes com PostgreSQL embutido. Atualização de versão anterior sintética e E2E de navegador **não foram executados** (não há `/opt/paseo-browser`).
+
+Pendências internas: conferir as 248 linhas "A conferir" da matriz contra código e teste; jornada autenticada no navegador (E2E m3b, m4a, m4b-m6, m7-ops com Chromium); `scripts/dev.test.sh` falha desde antes (aborta com "pid ausente" em `vite.pid` no cenário de falha); teste de upgrade de migração.
+Próxima tarefa concreta: conferir a matriz por marco, começando por M1 e M2 (autenticação, RLS, isolamento), e rodar o E2E com um Chromium disponível.
+Pendências externas: iguais às da seção anterior (D2-01 a D2-07).
+Como retomar: `cd` na worktree, `git log --oneline -5`, abrir `docs/matriz-requisitos.md`; subir com `CHATISP_DEV_TLS=1 ./scripts/dev.sh` (portas livres via variáveis do README).
