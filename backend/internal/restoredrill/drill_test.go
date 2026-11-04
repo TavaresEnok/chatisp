@@ -1,6 +1,7 @@
 package restoredrill
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -44,6 +45,13 @@ func TestDrillRestoresDumpAndReapplies(t *testing.T) {
 	if !report.AttachmentReferenceOK || !report.KeyReferenceOK {
 		t.Fatal("referência de anexo ou de chave não conferiu")
 	}
+	if !report.ContentReadable || !report.KeyRecovered || !report.SecretDecrypted {
+		t.Fatal("conteúdo ou chave recuperada não conferiu")
+	}
+	if report.DurationNote != durationNote || strings.Contains(strings.ToLower(report.DurationNote), "rpo") || strings.Contains(strings.ToLower(report.DurationNote), "rto") {
+		t.Fatalf("nota de duração: %s", report.DurationNote)
+	}
+	assertBackupArtifacts(t, dumpDir)
 	if !report.DeletionTablePresent || !report.DeletionReapplied || !report.RemovedAttachmentRestored {
 		t.Fatal("deletion_records não foi reaplicada")
 	}
@@ -107,7 +115,7 @@ func TestReapplySkipsMissingTable(t *testing.T) {
 		TenantID:  tenantID,
 		Subject:   "attachment",
 		SubjectID: removedAttachmentID,
-	}})
+	}}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,6 +229,9 @@ func assertReportText(t *testing.T, text string, tablePresent bool) {
 	if !strings.Contains(text, "A carga não foi aceita como capacidade.") {
 		t.Fatalf("relatório sem a frase de carga: %s", text)
 	}
+	if !strings.Contains(text, "conteúdo mantido") || !strings.Contains(text, "artefato recuperado") {
+		t.Fatalf("relatório não distingue conteúdo e chave: %s", text)
+	}
 	if !strings.Contains(text, "O backup imutável não é prometido como apagado na hora.") {
 		t.Fatalf("relatório sem a frase de backup: %s", text)
 	}
@@ -259,6 +270,39 @@ func dumpStillHoldsRemovedAttachment(t *testing.T, dir string) bool {
 		t.Fatal(err)
 	}
 	return found && !leaked && !writable
+}
+
+func assertBackupArtifacts(t *testing.T, dir string) {
+	t.Helper()
+	if err := backupObjectIntact(dir, keptObjectKey, keptObjectVersion); err != nil {
+		t.Fatal(err)
+	}
+	if err := backupObjectIntact(dir, removedObjectKey, removedObjectVersion); err != nil {
+		t.Fatal(err)
+	}
+	recovery := filepath.Join(dir, "recovery")
+	info, err := os.Lstat(recovery)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 {
+		t.Fatalf("diretório da chave: %v", err)
+	}
+	materialPath := filepath.Join(recovery, "material")
+	materialInfo, err := os.Lstat(materialPath)
+	if err != nil || materialInfo.Mode().Perm() != 0o600 || materialInfo.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("material da chave: modo %v err %v", materialInfo, err)
+	}
+	material, err := os.ReadFile(materialPath)
+	if err != nil || len(material) == 0 {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"manifest.txt", "objects.manifest", "secrets.manifest"} {
+		body, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(body, material) {
+			t.Fatalf("material vazou em %s", name)
+		}
+	}
 }
 
 func assertNoDrillDatabaseLeft(t *testing.T) {
