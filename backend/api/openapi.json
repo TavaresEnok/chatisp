@@ -2261,6 +2261,22 @@
             "type": "string"
           },
           "occupied": {
+            "description": "Conversas que consomem vaga: abertas + aguardando cliente",
+            "format": "int64",
+            "type": "integer"
+          },
+          "open": {
+            "description": "Abertas atribuídas",
+            "format": "int64",
+            "type": "integer"
+          },
+          "snoozed": {
+            "description": "Adiadas com retorno preferencial a este atendente; não consomem vaga",
+            "format": "int64",
+            "type": "integer"
+          },
+          "waiting": {
+            "description": "Aguardando cliente atribuídas",
             "format": "int64",
             "type": "integer"
           }
@@ -2268,7 +2284,10 @@
         "required": [
           "membership_id",
           "occupied",
-          "capacity"
+          "capacity",
+          "open",
+          "waiting",
+          "snoozed"
         ],
         "type": "object"
       },

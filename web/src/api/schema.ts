@@ -2117,8 +2117,26 @@ export interface components {
             /** Format: int64 */
             capacity: number;
             membership_id: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Conversas que consomem vaga: abertas + aguardando cliente
+             */
             occupied: number;
+            /**
+             * Format: int64
+             * @description Abertas atribuídas
+             */
+            open: number;
+            /**
+             * Format: int64
+             * @description Adiadas com retorno preferencial a este atendente; não consomem vaga
+             */
+            snoozed: number;
+            /**
+             * Format: int64
+             * @description Aguardando cliente atribuídas
+             */
+            waiting: number;
         };
         OccupancyOutputBody: {
             members: components["schemas"]["OccupancyMember"][] | null;

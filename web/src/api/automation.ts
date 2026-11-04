@@ -45,7 +45,9 @@ export async function putPresenceSettings(body: { expected_version: number; offl
 export async function getSnooze(inbox_id: string, conversation_id: string, signal?: AbortSignal): Promise<Snooze | null> {
   const result = await api.GET("/api/panel/conversations/{conversation_id}/snooze", { params: { path: { conversation_id }, query: { inbox_id } }, signal, cache: "no-store" });
   if (result.response.status === 404) return null;
-  return unwrap(result);
+  const value = unwrap(result);
+  // Only a complete active snooze counts; anything else means none.
+  return value.state === "active" && value.snoozed_until ? value : null;
 }
 export async function snooze(conversation_id: string, body: { request_id: string; inbox_id: string; expected_version: number; until: string; reason: string }, signal?: AbortSignal) {
   return unwrap(await api.PUT("/api/panel/conversations/{conversation_id}/snooze", { params: { path: { conversation_id } }, body, signal }));

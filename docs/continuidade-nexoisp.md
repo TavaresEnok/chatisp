@@ -144,3 +144,39 @@ A worktree temporária de comparação em `/tmp/chat-isp-baseline-review` foi cr
 por esta sessão, em detached HEAD, sem alterações rastreadas; contém symlink de
 node_modules para o repositório atual. Pode ser removida quando não for útil.
 Logs em /tmp são evidência temporária; este documento guarda o resultado durável.
+
+
+## Continuação em 04/11/2026 (branch `continuation/m5-runtime-panel`)
+
+### Implementado e commitado
+- `4b88353` testes web: doubles/seletores alinhados à presença global, à fila
+  `/queue` e à assinatura. Vitest completo passou (204, depois 208 com os novos).
+- `933404a` M3 auto-reabertura: migração 00029 (`inboxes.reopen_window_hours`,
+  0 = desligada, máx. 720), `service.ReopenWithinInboxWindow` composta no
+  `ApplyInbound` (mesmo protocolo, novo ciclo, menu, fila); fora da janela ou
+  desligada abre novo atendimento. `GET/PUT /api/panel/inboxes/{id}/reopen-window`
+  (admin edita, supervisor lê, auditado). Provas PG: reabre, replay idempotente,
+  janela desligada/expirada.
+- `6426a4a` painel: seção "Automação do atendimento" (prazos de inatividade,
+  tolerância offline, janela X e editor do menu de triagem por caixa) e botão
+  "Adiar" na conversa. Usa APIs M5C que não tinham tela.
+- (a commitar neste bloco) M5: migração 00030 e `pipeline.UnassignOffline` no
+  tick de 10 s — devolve à fila conversas `open` de atendente offline além da
+  tolerância (evento `offline_unassigned`, sem ator); `waiting_customer` mantém
+  o dono por causa do relógio de inatividade. Ocupação separa abertas /
+  aguardando / adiadas (adiadas não consomem vaga). Linha do tempo do painel com
+  rótulos em português.
+
+### Verificações executadas
+- E2E Chromium 140 com `CHATISP_E2E_API_PORT=28080`: M3B e M4A passaram
+  (evidência fresca; portas 8080/18080 do host ocupadas e preservadas).
+- `go vet ./...` e `go test -count=1 ./...` completos: passaram.
+- `tsc -b` e Vitest completo (208): passaram. ESLint global segue com a dívida
+  preexistente já descrita (não alterado).
+- Não houve E2E novo cobrindo reabertura/adiamento/desatribuição no navegador.
+
+### Lacunas restantes
+M4B (mídia/áudio; sem ffmpeg no host), M5 gancho de bot externo, M6, M7, M8 e
+dependências externas conforme a seção de lacunas acima. Próximo bloco sugerido:
+M7 (relatórios e CSV a partir de eventos/intervalos persistidos) ou M6 contrato/fake
+do ERP e API pública; confirmar prioridade com o proprietário.

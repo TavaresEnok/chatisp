@@ -2,6 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import * as api from "@/api/presence";
 import { useSessionStore, type PanelPrincipal } from "@/stores/session-store";
 
+/** "2 abertas, 1 aguardando · 1 adiada" — snoozed conversations do not use a slot. */
+export function occupancyDetail(m: { open?: number; waiting?: number; snoozed?: number }) {
+  const parts = [`${m.open ?? 0} ${m.open === 1 ? "aberta" : "abertas"}`, `${m.waiting ?? 0} aguardando`];
+  return ` (${parts.join(", ")}${m.snoozed ? ` · ${m.snoozed} ${m.snoozed === 1 ? "adiada" : "adiadas"}` : ""})`;
+}
 export function presenceScope(p: PanelPrincipal) { return JSON.stringify([p.tenantId, p.userId, p.membershipId, p.sessionId, p.role]); }
 export function OperatorPresence() {
   const principal = useSessionStore(s => s.principal);
@@ -11,7 +16,7 @@ export function OperatorPresence() {
 function PresenceBody({ principal }: { principal: PanelPrincipal }) {
   // A UUID per mounted tab, never shared through local/session storage.
   const [snapshot, setSnapshot] = useState<api.PresenceSnapshot | null>(null);
-  const [occupied, setOccupied] = useState<{ occupied: number; capacity: number } | null>(null);
+  const [occupied, setOccupied] = useState<{ occupied: number; capacity: number; open?: number; waiting?: number; snoozed?: number } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
@@ -51,7 +56,7 @@ function PresenceBody({ principal }: { principal: PanelPrincipal }) {
   }
   return <section aria-label="Minha presença">
     <label>Minha presença <select aria-label="Minha presença" value={snapshot?.manual ?? "available"} disabled={!snapshot || busy} onChange={e => void change(e.target.value as "available" | "busy")}><option value="available">Disponível</option><option value="busy">Ocupado</option></select></label>
-    <p role="status">{error ? "Presença não confirmada" : snapshot?.connected ? "Conectado" : "Verificando presença…"}{occupied && ` · Vagas: ${occupied.occupied}/${occupied.capacity}`}</p>
+    <p role="status">{error ? "Presença não confirmada" : snapshot?.connected ? "Conectado" : "Verificando presença…"}{occupied && ` · Vagas: ${occupied.occupied}/${occupied.capacity}`}{occupied && occupancyDetail(occupied)}</p>
     {error && <p role="alert">{error}</p>}
   </section>;
 }

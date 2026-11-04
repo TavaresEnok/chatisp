@@ -18,7 +18,7 @@ beforeEach(() => {
   vi.mocked(presence.heartbeat).mockResolvedValue(snapshot);
   vi.mocked(presence.manual).mockResolvedValue({ ...snapshot, manual: "busy", state: "busy" });
   vi.mocked(presence.closeTab).mockResolvedValue({ ...snapshot, tab_count: 1 });
-  vi.mocked(presence.occupancy).mockResolvedValue({ members: [{ membership_id: "member-a", occupied: 3, capacity: 20 }] });
+  vi.mocked(presence.occupancy).mockResolvedValue({ members: [{ membership_id: "member-a", occupied: 3, capacity: 20, open: 2, waiting: 1, snoozed: 0 }] });
   vi.mocked(documents.masked).mockResolvedValue({ contact_id: "contact-a", present: true, mask: "***.***.***-**", kind: "cpf", version: 1 });
 });
 afterEach(() => vi.useRealTimers());

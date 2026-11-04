@@ -4,7 +4,7 @@ import { listHoursInboxes, listHoursSectors } from "@/api/businesshours";
 import { distribution, setAuto, sectorPresence } from "@/api/distribution";
 import { directory, type DirectoryEntry } from "@/api/directory";
 import { occupancy } from "@/api/presence";
-import { presenceScope } from "@/features/presence/operator-presence";
+import { occupancyDetail, presenceScope } from "@/features/presence/operator-presence";
 import { useSessionStore, type PanelPrincipal } from "@/stores/session-store";
 
 export function DistributionSettings({ principal }: { principal: PanelPrincipal }) {
@@ -52,7 +52,7 @@ function SectorOperations({ principal, sector, inbox }: { principal: PanelPrinci
     finally { setBusy(false); }
   }
   return <div>{view && <><p>Atribuição automática: {view.enabled ? "Ligada" : "Desligada"}</p><p>Conversas na fila: {view.items?.length ?? 0}</p>{principal.role === "admin" && <button type="button" disabled={busy} onClick={() => void toggle()}>{view.enabled ? "Desligar" : "Ligar"} atribuição automática</button>}</>}
-    {slots && <ul aria-label="Ocupação do setor">{slots.members?.map(m => { const presence = agents?.agents?.find(a => a.membership_id === m.membership_id); return <li key={m.membership_id}>{operators.find(o => o.membership_id === m.membership_id)?.label ?? "Atendente de outra caixa"}: {m.occupied}/{m.capacity} vagas · {presence?.state === "available" ? "Disponível" : presence?.state === "busy" ? "Ocupado" : "Offline"}</li>; })}</ul>}
+    {slots && <ul aria-label="Ocupação do setor">{slots.members?.map(m => { const presence = agents?.agents?.find(a => a.membership_id === m.membership_id); return <li key={m.membership_id}>{operators.find(o => o.membership_id === m.membership_id)?.label ?? "Atendente de outra caixa"}: {m.occupied}/{m.capacity} vagas{occupancyDetail(m)} · {presence?.state === "available" ? "Disponível" : presence?.state === "busy" ? "Ocupado" : "Offline"}</li>; })}</ul>}
     {error && <p role="alert">{error}</p>}
   </div>;
 }

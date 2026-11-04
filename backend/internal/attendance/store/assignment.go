@@ -82,7 +82,7 @@ func (Repo) ApplyAssignment(ctx context.Context, tx pgx.Tx, tenantID, conversati
 	if err := cancelQueuedAutomatic(ctx, q, tenantID, conversationID, current.ControllerEpoch, current.Version+1); err != nil {
 		return Conversation{}, err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO conversation_events(tenant_id,id,conversation_id,cycle_number,kind,actor_id,at,version,controller_epoch,controller,assignee_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, tenantID, uuid.New(), conversationID, current.CycleNumber, eventKind, actorID, at, current.Version+1, current.ControllerEpoch+1, controller, member)
+	_, err = tx.Exec(ctx, `INSERT INTO conversation_events(tenant_id,id,conversation_id,cycle_number,kind,actor_id,at,version,controller_epoch,controller,assignee_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, tenantID, uuid.New(), conversationID, current.CycleNumber, eventKind, uuidPtr(actorID), at, current.Version+1, current.ControllerEpoch+1, controller, member)
 	if err != nil {
 		return Conversation{}, err
 	}
