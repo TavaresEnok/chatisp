@@ -2,6 +2,8 @@ import { useEffect, type MouseEvent } from "react";
 import { Link, Navigate, Outlet, useLocation } from "react-router";
 import { useEndSession } from "@/components/auth/use-end-session";
 import { OperatorPresence } from "@/features/presence/operator-presence";
+import { ProviderMark } from "@/features/branding/provider-mark";
+import { useProviderBrand } from "@/features/branding/use-provider-brand";
 import { AreaNav } from "@/components/layout/area-nav";
 import { areas } from "@/lib/areas";
 import { useSessionStore } from "@/stores/session-store";
@@ -38,11 +40,12 @@ export function AppShell() {
   const displayName = useSessionStore((state) => state.displayName);
   const principal = useSessionStore((state) => state.principal);
   const endSession = useEndSession();
+  const brand = useProviderBrand();
 
   useEffect(() => {
     document.documentElement.lang = "pt-BR";
-    document.title = `${heading} — Chat ISP`;
-  }, [heading]);
+    document.title = `${heading} — ${brand.name}`;
+  }, [heading, brand.name]);
 
   if (principal?.mfaEnrollmentRequired) {
     return <Navigate to="/mfa" replace />;
@@ -59,12 +62,7 @@ export function AppShell() {
       </a>
       <div className="md:grid md:min-h-svh md:grid-cols-[16rem_minmax(0,1fr)]">
         <aside className="border-b border-sidebar-border bg-sidebar text-sidebar-foreground md:border-r md:border-b-0">
-          <div className="px-4 py-4">
-            <p className="text-base font-semibold tracking-tight">Chat ISP</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Atendimento do provedor
-            </p>
-          </div>
+          <ProviderMark />
           <AreaNav />
  <OperatorPresence />
         </aside>

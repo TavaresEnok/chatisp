@@ -210,6 +210,9 @@ describe("painel", () => {
       if (new URL(request.url).pathname.endsWith("/contacts")) return new Response(JSON.stringify({ items: [], next_offset: null }), { headers: { "content-type": "application/json" } });
       if (new URL(request.url).pathname.endsWith("/sectors")) return new Response(JSON.stringify({ sectors: [] }), { headers: { "content-type": "application/json" } });
       if (new URL(request.url).pathname.endsWith("/preferences/notifications")) return new Response(JSON.stringify({ sound: true, browser: false, silent: false }), { headers: { "content-type": "application/json" } });
+      if (new URL(request.url).pathname === "/api/panel/branding") {
+        return new Response(JSON.stringify({ display_name: "", fallback_name: "Chat ISP", has_logo: false }), { headers: { "content-type": "application/json" } });
+      }
       throw new Error(`Requisição inesperada: ${request.url}`);
     }));
     const user = userEvent.setup();
