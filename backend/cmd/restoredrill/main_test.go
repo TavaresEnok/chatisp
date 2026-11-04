@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -82,5 +83,18 @@ func TestRunPrintsRestoreReport(t *testing.T) {
 	}
 	if report.Medida != "rto" {
 		t.Fatalf("medida: %s", report.Medida)
+	}
+	if !report.ConteudoLegivel || !report.ChaveRecuperada || !report.SegredoDecifrado {
+		t.Fatalf("relatório sem conteúdo ou chave: %+v", report)
+	}
+	if report.DuracaoNota == "" || strings.Contains(strings.ToLower(report.DuracaoNota), "rpo") || strings.Contains(strings.ToLower(report.DuracaoNota), "rto") {
+		t.Fatalf("nota de duração: %s", report.DuracaoNota)
+	}
+	material, err := os.ReadFile(filepath.Join(dump, "recovery", "material"))
+	if err != nil || len(material) == 0 {
+		t.Fatalf("material: %v", err)
+	}
+	if bytes.Contains(stdout.Bytes(), material) || bytes.Contains(stderr.Bytes(), material) {
+		t.Fatal("relatório ou erro contém material de chave")
 	}
 }

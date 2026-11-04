@@ -6,9 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -41,19 +39,26 @@ func writeDump(ctx context.Context, conn *pgx.Conn, dir string) error {
 		if buf.Len() < 19 {
 			return fmt.Errorf("falha ao gravar o dump da tabela %s", table)
 		}
-		path := filepath.Join(dir, table+".copybin")
+		path, err := confinedChild(dir, table+".copybin")
+		if err != nil {
+			return err
+		}
 		if err := writeReadOnly(path, buf.Bytes()); err != nil {
 			return err
 		}
 		lines = append(lines, table+" "+strings.Join(cols, " "))
 	}
-	return writeReadOnly(filepath.Join(dir, "manifest.txt"), []byte(strings.Join(lines, "\n")+"\n"))
+	manifestPath, err := confinedChild(dir, "manifest.txt")
+	if err != nil {
+		return err
+	}
+	return writeReadOnly(manifestPath, []byte(strings.Join(lines, "\n")+"\n"))
 }
 
 func restoreDump(ctx context.Context, conn *pgx.Conn, dir string) error {
-	manifest, err := os.ReadFile(filepath.Join(dir, "manifest.txt"))
+	manifest, err := readDumpPayload(dir, "manifest.txt")
 	if err != nil {
-		return errors.New("falha ao ler o dump")
+		return err
 	}
 	scanner := bufio.NewScanner(bytes.NewReader(manifest))
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -75,9 +80,9 @@ func restoreDump(ctx context.Context, conn *pgx.Conn, dir string) error {
 		if err := validIdents(append([]string{table}, cols...)); err != nil {
 			return err
 		}
-		payload, err := os.ReadFile(filepath.Join(dir, table+".copybin"))
+		payload, err := readDumpPayload(dir, table+".copybin")
 		if err != nil {
-			return errors.New("falha ao ler o dump")
+			return err
 		}
 		sql := "COPY public." + table + " (" + strings.Join(cols, ", ") + ") FROM STDIN WITH (FORMAT binary)"
 		if _, err := conn.PgConn().CopyFrom(ctx, bytes.NewReader(payload), sql); err != nil {
@@ -158,6 +163,18 @@ func tableColumns(ctx context.Context, conn *pgx.Conn, table string) ([]string, 
 	return cols, nil
 }
 
+func readDumpPayload(dir, name string) ([]byte, error) {
+	path, err := confinedChild(dir, name)
+	if err != nil {
+		return nil, errors.New("falha ao ler o dump")
+	}
+	body, err := readRegular(path, maxDumpFileBytes)
+	if err != nil {
+		return nil, errors.New("falha ao ler o dump")
+	}
+	return body, nil
+}
+
 func validIdents(names []string) error {
 	for _, name := range names {
 		if !identRE.MatchString(name) {
@@ -191,9 +208,9 @@ func dumpContains(dir string, needle []byte) (bool, error) {
 		if entry.IsDir() {
 			continue
 		}
-		payload, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		payload, err := readDumpPayload(dir, entry.Name())
 		if err != nil {
-			return false, errors.New("falha ao ler o dump")
+			return false, err
 		}
 		if bytes.Contains(payload, needle) {
 			return true, nil
@@ -217,15 +234,15 @@ func dumpWritable(dir string) (bool, error) {
 			return false, errors.New("falha ao ler o dump")
 		}
 		saw = true
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return false, errors.New("falha ao ler o dump")
+		}
 		if info.Mode().Perm()&0o222 != 0 {
 			return true, nil
 		}
-		file, err := os.Open(filepath.Join(dir, entry.Name()))
-		if err != nil {
-			return false, errors.New("falha ao ler o dump")
+		if _, err := readDumpPayload(dir, entry.Name()); err != nil {
+			return false, err
 		}
-		_, _ = io.Copy(io.Discard, file)
-		_ = file.Close()
 	}
 	if !saw {
 		return false, errors.New("falha ao ler o dump")

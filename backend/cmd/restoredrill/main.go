@@ -26,9 +26,13 @@ type drillReport struct {
 	Banco                string `json:"banco"`
 	Anexos               bool   `json:"anexos"`
 	Chaves               bool   `json:"chaves"`
+	ConteudoLegivel      bool   `json:"conteudo_legivel"`
+	ChaveRecuperada      bool   `json:"chave_recuperada"`
+	SegredoDecifrado     bool   `json:"segredo_decifrado"`
 	ExclusoesReaplicadas bool   `json:"exclusoes_reaplicadas"`
 	DuracaoMS            int64  `json:"duracao_ms"`
 	Medida               string `json:"medida"`
+	DuracaoNota          string `json:"duracao_nota"`
 }
 
 func run(args []string, stdout, stderr io.Writer) error {
@@ -52,9 +56,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 		Banco:                report.Database,
 		Anexos:               report.AttachmentReferenceOK,
 		Chaves:               report.KeyReferenceOK,
+		ConteudoLegivel:      report.ContentReadable,
+		ChaveRecuperada:      report.KeyRecovered,
+		SegredoDecifrado:     report.SecretDecrypted,
 		ExclusoesReaplicadas: report.DeletionReapplied,
 		DuracaoMS:            report.Duration.Milliseconds(),
 		Medida:               "rto",
+		DuracaoNota:          report.DurationNote,
 	}
 	encoded, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
