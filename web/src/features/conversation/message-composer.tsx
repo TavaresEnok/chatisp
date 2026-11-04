@@ -1,4 +1,4 @@
-import { useContext, useEffect, useId, useReducer, useRef, useState } from "react";
+import { useContext, useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { QueryClientContext } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -115,10 +115,6 @@ function ComposerSession({
   const field = useRef<HTMLTextAreaElement>(null);
   const draftRef = useRef(state.draft);
   const draftRevision = useRef(0);
-  if (state.draft !== draftRef.current) {
-    draftRef.current = state.draft;
-    draftRevision.current += 1;
-  }
   const [cursor, setCursor] = useState(0);
   const [slashIndex, setSlashIndex] = useState(0);
   const [slashBusy, setSlashBusy] = useState(false);
@@ -132,8 +128,9 @@ function ComposerSession({
   const signatureAbort = useRef<AbortController | null>(null);
   const cannedDenied = useRef(false);
   const signatureRef = useRef<SignatureKnowledge>({ kind: canned ? "loading" : "off" });
-  if (canned && signatureRef.current.kind === "off") signatureRef.current = { kind: "loading" };
-  if (!canned) signatureRef.current = { kind: "off" };
+  const revokeComposerCannedRef = useRef<(message: string) => void>(() => {});
+  const applyKnownSignatureRef = useRef<(draft: string, signature: CannedSignature, email: string) => void>(() => {});
+  const rejectCannedRef = useRef<(error: unknown) => boolean>(() => false);
   const [dismissedToken, setDismissedToken] = useState<string | null>(null);
   const fieldId = useId();
   const slashListId = useId();
@@ -218,11 +215,29 @@ function ComposerSession({
     return true;
   }
 
+  useLayoutEffect(() => {
+    if (state.draft !== draftRef.current) {
+      draftRef.current = state.draft;
+      draftRevision.current += 1;
+    }
+  }, [state.draft]);
+
+  useLayoutEffect(() => {
+    if (canned && signatureRef.current.kind === "off") signatureRef.current = { kind: "loading" };
+    if (!canned) signatureRef.current = { kind: "off" };
+  }, [canned]);
+
+  useLayoutEffect(() => {
+    revokeComposerCannedRef.current = revokeComposerCanned;
+    applyKnownSignatureRef.current = applyKnownSignature;
+    rejectCannedRef.current = rejectCanned;
+  });
+
   useEffect(() => {
     if (!attendant) return;
     return subscribeCannedDenial((token, message) => {
       if (token !== cannedScopeToken(attendant)) return;
-      revokeComposerCanned(message);
+      revokeComposerCannedRef.current(message);
     });
   }, [attendant]);
 
@@ -239,11 +254,11 @@ function ComposerSession({
       if (cancelled || !alive.current || cannedDenied.current || epoch !== signatureEpoch.current) return;
       if (!samePrincipal(captured, principalStamp(useSessionStore.getState().principal))) return;
       signatureRef.current = { kind: "ready", signature };
-      applyKnownSignature(draftRef.current, signature, attendant.email);
+      applyKnownSignatureRef.current(draftRef.current, signature, attendant.email);
     }).catch((error: unknown) => {
       if (isAbortError(error)) return;
       if (!samePrincipal(captured, principalStamp(useSessionStore.getState().principal))) return;
-      if (rejectCanned(error)) return;
+      if (rejectCannedRef.current(error)) return;
       if (cancelled || !alive.current || epoch !== signatureEpoch.current) return;
       signatureRef.current = { kind: "failed" };
       if (draftRef.current.trim().length > 0) {

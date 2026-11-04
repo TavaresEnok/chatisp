@@ -51,7 +51,7 @@ export function useSlashReplies(principal: PanelPrincipal | null, open: boolean,
       denyCannedScope(client, principal, query.error.message);
     }
   }, [client, principal, query.error]);
-  const blocked = revoked || revokedRef.current;
+  const blocked = revoked;
   const replies = blocked ? [] : (query.data?.replies ?? []).filter((reply) => reply.shortcode.startsWith(filter));
   return { replies, pending: open && !blocked && query.isPending, failed: blocked || query.isError };
 }
@@ -72,10 +72,12 @@ export function SlashReplySource({
 }) {
   const slash = useSlashReplies(principal, open, filter);
   const onResultRef = useRef(onResult);
-  onResultRef.current = onResult;
   const marker = `${slash.pending ? 1 : 0}:${slash.failed ? 1 : 0}:${slash.replies.map((reply) => `${reply.id}:${reply.shortcode}:${reply.title}`).join("\n")}`;
   const snapshot = useRef({ replies: slash.replies, pending: slash.pending, failed: slash.failed });
-  snapshot.current = { replies: slash.replies, pending: slash.pending, failed: slash.failed };
+  useEffect(() => {
+    onResultRef.current = onResult;
+    snapshot.current = { replies: slash.replies, pending: slash.pending, failed: slash.failed };
+  });
   useEffect(() => {
     onResultRef.current(snapshot.current);
   }, [marker]);

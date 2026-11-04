@@ -21,6 +21,36 @@ it("reutiliza a intenção de devolução quando a resposta se perde", async () 
   expect(bodies[0]).toMatchObject({ expected_version: 4, client_request_id: expect.any(String) });
 });
 
+it("bloqueia destino e cancelamento quando a resposta da transferência se perde", async () => {
+  const bodies: unknown[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
+    const path = new URL(request.url).pathname;
+    if (request.method === "GET" && path.endsWith("/assignment-candidates")) return new Response(JSON.stringify({ candidates: [{ membership_id: "m2", assigned: 0, capacity: 2 }, { membership_id: "m3", assigned: 0, capacity: 2 }] }), { headers: { "content-type": "application/json" } });
+    if (request.method === "POST") {
+      bodies.push(await request.json());
+      if (bodies.length === 1) throw new TypeError("offline");
+      return new Response(JSON.stringify({ id: "c" }), { headers: { "content-type": "application/json" } });
+    }
+    return new Response("{}", { headers: { "content-type": "application/json" } });
+  }));
+  const done = vi.fn();
+  const principal = { tenantId: "t", userId: "u", sessionId: "s", membershipId: "m", role: "agent" as const, email: "a@b", expiresAt: "2099", mfaEnrollmentRequired: false };
+  const user = userEvent.setup();
+  render(<QueryClientProvider client={new QueryClient()}><AssignmentPanel principal={principal} inbox="i" conversation="c" version={4} onChanged={done} /></QueryClientProvider>);
+  await user.click(screen.getByRole("button", { name: "Transferir para atendente" }));
+  await user.selectOptions(await screen.findByLabelText("Atendente"), "m2");
+  await user.click(screen.getByRole("button", { name: "Confirmar" }));
+  expect(await screen.findByText(/Resposta perdida/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Cancelar" })).toBeDisabled();
+  expect(screen.getByLabelText("Atendente")).toBeDisabled();
+  expect(screen.getByLabelText("Atendente")).toHaveValue("m2");
+  expect(screen.getByRole("button", { name: "Confirmar" })).toBeEnabled();
+  await user.click(screen.getByRole("button", { name: "Confirmar" }));
+  await waitFor(() => expect(done).toHaveBeenCalledWith(false));
+  expect(bodies[1]).toEqual(bodies[0]);
+  expect(bodies[0]).toMatchObject({ expected_version: 4, target_id: "m2", client_request_id: expect.any(String) });
+});
+
 it.each(["unmount", "inbox", "conversation", "session"])("ignora conclusão da instância anterior após %s", async change => {
   let resolve!: (response: Response) => void;
   vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(done => { resolve = done; })));

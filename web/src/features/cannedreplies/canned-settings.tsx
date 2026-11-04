@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createReply, deleteReply, getSignature, listReplies, saveSignature, updateReply, type CannedReply, type CannedSignature } from "@/api/cannedreplies";
 import { PanelRequestError } from "@/api/problems";
@@ -205,21 +205,27 @@ function SignatureSettings({ principal, writable, onDenied }: { principal: Panel
   const revokedRef = useRef(false);
   const closedRef = useRef(false);
   const generation = useRef(0);
+  const generationListeners = useRef(new Set<() => void>());
+  const subscribeGeneration = useCallback((listener: () => void) => {
+    generationListeners.current.add(listener);
+    return () => { generationListeners.current.delete(listener); };
+  }, []);
+  const generationStamp = useCallback(() => generation.current, []);
+  const stamp = useSyncExternalStore(subscribeGeneration, generationStamp);
+  const bumpGeneration = useCallback(() => {
+    generation.current += 1;
+    for (const listener of generationListeners.current) listener();
+  }, []);
   const [revoked, setRevoked] = useState(false);
   const key = cannedKey(principal, "signature");
   const token = cannedScopeToken(principal);
-  const tokenRef = useRef(token);
-  if (tokenRef.current !== token) {
-    generation.current += 1;
-    tokenRef.current = token;
-  }
   const query = useQuery({
     queryKey: key,
     queryFn: async ({ signal }) => {
       if (revokedRef.current || closedRef.current) throw invalidated();
-      const stamp = generation.current;
+      const seen = generation.current;
       const signature = await getSignature(signal);
-      if (revokedRef.current || closedRef.current || stamp !== generation.current || signal.aborted) throw invalidated();
+      if (revokedRef.current || closedRef.current || seen !== generation.current || signal.aborted) throw invalidated();
       return signature;
     },
     enabled: !revoked,
@@ -229,26 +235,25 @@ function SignatureSettings({ principal, writable, onDenied }: { principal: Panel
     closedRef.current = false;
     return () => {
       closedRef.current = true;
-      generation.current += 1;
+      bumpGeneration();
     };
-  }, []);
+  }, [bumpGeneration]);
   useEffect(() => subscribeCannedDenial((deniedToken) => {
     if (deniedToken !== token) return;
     revokedRef.current = true;
-    generation.current += 1;
+    bumpGeneration();
     setRevoked(true);
-  }), [token]);
+  }), [bumpGeneration, token]);
   useEffect(() => {
     if (denied(query.error)) denyCannedScope(client, principal, denialMessage(query.error));
   }, [client, principal, query.error]);
   function commit(stamp: number, startedToken: string, next: CannedSignature): boolean {
     if (closedRef.current || revokedRef.current) return false;
-    if (stamp !== generation.current || startedToken !== tokenRef.current) return false;
+    if (stamp !== generation.current || startedToken !== token) return false;
     client.setQueryData(key, next);
     return true;
   }
   if (revoked) return null;
-  const stamp = generation.current;
   return (
     <section aria-label="Assinatura do atendente">
       <h3>Assinatura</h3>
