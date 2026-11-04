@@ -42,6 +42,30 @@ type templatePayload struct {
 	TemplateID     string `json:"template_id"`
 }
 
+type mediaPayload struct {
+	V              int    `json:"v"`
+	ConversationID string `json:"conversation_id"`
+	ConnectorID    string `json:"connector_id"`
+	Body           string `json:"body"`
+	Visibility     string `json:"visibility"`
+	Kind           string `json:"kind"`
+	AttachmentID   string `json:"attachment_id"`
+	ReplyTo        string `json:"reply_to"`
+}
+
+func canonicalMedia(conversationID, connectorID, body, kind, attachmentID, replyTo string) ([]byte, error) {
+	return json.Marshal(mediaPayload{
+		V:              payloadVersion,
+		ConversationID: conversationID,
+		ConnectorID:    connectorID,
+		Body:           body,
+		Visibility:     "public",
+		Kind:           kind,
+		AttachmentID:   attachmentID,
+		ReplyTo:        replyTo,
+	})
+}
+
 func canonicalTemplate(conversationID, connectorID, body, mode, purpose, language, templateID string) ([]byte, error) {
 	return json.Marshal(templatePayload{
 		V:              payloadVersion,

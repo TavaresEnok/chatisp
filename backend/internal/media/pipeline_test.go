@@ -183,6 +183,18 @@ func TestPipelinePreservesOriginalWithoutFFmpeg(t *testing.T) {
 		t.Fatalf("imagem %#v %v", image, e)
 	}
 
+	// /tmp is noexec here, and a relative TMPDIR makes LookPath return ErrDot.
+	// The stub therefore lives in an absolute directory on an executable filesystem.
+	wd, e := os.Getwd()
+	if e != nil {
+		t.Fatal(e)
+	}
+	stubRoot, e := os.MkdirTemp(wd, "ffmpeg-stub-")
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(stubRoot) })
+	t.Setenv("TMPDIR", stubRoot)
 	empty := t.TempDir()
 	t.Setenv("PATH", empty)
 	refused, e := svc.Convert(ctx, p, inbox, conv, sent.ID)

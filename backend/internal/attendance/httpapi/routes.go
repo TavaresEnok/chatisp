@@ -212,7 +212,16 @@ func (h handler) send(ctx context.Context, in *sendInput) (*sendOutput, error) {
 	if e = decode(in.RawBody, &b); e != nil {
 		return nil, e
 	}
-	v, e := h.deps.Attendance.Send(ctx, p, service.SendInput{InboxID: in.InboxID, ConversationID: in.ConversationID, ExpectedVersion: b.ExpectedVersion, ClientRequestID: b.ClientRequestID, Body: b.Body, At: time.Now().UTC()})
+	var v service.SendResult
+	if b.AttachmentID != nil && *b.AttachmentID != uuid.Nil {
+		v, e = h.deps.Attendance.SendMedia(ctx, p, service.MediaSendInput{
+			InboxID: in.InboxID, ConversationID: in.ConversationID, ExpectedVersion: b.ExpectedVersion,
+			ClientRequestID: b.ClientRequestID, Body: b.Body, AttachmentID: *b.AttachmentID,
+			ReplyToMessageID: b.ReplyToMessageID, At: time.Now().UTC(),
+		})
+	} else {
+		v, e = h.deps.Attendance.Send(ctx, p, service.SendInput{InboxID: in.InboxID, ConversationID: in.ConversationID, ExpectedVersion: b.ExpectedVersion, ClientRequestID: b.ClientRequestID, Body: b.Body, At: time.Now().UTC()})
+	}
 	if e != nil {
 		return nil, problem(e)
 	}

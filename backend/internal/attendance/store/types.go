@@ -143,6 +143,9 @@ type OutboundInput struct {
 	Payload         []byte
 	Body            string
 	At              time.Time
+	// AllowEmptyBody is only for media whose caption is optional.
+	// Text sends leave it false and still reject an empty body.
+	AllowEmptyBody bool
 }
 
 // OutboundResult is the single message and outbox row for that key.

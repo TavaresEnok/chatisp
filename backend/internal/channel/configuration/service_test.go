@@ -612,8 +612,11 @@ func TestPrivilegesQuarantineAndDiscarded(t *testing.T) {
 		}
 	}
 
-	assertDenied(t, execDenied(testPools.Platform, ctx, `SELECT count(*) FROM messages`))
-	assertDenied(t, execDenied(testPools.Platform, ctx, `SELECT count(*) FROM conversations`))
+	// 00035 grants platform SELECT on messages(tenant_id, ingested_at) and
+	// conversations(tenant_id, status). count(*) does not read content.
+	// Ungranted columns must still fail with SQLSTATE 42501.
+	assertDenied(t, execDenied(testPools.Platform, ctx, `SELECT body FROM messages`))
+	assertDenied(t, execDenied(testPools.Platform, ctx, `SELECT contact_id FROM conversations`))
 	assertDenied(t, execDenied(testPools.Platform, ctx, `SELECT ciphertext FROM credential_secrets`))
 	assertDenied(t, execDenied(testPools.Platform, ctx, `SELECT body FROM ingress_deliveries`))
 	assertDenied(t, execDenied(testPools.Ingress, ctx, `SELECT count(*) FROM messages`))

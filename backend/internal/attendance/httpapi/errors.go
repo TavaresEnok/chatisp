@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"chatisp/internal/attachments"
 	"chatisp/internal/attendance/service"
 	"chatisp/internal/attendance/store"
+	"chatisp/internal/media"
 	"chatisp/internal/platform/auth"
 	"errors"
 	"github.com/danielgtaylor/huma/v2"
@@ -22,6 +24,12 @@ func problem(err error) error {
 		return huma.Error409Conflict("conflito de atendimento")
 	case errors.Is(err, store.ErrInvalid):
 		return huma.Error422UnprocessableEntity("comando inválido")
+	case errors.Is(err, media.ErrFFmpegMissing), errors.Is(err, media.ErrConvert):
+		return huma.Error422UnprocessableEntity(err.Error())
+	case errors.Is(err, attachments.ErrLimit):
+		return huma.Error422UnprocessableEntity("limite de armazenamento de anexos")
+	case errors.Is(err, media.ErrStorage):
+		return huma.Error503ServiceUnavailable(err.Error())
 	case errors.Is(err, service.ErrPolicyDenied):
 		detail := "política de canal recusou o envio"
 		var denied *service.PolicyDenied

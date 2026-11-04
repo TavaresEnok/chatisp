@@ -303,9 +303,22 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		}
 	}
 
+	var privateFiles attachments.Storage
+	if store != nil {
+		privateFiles, err = attachmentStorage(environ)
+		if err != nil {
+			cleanupAll()
+			return runtimeServices{}, err
+		}
+	}
+
 	var attendanceSvc attendanceService.Service
 	if store != nil {
 		attendanceSvc = attendanceService.New(store, insertJobsClient)
+		// The API return value and the worker copy must share this store.
+		// A later assignment does not reach handlers already constructed.
+		attendanceSvc.Files = privateFiles
+		attendanceSvc.AttachmentLimits = tenantAttachmentLimits
 	}
 
 	var channelSvc *channelConfig.Service
@@ -450,12 +463,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		// No implicit catalog driver. SyncTemplates refuses before any write
 		// until a real driver is injected. An empty fake is not a provider snapshot.
 		policySvc = &channelpolicy.Service{DB: store}
-		storage, err := attachmentStorage(environ)
-		if err != nil {
-			cleanupAll()
-			return runtimeServices{}, err
-		}
-		attachmentSvc = &attachments.Service{DB: store, Storage: storage, Limits: tenantAttachmentLimits}
+		attachmentSvc = &attachments.Service{DB: store, Storage: privateFiles, Limits: tenantAttachmentLimits}
 		documents = contactdocs.New(store, cfg.KeyRing)
 		operatorPresence = presence.New(store)
 		panels = embed.New(store)

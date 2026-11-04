@@ -189,6 +189,12 @@ func (Repo) EnqueueText(ctx context.Context, tx pgx.Tx, in OutboundInput) (Outbo
 		return OutboundResult{}, ErrInvalid
 	}
 	body, ok := text(in.Body, 16000)
+	if !ok {
+		if in.AllowEmptyBody && strings.TrimSpace(in.Body) == "" {
+			body = ""
+			ok = true
+		}
+	}
 	if !ok || in.ConnectorID == uuid.Nil {
 		return OutboundResult{}, ErrInvalid
 	}

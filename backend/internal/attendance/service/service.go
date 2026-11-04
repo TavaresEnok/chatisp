@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"chatisp/internal/attachments"
 	"chatisp/internal/attendance/store"
 	"chatisp/internal/channelpolicy"
 	"chatisp/internal/contactdirectory"
@@ -19,10 +20,14 @@ import (
 )
 
 // Service orchestrates attendance commands. Repo is stateless.
+// Files and AttachmentLimits are the private attachment store. The runtime
+// must set both before copying this value into the API or the workers.
 type Service struct {
-	DB   *db.Store
-	Repo store.Repo
-	Jobs Queuer
+	DB               *db.Store
+	Repo             store.Repo
+	Jobs             Queuer
+	Files            attachments.Storage
+	AttachmentLimits attachments.ResolveLimits
 }
 
 // New binds the platform store and the outbound job inserter.

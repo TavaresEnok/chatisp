@@ -13,6 +13,7 @@ import (
 
 	"chatisp/internal/attendance/store"
 	"chatisp/internal/cannedreplies"
+	"chatisp/internal/channel/whatsapp"
 	"chatisp/internal/channelpolicy"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/db/dbgen"
@@ -28,11 +29,17 @@ func (e *PolicyDenied) Error() string { return ErrPolicyDenied.Error() }
 func (e *PolicyDenied) Unwrap() error { return ErrPolicyDenied }
 
 type messageContext struct {
-	Mode       string `json:"mode"`
-	Kind       string `json:"kind"`
-	Purpose    string `json:"purpose"`
-	TemplateID string `json:"template_id,omitempty"`
-	Language   string `json:"language,omitempty"`
+	Mode             string `json:"mode"`
+	Kind             string `json:"kind"`
+	Purpose          string `json:"purpose"`
+	TemplateID       string `json:"template_id,omitempty"`
+	Language         string `json:"language,omitempty"`
+	MediaKind        string `json:"media_kind,omitempty"`
+	AttachmentID     string `json:"attachment_id,omitempty"`
+	SendAttachmentID string `json:"send_attachment_id,omitempty"`
+	MIME             string `json:"mime,omitempty"`
+	FileName         string `json:"file_name,omitempty"`
+	ReplyToMessageID string `json:"reply_to_message_id,omitempty"`
 }
 
 // TemplateSendInput starts one proactive template. ClientRequestID is scoped
@@ -107,147 +114,207 @@ func mapDecision(d channelpolicy.Decision, err error) error {
 }
 
 type publicIntent struct {
-	InboxID         uuid.UUID
-	ConversationID  uuid.UUID
-	ExpectedVersion int64
-	ClientRequestID string
-	Body            string
-	At              time.Time
-	Operation       string
-	Mode            string
-	Kind            string
-	Purpose         string
-	TemplateID      string
-	Language        string
+	InboxID          uuid.UUID
+	ConversationID   uuid.UUID
+	ExpectedVersion  int64
+	ClientRequestID  string
+	Body             string
+	At               time.Time
+	Operation        string
+	Mode             string
+	Kind             string
+	Purpose          string
+	TemplateID       string
+	Language         string
+	ContentKind      string
+	AttachmentID     uuid.UUID
+	SendAttachmentID uuid.UUID
+	ReplyTo          *uuid.UUID
+	MIME             string
+	FileName         string
+	TrackConsent     bool
 }
 
 func (s Service) enqueuePublic(ctx context.Context, p Principal, in publicIntent) (SendResult, error) {
 	var out SendResult
 	err := s.tx(ctx, p.TenantID, func(ctx context.Context, tx pgx.Tx) error {
-		if err := s.authorizePrincipal(ctx, tx, p); err != nil {
-			return err
-		}
-		body := stringsTrimPolicy(in.Body)
-		requestID := stringsTrimPolicy(in.ClientRequestID)
-		if body == "" || requestID == "" || in.At.IsZero() || in.ExpectedVersion < 1 || in.Purpose == "" {
-			return store.ErrInvalid
-		}
-		if in.Kind == "template" && (in.Mode != "proactive" || in.TemplateID == "") {
-			return store.ErrInvalid
-		}
-		replay, err := queuedOperation(ctx, queries(tx), p, in.Operation, requestID)
-		if err != nil {
-			return err
-		}
-		if !replay && in.Kind == "template" && !validTemplateLanguage(in.Language) {
-			return store.ErrInvalid
-		}
-		var contactID uuid.UUID
-		err = tx.QueryRow(ctx, `
-			SELECT contact_id FROM conversations
-			 WHERE tenant_id = $1 AND id = $2 AND inbox_id = $3`, p.TenantID, in.ConversationID, in.InboxID).Scan(&contactID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrForbidden
-		}
-		if err != nil {
-			return err
-		}
-		var decision channelpolicy.Decision
-		if !replay {
-			decision, err = s.admit(ctx, tx, p, contactID, in.InboxID, in.ConversationID, in.Mode, in.Kind, in.Purpose, in.TemplateID, in.Language)
-			if err != nil {
-				return err
-			}
-		}
-		stored := body
-		if in.Kind != "template" {
-			if replay {
-				stored, err = s.storedHumanBody(ctx, tx, p, in.Operation, requestID, body)
-			} else {
-				stored, err = s.signHuman(ctx, tx, p, in.Operation, requestID, body)
-			}
-			if err != nil {
-				return err
-			}
-		}
-		conv, err := lockAuthorizedConversation(ctx, tx, p, in.InboxID, in.ConversationID)
-		if err != nil {
-			return err
-		}
-		if !replay && in.Mode == "proactive" {
-			decision, err = s.admit(ctx, tx, p, contactID, in.InboxID, in.ConversationID, in.Mode, in.Kind, in.Purpose, in.TemplateID, in.Language)
-			if err != nil {
-				return err
-			}
-		}
-		if conv.InboxID != in.InboxID {
-			return store.ErrNotFound
-		}
-		connector, err := queries(tx).GetInboxConnector(ctx, dbgen.GetInboxConnectorParams{TenantID: p.TenantID, ID: conv.InboxID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return store.ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		var payload []byte
-		if in.Kind == "template" {
-			payload, err = canonicalTemplate(conv.ID.String(), connector.String(), stored, in.Mode, in.Purpose, in.Language, in.TemplateID)
-		} else {
-			payload, err = canonicalSend(conv.ID.String(), connector.String(), stored)
-		}
-		if err != nil {
-			return err
-		}
-		if !replay {
-			if conv.Version != in.ExpectedVersion {
-				return store.ErrStaleVersion
-			}
-			if conv.Status == store.StatusClosed {
-				return store.ErrClosed
-			}
-			if conv.Controller != store.ControllerHuman || conv.AssigneeID != p.MembershipID {
-				return ErrForbidden
-			}
-		}
-		sent, err := s.Repo.EnqueueText(ctx, tx, store.OutboundInput{
-			TenantID: p.TenantID, ConversationID: conv.ID, ConnectorID: connector, PrincipalID: p.MembershipID,
-			Operation: in.Operation, ClientRequestID: requestID, Payload: payload, Body: stored, At: in.At,
-		})
-		if err != nil {
-			return err
-		}
-		out.OutboundResult = sent
-		if sent.Replayed {
-			return nil
-		}
-		columnKind := "text"
-		if in.Kind == "template" {
-			columnKind = "template"
-		}
-		if err := s.stampMessage(ctx, tx, p.TenantID, sent.MessageID, columnKind, messageContext{
-			Mode: in.Mode, Kind: in.Kind, Purpose: in.Purpose, TemplateID: in.TemplateID, Language: in.Language,
-		}); err != nil {
-			return err
-		}
-		if err := s.rememberDecision(ctx, tx, p.TenantID, sent.AttemptID, "enqueue", 0, decision, in.Mode, in.Kind, in.Purpose, in.TemplateID); err != nil {
-			return err
-		}
-		if in.Mode == "proactive" {
-			if err := s.policy().RegisterPendingTx(ctx, tx, sectorPrincipal(p), channelpolicy.Scope{
-				InboxID: in.InboxID, ContactID: contactID, Purpose: in.Purpose,
-			}, sent.AttemptID); err != nil {
-				return err
-			}
-		}
-		id, err := enqueueJob(ctx, s.Jobs, tx, p.TenantID, sent.AttemptID)
-		if err != nil {
-			return err
-		}
-		out.JobID = id
-		return nil
+		return s.enqueueInTx(ctx, tx, p, in, &out)
 	})
 	return out, err
+}
+
+func (s Service) enqueueInTx(ctx context.Context, tx pgx.Tx, p Principal, in publicIntent, out *SendResult) error {
+	if out == nil {
+		return store.ErrInvalid
+	}
+	if err := s.authorizePrincipal(ctx, tx, p); err != nil {
+		return err
+	}
+	body := stringsTrimPolicy(in.Body)
+	requestID := stringsTrimPolicy(in.ClientRequestID)
+	if (body == "" && in.ContentKind == "") || requestID == "" || in.At.IsZero() || in.ExpectedVersion < 1 || in.Purpose == "" {
+		return store.ErrInvalid
+	}
+	if in.Kind == "template" && (in.Mode != "proactive" || in.TemplateID == "") {
+		return store.ErrInvalid
+	}
+	replay, err := queuedOperation(ctx, queries(tx), p, in.Operation, requestID)
+	if err != nil {
+		return err
+	}
+	if !replay && in.Kind == "template" && !validTemplateLanguage(in.Language) {
+		return store.ErrInvalid
+	}
+	var contactID uuid.UUID
+	err = tx.QueryRow(ctx, `
+			SELECT contact_id FROM conversations
+			 WHERE tenant_id = $1 AND id = $2 AND inbox_id = $3`, p.TenantID, in.ConversationID, in.InboxID).Scan(&contactID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrForbidden
+	}
+	if err != nil {
+		return err
+	}
+	var decision channelpolicy.Decision
+	if !replay {
+		decision, err = s.admit(ctx, tx, p, contactID, in.InboxID, in.ConversationID, in.Mode, in.Kind, in.Purpose, in.TemplateID, in.Language)
+		if err != nil {
+			return err
+		}
+	}
+	stored := body
+	if in.Kind != "template" && body != "" {
+		if replay {
+			stored, err = s.storedHumanBody(ctx, tx, p, in.Operation, requestID, body)
+		} else {
+			stored, err = s.signHuman(ctx, tx, p, in.Operation, requestID, body)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	if !replay && in.ContentKind != "" {
+		if err := whatsapp.ValidMediaCaption(stored); err != nil {
+			return store.ErrInvalid
+		}
+	}
+	conv, err := lockAuthorizedConversation(ctx, tx, p, in.InboxID, in.ConversationID)
+	if err != nil {
+		return err
+	}
+	if !replay && in.Mode == "proactive" {
+		decision, err = s.admit(ctx, tx, p, contactID, in.InboxID, in.ConversationID, in.Mode, in.Kind, in.Purpose, in.TemplateID, in.Language)
+		if err != nil {
+			return err
+		}
+	}
+	if conv.InboxID != in.InboxID {
+		return store.ErrNotFound
+	}
+	connector, err := queries(tx).GetInboxConnector(ctx, dbgen.GetInboxConnectorParams{TenantID: p.TenantID, ID: conv.InboxID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return store.ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	var payload []byte
+	switch {
+	case in.Kind == "template":
+		payload, err = canonicalTemplate(conv.ID.String(), connector.String(), stored, in.Mode, in.Purpose, in.Language, in.TemplateID)
+	case in.ContentKind != "":
+		reply := ""
+		if in.ReplyTo != nil {
+			reply = in.ReplyTo.String()
+		}
+		payload, err = canonicalMedia(conv.ID.String(), connector.String(), stored, in.ContentKind, in.AttachmentID.String(), reply)
+	default:
+		payload, err = canonicalSend(conv.ID.String(), connector.String(), stored)
+	}
+	if err != nil {
+		return err
+	}
+	if !replay {
+		if conv.Version != in.ExpectedVersion {
+			return store.ErrStaleVersion
+		}
+		if conv.Status == store.StatusClosed {
+			return store.ErrClosed
+		}
+		if conv.Controller != store.ControllerHuman || conv.AssigneeID != p.MembershipID {
+			return ErrForbidden
+		}
+	}
+	sent, err := s.Repo.EnqueueText(ctx, tx, store.OutboundInput{
+		TenantID: p.TenantID, ConversationID: conv.ID, ConnectorID: connector, PrincipalID: p.MembershipID,
+		Operation: in.Operation, ClientRequestID: requestID, Payload: payload, Body: stored, At: in.At,
+		AllowEmptyBody: in.ContentKind != "" && stored == "",
+	})
+	if err != nil {
+		return err
+	}
+	out.OutboundResult = sent
+	if sent.Replayed {
+		return nil
+	}
+	if in.ContentKind != "" {
+		if err := bindOutboundMedia(ctx, tx, p.TenantID, conv.ID, in.AttachmentID, in.SendAttachmentID, in.ContentKind); err != nil {
+			return err
+		}
+		if in.ReplyTo != nil {
+			if err := bindReply(ctx, tx, p.TenantID, conv.ID, sent.MessageID, *in.ReplyTo); err != nil {
+				return err
+			}
+		}
+	}
+	columnKind := "text"
+	if in.Kind == "template" {
+		columnKind = "template"
+	}
+	if in.ContentKind != "" {
+		columnKind = in.ContentKind
+	}
+	doc := messageContext{Mode: in.Mode, Kind: in.Kind, Purpose: in.Purpose, TemplateID: in.TemplateID, Language: in.Language}
+	if in.ContentKind != "" {
+		doc.MediaKind = in.ContentKind
+		doc.AttachmentID = in.AttachmentID.String()
+		sendID := in.SendAttachmentID
+		if sendID == uuid.Nil {
+			sendID = in.AttachmentID
+		}
+		doc.SendAttachmentID = sendID.String()
+		doc.MIME = in.MIME
+		doc.FileName = in.FileName
+		if in.ReplyTo != nil {
+			doc.ReplyToMessageID = in.ReplyTo.String()
+		}
+	}
+	if err := s.stampMessage(ctx, tx, p.TenantID, sent.MessageID, columnKind, doc); err != nil {
+		return err
+	}
+	if err := s.rememberDecision(ctx, tx, p.TenantID, sent.AttemptID, "enqueue", 0, decision, in.Mode, in.Kind, in.Purpose, in.TemplateID); err != nil {
+		return err
+	}
+	if in.Mode == "proactive" {
+		if err := s.policy().RegisterPendingTx(ctx, tx, sectorPrincipal(p), channelpolicy.Scope{
+			InboxID: in.InboxID, ContactID: contactID, Purpose: in.Purpose,
+		}, sent.AttemptID); err != nil {
+			return err
+		}
+	}
+	if in.TrackConsent {
+		if err := s.policy().RegisterPendingTx(ctx, tx, sectorPrincipal(p), channelpolicy.Scope{
+			InboxID: in.InboxID, ContactID: contactID, Purpose: in.Purpose,
+		}, sent.AttemptID); err != nil {
+			return err
+		}
+	}
+	id, err := enqueueJob(ctx, s.Jobs, tx, p.TenantID, sent.AttemptID)
+	if err != nil {
+		return err
+	}
+	out.JobID = id
+	return nil
 }
 
 func queuedOperation(ctx context.Context, q *dbgen.Queries, p Principal, operation, requestID string) (bool, error) {

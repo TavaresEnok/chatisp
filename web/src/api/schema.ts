@@ -2645,10 +2645,12 @@ export interface components {
             sector_id: string;
         };
         SendBody: {
+            attachment_id?: string;
             body: string;
             client_request_id: string;
             /** Format: int64 */
             expected_version: number;
+            reply_to_message_id?: string;
         };
         ServerMessage: {
             code?: string;
