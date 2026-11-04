@@ -30,6 +30,7 @@ import (
 	"chatisp/internal/collision"
 	"chatisp/internal/contactdirectory"
 	"chatisp/internal/contactdocs"
+	"chatisp/internal/embed"
 	"chatisp/internal/lifecycle"
 	"chatisp/internal/notifications"
 	"chatisp/internal/platform/auth"
@@ -126,6 +127,7 @@ func run(ctx context.Context, args []string, environ []string, stdout, stderr io
 			Presence:       svcs.Presence,
 			Lifecycle:      svcs.Lifecycle,
 			Triage:         svcs.Triage,
+			Embed:          svcs.Embed,
 			Store:          svcs.Store,
 			JobsClient:     svcs.JobsClient,
 			ReadyChecks:    svcs.ReadyChecks,
@@ -175,6 +177,7 @@ type runtimeServices struct {
 	Presence      presence.Service
 	Lifecycle     lifecycle.Service
 	Triage        triage.Service
+	Embed         embed.Service
 	Store         *db.Store
 	JobsClient    runtime.Worker
 	ReadyChecks   []func(context.Context) error
@@ -440,6 +443,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 	var attachmentSvc *attachments.Service
 	var documents contactdocs.Service
 	var operatorPresence presence.Service
+	var panels embed.Service
 	if store != nil {
 		canned = cannedreplies.New(store)
 		hours = businesshours.New(store)
@@ -454,6 +458,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		attachmentSvc = &attachments.Service{DB: store, Storage: storage, Limits: tenantAttachmentLimits}
 		documents = contactdocs.New(store, cfg.KeyRing)
 		operatorPresence = presence.New(store)
+		panels = embed.New(store)
 	}
 
 	return runtimeServices{
@@ -474,6 +479,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		Presence:      operatorPresence,
 		Lifecycle:     lifecycle.New(store),
 		Triage:        triage.New(store),
+		Embed:         panels,
 		Store:         store,
 		JobsClient:    workerWorker,
 		ReadyChecks:   readyChecks,

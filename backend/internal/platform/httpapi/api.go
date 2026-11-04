@@ -33,6 +33,7 @@ import (
 	contactHTTP "chatisp/internal/contactdirectory/httpapi"
 	"chatisp/internal/contactdocs"
 	contactDocsHTTP "chatisp/internal/contactdocs/httpapi"
+	"chatisp/internal/embed"
 	"chatisp/internal/lifecycle"
 	lifecycleHTTP "chatisp/internal/lifecycle/httpapi"
 	"chatisp/internal/notifications"
@@ -78,6 +79,7 @@ type Dependencies struct {
 	Presence       presence.Service
 	Lifecycle      lifecycle.Service
 	Triage         triage.Service
+	Embed          embed.Service
 	// Store is the application database used by distribution. Nil answers 503.
 	Store *db.Store
 }
@@ -225,6 +227,7 @@ func New(deps Dependencies) *API {
 	registerDistribution(api, deps)
 	registerReports(api, deps)
 	registerRealtimeContract(api)
+	embed.Mount(router, embed.Dependencies{Auth: deps.Auth, Panels: deps.Embed, TrustedOrigins: deps.TrustedOrigins})
 
 	realtimeHandler := deps.Realtime
 	if realtimeHandler == nil {

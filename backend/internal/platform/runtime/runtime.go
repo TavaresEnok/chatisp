@@ -21,6 +21,7 @@ import (
 	"chatisp/internal/collision"
 	"chatisp/internal/contactdirectory"
 	"chatisp/internal/contactdocs"
+	"chatisp/internal/embed"
 	"chatisp/internal/lifecycle"
 	"chatisp/internal/notifications"
 	"chatisp/internal/platform/auth"
@@ -67,6 +68,7 @@ type Options struct {
 	Presence        presence.Service
 	Lifecycle       lifecycle.Service
 	Triage          triage.Service
+	Embed           embed.Service
 	Store           *db.Store
 	JobsClient      Worker
 	Cleanup         func()
@@ -124,6 +126,7 @@ func Run(parent context.Context, opts Options) error {
 			Presence:       opts.Presence,
 			Lifecycle:      opts.Lifecycle,
 			Triage:         opts.Triage,
+			Embed:          opts.Embed,
 			Store:          opts.Store,
 			TrustedOrigins: opts.TrustedOrigins,
 		})
