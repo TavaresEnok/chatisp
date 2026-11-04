@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -51,6 +52,12 @@ func TestDrillRestoresDumpAndReapplies(t *testing.T) {
 	}
 	if report.LoadAcceptedAsCapacity {
 		t.Fatal("carga foi aceita como capacidade")
+	}
+	if !dbNameRE.MatchString(report.Database) {
+		t.Fatalf("banco do relatório: %s", report.Database)
+	}
+	if report.Duration <= 0 {
+		t.Fatal("duração do ensaio não foi medida")
 	}
 	assertReportText(t, report.Text, true)
 	if !dumpStillHoldsRemovedAttachment(t, dumpDir) {
@@ -139,6 +146,69 @@ func TestDisposableGuardRejectsRealCheckout(t *testing.T) {
 	if err := guardDumpDir("/home/enok/srv_projetos/workspace/chat-isp"); err == nil {
 		t.Fatal("dump no checkout real foi aceito")
 	}
+}
+
+func TestDisposableGuardAllowsEmbeddedClusterAnywhere(t *testing.T) {
+	const checkout = "/home/enok/srv_projetos/workspace/chat-isp/.tmp/testdb/pg-482913"
+	if err := disposableDataDir(checkout); err != nil {
+		t.Fatalf("cluster embutido no checkout chat-isp: %s", err)
+	}
+	const worktree = "/home/enok/srv_projetos/worktrees/outro-nome/.tmp/testdb/pg-7"
+	if err := disposableDataDir(worktree); err != nil {
+		t.Fatalf("cluster embutido em worktree: %s", err)
+	}
+	if err := disposableDataDir("/home/enok/srv_projetos/workspace/chat-isp/.tmp/testdb/pg-abc"); err == nil {
+		t.Fatal("diretório estável disfarçado de cluster foi aceito")
+	}
+	if err := disposableDataDir("/home/enok/srv_projetos/workspace/chat-isp/var/lib/postgresql"); err == nil {
+		t.Fatal("dados do checkout foram aceitos")
+	}
+	if err := guardDumpDir("/home/enok/srv_projetos/workspace/chat-isp/.tmp/testdb/pg-482913"); err == nil {
+		t.Fatal("dump no checkout real foi aceito")
+	}
+}
+
+func TestDisposableGuardRejectsEmbeddedSymlinkEscape(t *testing.T) {
+	foreign := embeddedNamedSymlink(t, "/var/lib/postgresql/18/main")
+	if err := disposableDataDir(foreign); err == nil {
+		t.Fatal("symlink pg-N para diretório não descartável foi aceito")
+	}
+	forbidden := embeddedNamedSymlink(t, "/home/enok/srv_projetos/workspace/chat-isp/var/lib/postgresql")
+	err := disposableDataDir(forbidden)
+	if err == nil {
+		t.Fatal("symlink pg-N para diretório do checkout foi aceito")
+	}
+	if !strings.Contains(err.Error(), "checkout real") {
+		t.Fatalf("recusa inesperada: %s", err)
+	}
+
+	cluster := filepath.Join(t.TempDir(), ".tmp", "testdb", "pg-482913")
+	if err := os.MkdirAll(cluster, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	short := filepath.Join(t.TempDir(), "cispshort")
+	if err := os.Symlink(cluster, short); err != nil {
+		t.Fatal(err)
+	}
+	if err := disposableDataDir(short); err != nil {
+		t.Fatalf("symlink curto para o cluster efêmero: %s", err)
+	}
+	if err := disposableDataDir(cluster); err != nil {
+		t.Fatalf("cluster efêmero resolvido: %s", err)
+	}
+}
+
+func embeddedNamedSymlink(t *testing.T, target string) string {
+	t.Helper()
+	parent := filepath.Join(t.TempDir(), ".tmp", "testdb")
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(parent, "pg-123")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	return link
 }
 
 func TestReportTextsRefuseCapacity(t *testing.T) {

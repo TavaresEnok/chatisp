@@ -49,7 +49,11 @@ type Options struct {
 }
 
 // Report is the drill result. It carries no capacity figure.
+// Database is the disposable database that received the restore.
+// Duration is the measured recovery time of this drill.
 type Report struct {
+	Database                         string
+	Duration                         time.Duration
 	AttachmentReferenceOK            bool
 	KeyReferenceOK                   bool
 	DeletionTablePresent             bool
@@ -71,6 +75,10 @@ type deletion struct {
 // key references, and reapplies deletion_records when that table exists.
 // The dump file stays on disk. Load is not accepted as capacity.
 func Run(ctx context.Context, opts Options) (Report, error) {
+	started := time.Now()
+	if err := guardDestination(opts.AdminURL, opts.DumpDir); err != nil {
+		return Report{}, err
+	}
 	admin, err := connect(ctx, opts.AdminURL)
 	if err != nil {
 		return Report{}, err
@@ -170,6 +178,8 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	}
 
 	report := Report{
+		Database:                         dest,
+		Duration:                         time.Since(started),
 		AttachmentReferenceOK:            true,
 		KeyReferenceOK:                   true,
 		DeletionTablePresent:             present,
