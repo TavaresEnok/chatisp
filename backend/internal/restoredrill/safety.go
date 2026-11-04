@@ -15,21 +15,35 @@ import (
 
 const maintenanceDB = "postgres"
 
+// realCheckout is the canonical working tree. Disposable embedded clusters may
+// live under its .tmp/testdb, but no other data directory or dump may.
+const realCheckout = "/home/enok/srv_projetos/workspace/chat-isp"
+
 var dbNameRE = regexp.MustCompile(`^chatisp_restore_drill_[0-9a-f]{32}$`)
 
-// guard refuses every connection that is not the maintenance database of a
-// throwaway cluster. The drill never reads CHATISP_DATABASE_URL.
-func guard(ctx context.Context, conn *pgx.Conn, adminURL, dumpDir string) error {
+// guardDestination checks the URL and the dump directory before any connection.
+// The drill never reads CHATISP_DATABASE_URL.
+func guardDestination(adminURL, dumpDir string) error {
 	if _, ok := os.LookupEnv("CHATISP_DATABASE_URL"); ok {
 		return errors.New("ensaio recusado: CHATISP_DATABASE_URL está definida; o ensaio não usa banco da aplicação")
 	}
 	if _, ok := os.LookupEnv("CHATISP_TEST_DATABASE_URL"); ok {
 		return errors.New("ensaio recusado: CHATISP_TEST_DATABASE_URL está definida; o ensaio não segue URL externa")
 	}
-	if _, err := socketDir(adminURL); err != nil {
+	socket, err := socketDir(adminURL)
+	if err != nil {
 		return err
 	}
-	if err := guardDumpDir(dumpDir); err != nil {
+	if err := disposableDataDir(socket); err != nil {
+		return err
+	}
+	return guardDumpDir(dumpDir)
+}
+
+// guard refuses every connection that is not the maintenance database of a
+// throwaway cluster. The drill never reads CHATISP_DATABASE_URL.
+func guard(ctx context.Context, conn *pgx.Conn, adminURL, dumpDir string) error {
+	if err := guardDestination(adminURL, dumpDir); err != nil {
 		return err
 	}
 
@@ -119,30 +133,99 @@ func resolvePath(path string) string {
 	return resolved
 }
 
+// resolveDataDestination returns the canonical data directory. A pg-<n> name is
+// never accepted on its own: a symlink contributes its target, including when
+// that target is missing, so the lexical shape cannot hide another directory.
+// A missing path that is not a symlink stays lexical; the drill's literal
+// checks use paths that have not been created.
+func resolveDataDestination(path string) (string, error) {
+	return followDataDestination(filepath.Clean(path), 0)
+}
+
+func followDataDestination(path string, depth int) (string, error) {
+	if depth > 16 {
+		return "", errors.New("ensaio recusado: o cluster não é descartável")
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return filepath.Clean(resolved), nil
+	}
+	info, err := os.Lstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return path, nil
+	}
+	target, err := os.Readlink(path)
+	if err != nil || target == "" {
+		return "", errors.New("ensaio recusado: o cluster não é descartável")
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(path), target)
+	}
+	return followDataDestination(filepath.Clean(target), depth+1)
+}
+
 func disposableDataDir(dir string) error {
 	cleaned := filepath.Clean(strings.TrimSpace(dir))
-	if cleaned == "" || cleaned == "." {
+	if cleaned == "" || cleaned == "." || !filepath.IsAbs(cleaned) {
 		return errors.New("ensaio recusado: o cluster não é descartável")
 	}
-	if strings.Contains(cleaned, "/home/enok/srv_projetos/workspace/chat-isp") {
-		return errors.New("ensaio recusado: diretório de dados do checkout real")
-	}
-	resolved := resolvePath(cleaned)
-	if strings.Contains(resolved, "/home/enok/srv_projetos/workspace/chat-isp") {
-		return errors.New("ensaio recusado: diretório de dados do checkout real")
-	}
-	tmp, err := filepath.Abs(os.TempDir())
+	// The exception is the canonical destination only. The embedded test server
+	// stores the cluster in <checkout>/.tmp/testdb/pg-<n>, including a checkout
+	// named chat-isp, and may expose it through a short symlink in the temp dir.
+	// That symlink is accepted only when it resolves to the ephemeral cluster.
+	// A pg-<n> path that points at any other directory stays refused.
+	resolved, err := resolveDataDestination(cleaned)
 	if err != nil {
-		return errors.New("ensaio recusado: diretório temporário indisponível")
+		return err
 	}
-	tmp = resolvePath(tmp)
-	underTmp := resolved == tmp || strings.HasPrefix(resolved, tmp+string(os.PathSeparator))
-	marker := string(os.PathSeparator) + ".tmp" + string(os.PathSeparator) + "testdb"
-	underWorkspaceTmp := strings.Contains(resolved, marker+string(os.PathSeparator)) || strings.HasSuffix(resolved, marker)
-	if !underTmp && !underWorkspaceTmp {
+	if isEmbeddedTestDataDir(resolved) {
+		return nil
+	}
+	if pathInRealCheckout(cleaned) || pathInRealCheckout(resolved) {
+		return errors.New("ensaio recusado: diretório de dados do checkout real")
+	}
+	underTmp, err := underProcessTemp(resolved)
+	if err != nil {
+		return err
+	}
+	if !underTmp {
 		return errors.New("ensaio recusado: o cluster não é descartável")
 	}
 	return nil
+}
+
+func isEmbeddedTestDataDir(path string) bool {
+	base := filepath.Base(path)
+	rest, ok := strings.CutPrefix(base, "pg-")
+	if !ok || rest == "" {
+		return false
+	}
+	for _, r := range rest {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	parent := filepath.Dir(path)
+	if filepath.Base(parent) != "testdb" {
+		return false
+	}
+	return filepath.Base(filepath.Dir(parent)) == ".tmp"
+}
+
+func pathInRealCheckout(path string) bool {
+	cleaned := filepath.Clean(path)
+	return cleaned == realCheckout || strings.HasPrefix(cleaned, realCheckout+string(os.PathSeparator))
+}
+
+func underProcessTemp(resolved string) (bool, error) {
+	tmp, err := filepath.Abs(os.TempDir())
+	if err != nil {
+		return false, errors.New("ensaio recusado: diretório temporário indisponível")
+	}
+	tmp = resolvePath(tmp)
+	if resolved == tmp || strings.HasPrefix(resolved, tmp+string(os.PathSeparator)) {
+		return true, nil
+	}
+	return false, nil
 }
 
 func guardDumpDir(dir string) error {
@@ -159,11 +242,11 @@ func guardDumpDir(dir string) error {
 	}
 	resolved := resolvePath(abs)
 	tmpResolved := resolvePath(tmp)
+	if pathInRealCheckout(abs) || pathInRealCheckout(resolved) {
+		return errors.New("ensaio recusado: o dump não pode ficar no checkout real")
+	}
 	if resolved != tmpResolved && !strings.HasPrefix(resolved, tmpResolved+string(os.PathSeparator)) {
 		return errors.New("ensaio recusado: o dump só pode ficar em diretório temporário")
-	}
-	if strings.Contains(resolved, "/home/enok/srv_projetos/workspace/chat-isp") {
-		return errors.New("ensaio recusado: o dump não pode ficar no checkout real")
 	}
 	info, err := os.Stat(resolved)
 	if err != nil || !info.IsDir() {
