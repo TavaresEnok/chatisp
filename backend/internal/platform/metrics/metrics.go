@@ -4,6 +4,7 @@ package metrics
 import (
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -13,12 +14,19 @@ import (
 	"chatisp/internal/platform/version"
 )
 
-// Metrics records HTTP traffic without per-user or per-message labels.
+// Metrics records process, HTTP, pool, WebSocket and River series.
+// Labels stay on closed sets. Nil methods are no-ops so tests can omit it.
 type Metrics struct {
-	registry *prometheus.Registry
-	requests *prometheus.CounterVec
-	duration *prometheus.HistogramVec
-	erp      *prometheus.CounterVec
+	registry  *prometheus.Registry
+	requests  *prometheus.CounterVec
+	duration  *prometheus.HistogramVec
+	erp       *prometheus.CounterVec
+	websocket prometheus.Gauge
+
+	mu         sync.Mutex
+	jobResults *prometheus.CounterVec
+	pools      *poolCollector
+	river      *riverCollector
 }
 
 // New registers process, runtime and HTTP series on an isolated registry.
@@ -39,6 +47,10 @@ func New() *Metrics {
 			Name: "chatisp_erp_connector_calls_total",
 			Help: "Chamadas ao conector de ERP por conector e resultado.",
 		}, []string{"connector", "result"}),
+		websocket: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "chatisp_websocket_connections",
+			Help: "Conexões WebSocket do painel aceitas e ainda abertas neste processo.",
+		}),
 	}
 	info := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name:        "chatisp_build_info",
@@ -50,6 +62,7 @@ func New() *Metrics {
 		metrics.requests,
 		metrics.duration,
 		metrics.erp,
+		metrics.websocket,
 		info,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),

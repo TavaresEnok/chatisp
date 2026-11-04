@@ -119,6 +119,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.logger.Debug("websocket upgrade rejeitado", "err", err)
 		return
 	}
+	h.openSocket()
+	defer h.closeSocket()
 
 	// 6. Parse optional initial query params.
 	query := r.URL.Query()
@@ -135,6 +137,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 7. Initialize and run connection until terminated.
 	c := newConnection(h, ws, principal, sessionToken, initialInbox, sinceSeq)
 	c.start(r.Context(), withSnapshot)
+}
+
+func (h *Handler) openSocket() {
+	if h == nil || h.opts.Metrics == nil {
+		return
+	}
+	h.opts.Metrics.WebSocketOpened()
+}
+
+func (h *Handler) closeSocket() {
+	if h == nil || h.opts.Metrics == nil {
+		return
+	}
+	h.opts.Metrics.WebSocketClosed()
 }
 
 func isOriginAllowed(origin string, trustedOrigins []string) bool {

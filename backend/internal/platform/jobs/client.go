@@ -14,6 +14,8 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivertype"
+
+	"chatisp/internal/platform/metrics"
 )
 
 const (
@@ -44,6 +46,7 @@ type settings struct {
 	leaseWait  time.Duration
 	discardFor time.Duration
 	clientID   string
+	metrics    *metrics.Metrics
 }
 
 // WithLogger sets the process logger. Argument, metadata and error values are
@@ -149,6 +152,7 @@ func New(pool *pgxpool.Pool, handlers Handlers, opts ...Option) (*Client, error)
 			riverCfg.FetchPollInterval = cfg.poll
 		}
 	}
+	attachWorkMetrics(riverCfg, cfg.metrics, works)
 	inner, err := river.NewClient(riverpgxv5.New(pool), riverCfg)
 	if err != nil {
 		return nil, fmt.Errorf("falha ao montar cliente River: %w", err)

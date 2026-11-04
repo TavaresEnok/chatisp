@@ -77,6 +77,9 @@ type Options struct {
 	Cleanup         func()
 	TrustedOrigins  []string
 	ReadyChecks     []func(context.Context) error
+	// Collectors share the process context and must return when it ends.
+	// Run waits for them before Cleanup closes pools.
+	Collectors []func(context.Context)
 }
 
 // Run serves until ctx is cancelled or a listener fails, then shuts down gracefully.
@@ -97,6 +100,8 @@ func Run(parent context.Context, opts Options) error {
 	}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
+	stopCollectors := startCollectors(ctx, opts.Collectors)
+	defer stopCollectors()
 
 	meter := opts.Metrics
 	if meter == nil {
@@ -499,6 +504,29 @@ func (w logWriter) Write(p []byte) (int, error) {
 	}
 	w.logger.Error("erro de transporte HTTP", "component", "http", "error", message)
 	return len(p), nil
+}
+
+// startCollectors runs each function until ctx ends, then waits.
+// The returned stop cancels that context and joins the goroutines so Cleanup
+// can close pools only after the last backlog read has left them.
+func startCollectors(parent context.Context, collectors []func(context.Context)) func() {
+	ctx, cancel := context.WithCancel(parent)
+	var wg sync.WaitGroup
+	for _, collect := range collectors {
+		if collect == nil {
+			continue
+		}
+		wg.Add(1)
+		fn := collect
+		go func() {
+			defer wg.Done()
+			fn(ctx)
+		}()
+	}
+	return func() {
+		cancel()
+		wg.Wait()
+	}
 }
 
 func listen(existing net.Listener, addr string, needed bool) (net.Listener, bool, error) {

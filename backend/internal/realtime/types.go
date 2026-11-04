@@ -10,6 +10,7 @@ import (
 	attendanceService "chatisp/internal/attendance/service"
 	"chatisp/internal/attendance/store"
 	"chatisp/internal/platform/db"
+	"chatisp/internal/platform/metrics"
 )
 
 // Principal represents the authenticated panel actor.
@@ -69,6 +70,9 @@ type Options struct {
 	WriteTimeout       time.Duration
 	Logger             *slog.Logger
 	DB                 *db.Store
+	// Metrics counts sockets on the process registry after a successful upgrade.
+	// Nil keeps the handler usable in tests that do not observe the gauge.
+	Metrics *metrics.Metrics
 }
 
 // ClientMessage is sent by the client over websocket.
