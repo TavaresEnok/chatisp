@@ -34,6 +34,9 @@ const (
 	ReasonHidden        = "capacidade oculta"
 	ReasonNotSimulation = "adaptador não identificado como simulação"
 	ReasonDown          = "erp indisponível"
+	ReasonTimeout       = "tempo esgotado"
+	ReasonCircuit       = "circuito aberto"
+	ReasonInvoice       = "fatura não pertence ao cliente selecionado"
 	ReasonUncertain     = "resultado externo incerto"
 	ReasonNotFound      = "cadastro não encontrado"
 )
@@ -48,9 +51,25 @@ var (
 	ErrNotFound          = errors.New("registro não encontrado")
 	ErrInvalid           = errors.New("pedido de erp inválido")
 	ErrDown              = errors.New("erp indisponível")
+	ErrTimeout           = errors.New("tempo do erp esgotado")
 	ErrAmbiguous         = errors.New("resultado externo incerto")
 	ErrOpen              = errors.New("circuito do erp aberto")
+	ErrDispatch          = errors.New("envio recusado pela janela ou pelo consentimento")
 )
+
+// DispatchError is a local send refusal. Reason is a stable policy code, never a customer payload.
+type DispatchError struct {
+	Reason string
+}
+
+func (e *DispatchError) Error() string {
+	if e == nil || e.Reason == "" {
+		return ErrDispatch.Error()
+	}
+	return ErrDispatch.Error() + ": " + e.Reason
+}
+
+func (e *DispatchError) Unwrap() error { return ErrDispatch }
 
 // Principal is the attendant revalidated before a capability runs.
 type Principal struct {
@@ -79,6 +98,7 @@ type Consult struct {
 	Capability   string
 	Reference    string
 	CustomerID   string
+	ContractID   string
 	InvoiceID    string
 	Verification string
 	LocalKey     string
@@ -127,6 +147,19 @@ type Action struct {
 	Outcome      string
 	ExternalRef  string
 	View         View
+	// ReasonCode is the stable token stored with the timeline event.
+	ReasonCode string
+	// ClientRequestID, OutboxOperation, PrincipalID, MessageID and AttemptID
+	// bind a successful second copy to the outbox row that was queued.
+	ClientRequestID string
+	OutboxOperation string
+	PrincipalID     uuid.UUID
+	MessageID       uuid.UUID
+	AttemptID       uuid.UUID
+	// ActorID and MembershipID are the panel actor. Storage leaves them empty
+	// when the call did not come from an authenticated membership.
+	ActorID      uuid.UUID
+	MembershipID uuid.UUID
 }
 
 // Link binds a contact to an opaque customer. Selection is explicit.
@@ -254,6 +287,7 @@ func fingerprint(in Consult) [32]byte {
 		in.Capability,
 		in.Reference,
 		in.CustomerID,
+		in.ContractID,
 		in.InvoiceID,
 		in.Verification,
 		in.Conversation.String(),

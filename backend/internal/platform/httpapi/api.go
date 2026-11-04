@@ -37,6 +37,7 @@ import (
 	"chatisp/internal/contactdocs"
 	contactDocsHTTP "chatisp/internal/contactdocs/httpapi"
 	"chatisp/internal/embed"
+	"chatisp/internal/erp"
 	"chatisp/internal/lifecycle"
 	lifecycleHTTP "chatisp/internal/lifecycle/httpapi"
 	mediaHTTP "chatisp/internal/media/httpapi"
@@ -89,6 +90,8 @@ type Dependencies struct {
 	Triage         triage.Service
 	Embed          embed.Service
 	BotHook        bothook.Service
+	// ERP is the simulated connector. Nil answers 503 and does not mount a supplier client.
+	ERP *erp.Panel
 	// Store is the application database used by distribution. Nil answers 503.
 	Store *db.Store
 }
@@ -277,6 +280,7 @@ func New(deps Dependencies) *API {
 		TrustedOrigins: deps.TrustedOrigins,
 	})
 	bothookHTTP.Mount(router, bothookHTTP.Dependencies{Auth: deps.Auth, Hooks: deps.BotHook, TrustedOrigins: deps.TrustedOrigins})
+	erp.Mount(router, erp.Dependencies{Auth: deps.Auth, Panel: deps.ERP, TrustedOrigins: deps.TrustedOrigins})
 
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		Write(w, http.StatusNotFound, "o caminho solicitado não existe")

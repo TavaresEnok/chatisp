@@ -23,6 +23,7 @@ import (
 	"chatisp/internal/contactdirectory"
 	"chatisp/internal/contactdocs"
 	"chatisp/internal/embed"
+	"chatisp/internal/erp"
 	"chatisp/internal/lifecycle"
 	"chatisp/internal/notifications"
 	"chatisp/internal/platform/auth"
@@ -70,6 +71,7 @@ type Options struct {
 	Lifecycle       lifecycle.Service
 	Triage          triage.Service
 	Embed           embed.Service
+	ERP             *erp.Panel
 	Store           *db.Store
 	JobsClient      Worker
 	Cleanup         func()
@@ -100,6 +102,10 @@ func Run(parent context.Context, opts Options) error {
 	if meter == nil {
 		meter = metrics.New()
 	}
+	erpPanel := opts.ERP
+	if erpPanel == nil {
+		erpPanel = composeERP(opts.Store, meter)
+	}
 	gate := &readyGate{
 		checks: append([]func(context.Context) error(nil), opts.ReadyChecks...),
 	}
@@ -129,6 +135,7 @@ func Run(parent context.Context, opts Options) error {
 			Triage:         opts.Triage,
 			Embed:          opts.Embed,
 			BotHook:        bothook.New(opts.Store),
+			ERP:            erpPanel,
 			Store:          opts.Store,
 			TrustedOrigins: opts.TrustedOrigins,
 		})

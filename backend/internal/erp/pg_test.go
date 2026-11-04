@@ -97,15 +97,15 @@ func TestERPPostgres(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if loaded.ID != action.ID || loaded.Outcome != OutcomeUncertain || loaded.Hash != action.Hash {
+		if loaded.ID != action.ID || loaded.Outcome != OutcomeUncertain || loaded.Hash != action.Hash || loaded.View.Reason != ReasonUncertain || loaded.View.Capability != GetPixCode {
 			return errors.New("ação instável")
 		}
-		var events int
-		if err = tx.QueryRow(ctx, `SELECT count(*) FROM conversation_events WHERE tenant_id=$1 AND conversation_id=$2 AND kind='erp_action'`, tenant, conversation).Scan(&events); err != nil {
+		var kind string
+		if err = tx.QueryRow(ctx, `SELECT kind FROM conversation_events WHERE tenant_id=$1 AND id=$2`, tenant, action.ID).Scan(&kind); err != nil {
 			return err
 		}
-		if events != 1 {
-			return errors.New("linha do tempo")
+		if kind != "erp_action:GetPixCode:uncertain:uncertain" {
+			return errors.New("linha do tempo " + kind)
 		}
 		var result, correlation string
 		if err = tx.QueryRow(ctx, `SELECT result, correlation_id FROM audit_logs WHERE tenant_id=$1 AND target_id=$2`, tenant, action.ID).Scan(&result, &correlation); err != nil {
@@ -113,6 +113,30 @@ func TestERPPostgres(t *testing.T) {
 		}
 		if result != OutcomeUncertain || correlation != "boleto-pg" {
 			return errors.New("auditoria")
+		}
+		dup := action
+		dup.ID = uuid.New()
+		if err = CommitAction(ctx, tx, tenant, dup); err != nil {
+			return err
+		}
+		var actions int
+		if err = tx.QueryRow(ctx, `SELECT count(*) FROM erp_actions WHERE tenant_id=$1 AND local_key='boleto-pg'`, tenant).Scan(&actions); err != nil {
+			return err
+		}
+		if actions != 1 {
+			return errors.New("ação duplicada")
+		}
+		clash := action
+		clash.ID = uuid.New()
+		clash.Hash[0] ^= 0xff
+		if err = CommitAction(ctx, tx, tenant, clash); !errors.Is(err, ErrConflict) {
+			return errors.New("conflito de hash")
+		}
+		if err = tx.QueryRow(ctx, `SELECT count(*) FROM erp_actions WHERE tenant_id=$1 AND local_key='boleto-pg'`, tenant).Scan(&actions); err != nil {
+			return errors.New("transação abortada no conflito")
+		}
+		if actions != 1 {
+			return errors.New("conflito gravou outra ação")
 		}
 		link := Link{
 			ID: uuid.New(), ContactID: contact, ConversationID: conversation,

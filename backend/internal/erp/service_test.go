@@ -51,6 +51,13 @@ func TestFakeIsDeterministicAndLabeled(t *testing.T) {
 	if pix.PixCode != "simulacao:fake-pix-casa-1" {
 		t.Fatalf("pix: %q", pix.PixCode)
 	}
+	foreign, err := fake.Call(context.Background(), Consult{
+		Capability: GetPixCode, InvoiceID: "fake-inv-comercio-1",
+		CustomerID: "fake-customer-casa", ContractID: "fake-contract-casa", Now: now,
+	})
+	if err != nil || foreign.Outcome != OutcomeNotFound || foreign.Reason != ReasonInvoice || foreign.PixCode != "" {
+		t.Fatalf("fatura de outro cliente: %+v %v", foreign, err)
+	}
 	missing := NewFake(DefaultCapabilities())
 	off, err := missing.Call(context.Background(), Consult{Capability: ListOpenInvoices, CustomerID: first.Customer.ExternalID, Now: now})
 	if err != nil {
@@ -169,6 +176,32 @@ func TestAmbiguousResultIsNotRepeated(t *testing.T) {
 	changed.InvoiceID = "fake-inv-comercio-1"
 	if _, err = svc.Consult(context.Background(), agent(tenant, sector), changed); !errors.Is(err, ErrConflict) || fake.Calls != 1 {
 		t.Fatalf("conflito: %v calls=%d", err, fake.Calls)
+	}
+}
+
+func TestFakeSummaryAndInvoicesHonorContract(t *testing.T) {
+	fake := NewFake(AllCapabilities())
+	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	mismatch := Consult{Capability: GetCustomerSummary, CustomerID: "fake-customer-casa", ContractID: "fake-contract-comercio", Now: now}
+	view, err := fake.Call(context.Background(), mismatch)
+	if err != nil || view.Outcome != OutcomeNotFound || view.Customer != nil {
+		t.Fatalf("resumo incompatível: %+v %v", view, err)
+	}
+	invoices := mismatch
+	invoices.Capability = ListOpenInvoices
+	view, err = fake.Call(context.Background(), invoices)
+	if err != nil || view.Outcome != OutcomeNotFound || len(view.Invoices) != 0 || view.ExternalRef != "" {
+		t.Fatalf("faturas incompatíveis: %+v %v", view, err)
+	}
+	open := Consult{Capability: GetCustomerSummary, CustomerID: "fake-customer-comercio", Now: now}
+	view, err = fake.Call(context.Background(), open)
+	if err != nil || view.Outcome != OutcomeOK || view.Customer == nil || view.Customer.ContractID != "fake-contract-comercio" {
+		t.Fatalf("contrato opcional: %+v %v", view, err)
+	}
+	open.Capability = ListOpenInvoices
+	view, err = fake.Call(context.Background(), open)
+	if err != nil || view.Outcome != OutcomeOK || len(view.Invoices) != 1 || view.Invoices[0].ExternalID != "fake-inv-comercio-1" {
+		t.Fatalf("faturas sem contrato: %+v %v", view, err)
 	}
 }
 
