@@ -359,7 +359,7 @@ export async function runM4A(browser: Browser, testInfo: { attach(name: string, 
     expect(optout.body.detail).toBe("política de canal recusou o envio: consent_required");
     evidence.optout = "revogação cancelou o template proativo com a fila ainda de pé; nova tentativa 422 consent_required";
 
-    const file = agent.page.locator("input[type=file]:visible");
+    const file = agent.page.getByLabel("Arquivo", { exact: true });
     await file.setInputFiles({ name: "foto.jpg", mimeType: "image/jpeg", buffer: Buffer.from("<!DOCTYPE html><html><body>disfarce</body></html>") });
     await expect(agent.page.getByText("anexo inválido")).toBeVisible();
     await file.setInputFiles({ name: "nota.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7\nsimulacao\n") });

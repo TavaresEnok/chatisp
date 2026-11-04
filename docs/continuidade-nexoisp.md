@@ -252,3 +252,19 @@ Ficou de fora `continuation/m6-erp-fake`: não estava na lista e continua em `c2
 `tsc -b` falhou na primeira execução: `wait_alert` ficou obrigatório no schema gerado (`history-events.test.tsx`, `m3a-attendance.test.tsx`, `queue-wait-alert.test.tsx`), `platform-usage.ts` lia mês possivelmente ausente e o mock de áudio não tinha argumento. Os fixtures passaram a declarar `wait_alert: false` quando a fila não marca espera. A segunda `tsc -b` passou.
 
 Vitest antes desse ajuste: 8 arquivos, 14 testes, todos passaram (`bot-hook-notice`, `retention-panel`, `ops-alerts`, `queue-wait-alert`, `audit-log`, `message-composer.audio`, `embed`, `attendance-report`). Depois do ajuste: 6 arquivos, 15 testes, todos passaram (`queue-wait-alert`, `message-composer.audio`, `history-events`, `m3a-attendance`, `bot-hook-notice`, `retention-panel`). Não rodei a suíte Go inteira, o Vitest completo nem E2E.
+
+## Aceite integrado M4B-M6 no navegador, 04/11/2026
+
+Jornada nova `npm --prefix web run test:e2e:m4b-m6`, fixture `m2demo m4b`, Chromium 140.0.7339.186 pelo launcher local. Porta da API em `CHATISP_E2E_API_PORT` (nesta rodada `127.0.0.1:44703`). Evidência em `.paseo-build-tmp/m4b-m6-browser/m4b-m6-jornada.json` e em `docs/m4b-m6-entrega.md`. Não é homologação de produção.
+
+O que a jornada mostrou no painel, só com stand-in, ERP fake e receptor loopback:
+
+- Imagem `sim-media-fachada` e localização "Sede simulada" (`-23.55, -46.63`).
+- Documento de saída citando "Sede simulada". O compositor aceitou `boleto.pdf`. O cartão não mostrou o nome do arquivo.
+- Áudio original `audio/mpeg` pelo compositor. O navegador não converteu. ffmpeg e OGG/Opus não rodaram.
+- Vínculo do ERP fake em "Cadastro simulado — casa", fatura "fatura simulada em aberto" e "Segunda via enfileirada" depois da confirmação.
+- Receptor local recebeu `message.created` com HMAC SHA-256 do corpo.
+
+Na mesma sessão, `npm --prefix web run test:e2e:m3b` e `npm --prefix web run test:e2e:m4a` terminaram com código 0 no Chromium 140.0.7339.186. M4A usa o rótulo "Arquivo" da mesa de anexos, porque o compositor também expõe um input de arquivo.
+
+Continua fora: Meta, ERP e Evolution reais, API pública de escrita, URL assinada do PDF, conversão ffmpeg, ensaio de restore (`TestDrillRestoresDumpAndReapplies` já falhou nesta baseline por caminho de checkout) e a dívida de ESLint. Mensagens sem citação ainda podem exibir "Mensagem citada indisponível" porque o JSON leva o UUID zero; a correção está fora dos arquivos deste recorte. O marco M4 e o marco M6 não estão concluídos.

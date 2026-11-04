@@ -327,7 +327,7 @@ O aceite integral das linhas permanece pendente. O recorte M3A e suas evidência
 ## M4 — Canal e produtividade completos
 
 - Estado: pendente
-- Recorte M4A: em 03/11/2026, `go -C backend test -count=1 ./internal/acceptance ./cmd/m2demo` passou (`acceptance` 17.918s, `m2demo` 16.581s), com HTTP real, PostgreSQL embutido, lease, relógio da fixture e stand-in Meta em zero chamadas. Com consentimento ainda concedido e a janela já fechada, o template driver responde 201 (`approved_template` na decisão `enqueue`) e o template fake responde 422 com detalhe `template_not_authorized`. A revogação é outro passo: `consent_revoked` na tentativa que estava na fila e `consent_required` num POST seguinte. `mapDecision` só é chamado por `admit`. Nil em `contact_blocked` mantém o POST 201; autorização de setor segue `ErrForbidden` e opt-out segue `PolicyDenied`, relido no despacho. `DispatchOutbound` falha a tentativa humana bloqueada antes de qualquer driver. 403 na aceitação quebraria `TestM3AIntegrated` e não é o contrato. `npm --prefix web run test:e2e:m4a` passou no Chromium 140.0.7339.186 pelo launcher local; a evidência está em `.paseo-build-tmp/m4a-browser/m4a-jornada.json` e no roteiro [m4a-entrega.md](m4a-entrega.md). Isso não conclui o marco. M4B (mídia outbound, áudio gravado, ffmpeg) e Meta/ERP reais continuam de fora.
+- Recorte M4A: em 03/11/2026, `go -C backend test -count=1 ./internal/acceptance ./cmd/m2demo` passou (`acceptance` 17.918s, `m2demo` 16.581s), com HTTP real, PostgreSQL embutido, lease, relógio da fixture e stand-in Meta em zero chamadas. Com consentimento ainda concedido e a janela já fechada, o template driver responde 201 (`approved_template` na decisão `enqueue`) e o template fake responde 422 com detalhe `template_not_authorized`. A revogação é outro passo: `consent_revoked` na tentativa que estava na fila e `consent_required` num POST seguinte. `mapDecision` só é chamado por `admit`. Nil em `contact_blocked` mantém o POST 201; autorização de setor segue `ErrForbidden` e opt-out segue `PolicyDenied`, relido no despacho. `DispatchOutbound` falha a tentativa humana bloqueada antes de qualquer driver. 403 na aceitação quebraria `TestM3AIntegrated` e não é o contrato. `npm --prefix web run test:e2e:m4a` passou no Chromium 140.0.7339.186 pelo launcher local; a evidência está em `.paseo-build-tmp/m4a-browser/m4a-jornada.json` e no roteiro [m4a-entrega.md](m4a-entrega.md). Isso não conclui o marco. Recorte M4B-M6 em 04/11/2026: `npm --prefix web run test:e2e:m4b-m6` passou no mesmo Chromium, pela fixture `m2demo m4b`, com evidência em `.paseo-build-tmp/m4b-m6-browser/m4b-m6-jornada.json` e no roteiro [m4b-m6-entrega.md](m4b-m6-entrega.md). A jornada viu imagem e localização do stand-in, documento de saída citando a localização, áudio `audio/mpeg` sem ffmpeg e o restante de ERP fake e webhook descrito nas linhas abaixo. ffmpeg/OGG, URL assinada do PDF, Meta, ERP e Evolution reais continuam de fora. Isso não conclui o marco.
 - Entrega (C.1): mídias da V1, gravação de áudio, templates e WABA, janela oficial, consentimento, respostas prontas, saúde do canal e uso reportado.
 - Critério: uploads e URLs seguros, conversão limitada, janela revalidada no envio e estados remotos corretos.
 - Dependências: M2 para o driver e a outbox. M3 para o compositor já usado pelo atendente. ffmpeg ainda não está neste host; a evidência da conversão espera o binário. D2-05 impede qualquer valor monetário.
@@ -338,16 +338,16 @@ O aceite integral das linhas permanece pendente. O parágrafo do recorte M4A aci
 
 | ID | Prioridade | Requisito | Evidência |
 | --- | --- | --- | --- |
-| 02-receber-imagens | V1 | Receber imagens | A mídia é baixada antes de a URL remota expirar e aparece na conversa. |
+| 02-receber-imagens | V1 | Receber imagens | A mídia é baixada antes de a URL remota expirar e aparece na conversa. Recorte 04/11/2026: o stand-in entregou `image/jpeg` com id local `sim-media-fachada`; o painel mostrou "Fachada simulada" e "Imagem". Não houve URL remota da Meta nem prova de expiração. |
 | 02-enviar-imagens | V1 | Enviar imagens | Tipos e limites do driver oficial. Validação do arquivo antes do envio. |
 | 02-receber-documentos | V1 | Receber documentos e PDF | Guarda no storage do tenant, com MIME conferido. |
-| 02-enviar-documentos | V1 | Enviar documentos e PDF | Anexo de saída com URL assinada e temporária. |
+| 02-enviar-documentos | V1 | Enviar documentos e PDF | Anexo de saída com URL assinada e temporária. Recorte 04/11/2026: o compositor aceitou `boleto.pdf` (`%PDF-1.7`) e mostrou "Mídia aceita pelo conector"; o histórico mostrou o cartão "Documento de Atendimento". A URL assinada temporária não foi pedida. O nome do arquivo não apareceu no cartão. |
 | 02-receber-audio | V1 | Receber áudio e nota de voz | Player na conversa a partir do objeto guardado. |
 | 02-enviar-audio | V1 | Enviar arquivo de áudio | O driver recebe o formato combinado depois da conversão limitada, quando ela for necessária. |
-| 02-gravar-audio | V1 | Gravar áudio no painel | MediaRecorder no navegador. Conversão para OGG/Opus no worker, com ffmpeg limitado. |
+| 02-gravar-audio | V1 | Gravar áudio no painel | MediaRecorder no navegador. Conversão para OGG/Opus no worker, com ffmpeg limitado. Recorte 04/11/2026: o teste substituiu a captura por um blob `audio/mpeg` (ID3); o compositor enviou o original e avisou que o navegador não converteu. ffmpeg e OGG/Opus não rodaram. |
 | 02-receber-video | V1 | Receber vídeo | Preview e download seguro. Enviar vídeo continua V2. |
-| 02-receber-localizacao | V1 | Receber localização | A mensagem mostra a localização recebida. Sem motor de rede. |
-| 02-citacao | V1 | Responder mensagem específica | Campo de contexto do driver. A citação aponta para mensagem do mesmo tenant. |
+| 02-receber-localizacao | V1 | Receber localização | A mensagem mostra a localização recebida. Sem motor de rede. Recorte 04/11/2026: o painel mostrou "Sede simulada", "Localização" e "Coordenadas: -23.55, -46.63" a partir do stand-in. |
+| 02-citacao | V1 | Responder mensagem específica | Campo de contexto do driver. A citação aponta para mensagem do mesmo tenant. Recorte 04/11/2026: o documento de saída no histórico citou "Sede simulada". Mensagens sem citação ainda podem mostrar "Mensagem citada indisponível" por UUID zero no JSON; isso não foi corrigido neste recorte. |
 | 02-janela | V1 | Indicador da janela de 24 horas | Só na Cloud API. Recorte M4A: o painel mostra que o prazo não é calculado no navegador. O texto livre ficou na fila, a fixture recuou a âncora 25 horas e o despacho gravou `cancelled`/`window_closed` sem chamar o stand-in. |
 | 02-biblioteca-templates | V1 | Biblioteca de templates aprovados | Recorte M4A: com consentimento `cobranca` ainda concedido e a âncora inbound já recuada 25h, o template `sync_source=driver` entrou na fila (HTTP 201; no Go, decisão `enqueue`/`approved_template`). Depois do `FakeCatalog` explícito, o POST de `sim-fake-aviso` respondeu 422 com detalhe `política de canal recusou o envio: template_not_authorized`. Não é consulta à Graph. |
 | 02-sync-templates | V1 | Sincronização de templates | Recorte M4A: o botão do admin substitui o snapshot pelo catálogo simulado explícito. Não há driver oficial nem WABA real. |
@@ -456,13 +456,13 @@ O marco continua pendente. Só as linhas de horário citadas no recorte M4A têm
 
 ### Requisitos V1 e V1 simples
 
-Estado de todas as linhas: pendente.
+Estado integral de todas as linhas: pendente. Recorte 04/11/2026, só simulação local: a jornada `test:e2e:m4b-m6` ligou o ERP fake e o webhook `message.created` no runtime descartável `m2demo m4b`. Não há ERP, Meta, Evolution nem API pública de escrita reais. Ver [m4b-m6-entrega.md](m4b-m6-entrega.md).
 
 | ID | Prioridade | Requisito | Evidência |
 | --- | --- | --- | --- |
 | 01-evolution | V1 simples | WhatsApp Web por Evolution | Conector condicionado. Flag desligada até D2-04. QR efêmero só para admin, sem log persistente. Queda da Evolution afeta só as caixas desse conector. |
 | 07-id-erp | V1 | ID do cliente no ERP | Referência opaca. Não cria cadastro comercial no chat. |
-| 07-vinculo-erp | V1 | Vínculo do contato a um ou mais clientes ou contratos | O mesmo número pode ter casa e comércio. O atendente escolhe o vínculo da conversa. Telefone não escolhe sozinho. |
+| 07-vinculo-erp | V1 | Vínculo do contato a um ou mais clientes ou contratos | O mesmo número pode ter casa e comércio. O atendente escolhe o vínculo da conversa. Telefone não escolhe sozinho. Recorte 04/11/2026: o atendente vinculou `fake-customer-casa` / `fake-contract-casa` e o painel mostrou "Cadastro simulado — casa". O segundo cadastro do catálogo fake não foi escolhido nesta jornada. |
 | 08-referencia-erp | V1 | Referência ao cliente e ao contrato | IDs externos no contato e seleção por conversa. A consulta é sob demanda. |
 | 08-contexto-painel | V1 | Contexto do painel externo | Escopo por usuário, tenant e conversa. Troca curta, sem segredo de ERP ou WhatsApp na URL. |
 | 08-registro-acao | V1 | Registro de ação e falha na linha do tempo | Ator, referência externa, resultado e ID da operação. Sem copiar detalhe financeiro para tabela local. |
@@ -471,9 +471,9 @@ Estado de todas as linhas: pendente.
 | 08-conector-erp | V1 simples | Conector do ERP existente | Um adaptador. Fake só para teste, identificado como simulação. Sem SGP e IXC ao mesmo tempo. |
 | 08-identificar | V1 simples | Identificar cadastro por referência autorizada | Busca e confirmação do vínculo. Identificação não é autenticação. |
 | 08-verificacao-cliente | V1 simples | Verificação de autorização do cliente | Reutiliza o mecanismo do provedor quando D2-02 existir. Até lá a ação sensível permanece oculta. |
-| 08-resumo | V1 simples | Resumo do cliente na lateral | Campos mínimos autorizados, com hora da consulta. ERP fora mostra indisponível e o chat segue. |
-| 08-faturas | V1 simples | Faturas em aberto | Exibição transitória se a API real suportar. Sem tabela local de contas a receber. |
-| 08-segunda-via | V1 simples | Obter e enviar segunda via ou Pix | O ERP fornece o artefato. O chat envia como mensagem ou anexo e registra a ação. Timeout ambíguo não repete o efeito. |
+| 08-resumo | V1 simples | Resumo do cliente na lateral | Campos mínimos autorizados, com hora da consulta. ERP fora mostra indisponível e o chat segue. Recorte 04/11/2026: depois do vínculo, a região ERP mostrou "Cadastro simulado — casa". A hora da consulta e a queda do ERP real não foram medidas. |
+| 08-faturas | V1 simples | Faturas em aberto | Exibição transitória se a API real suportar. Sem tabela local de contas a receber. Recorte 04/11/2026: a consulta ao fake mostrou "fatura simulada em aberto". Não há API real nem tabela financeira. |
+| 08-segunda-via | V1 simples | Obter e enviar segunda via ou Pix | O ERP fornece o artefato. O chat envia como mensagem ou anexo e registra a ação. Timeout ambíguo não repete o efeito. Recorte 04/11/2026: com consentimento `cobranca` ainda na janela, "Enviar documento fatura simulada em aberto" e "Confirmar envio" mostraram "Segunda via enfileirada". Pix, artefato real e timeout ambíguo não foram exercitados. |
 | 08-abrir-cadastro | V1 simples | Abrir cadastro no ERP | Link para o ambiente já existente, sem credencial e sem CPF na URL. |
 | 08-iframe | V1 simples | Painel lateral externo em iframe | Página já existente, origem permitida, sandbox e postMessage com origem verificada. Se a página proibir incorporação, abre fora, sem contornar a proteção. |
 | 08-protocolo-erp | V1 simples | Associar protocolo do ERP | external_protocol é referência adicional. Não substitui o protocolo local já comunicado. |
@@ -484,7 +484,7 @@ Estado de todas as linhas: pendente.
 | 11-rate-limit | V1 | Rate limit da API pública | Por token e por tenant. A API do painel permanece no cookie. |
 | 11-openapi | V1 | Documentação OpenAPI | Gerada do backend Huma. O cliente TypeScript do painel já nasce no M1; esta linha fecha quando a API pública está no contrato publicado. |
 | 11-webhook-conversa | V1 | Webhooks de conversa criada, atribuída e encerrada | HMAC, ID estável do evento, retentativa e orientação de replay para o receptor. |
-| 11-webhook-mensagem | V1 | Webhook de mensagem criada | Mesma entrega durável. Falha do destino não desfaz a mensagem local. |
+| 11-webhook-mensagem | V1 | Webhook de mensagem criada | Mesma entrega durável. Falha do destino não desfaz a mensagem local. Recorte 04/11/2026: um receptor em `127.0.0.1` recebeu `message.created` com `X-ChatISP-Event-Type` e HMAC `sha256=` do corpo, usando o segredo mostrado uma vez no painel. Falha do destino não foi provocada. |
 | 11-api-cadastros | V1 simples | API de atendentes, setores e caixas | API pública lê. Escritas de administração ficam na API autenticada do painel. |
 | 11-dashboard-app | V1 simples | Painel lateral externo (Dashboard App) | Mesma capacidade de 08-iframe. Não é uma segunda interface de ERP construída aqui. |
 | 11-conector-erp | V1 simples | Conector com o ERP na lista de integrações | Mesma capacidade de 08-conector-erp. A pendência de D2-01 continua visível. |
