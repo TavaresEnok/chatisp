@@ -27,6 +27,7 @@ export type QueueItem = {
   protocol: string;
   priorityLabel: string | null;
   unreadCount: number;
+  waitAlert?: boolean;
 };
 
 export type QueueResultState = "loading" | "error" | "ready";

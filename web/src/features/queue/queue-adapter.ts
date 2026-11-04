@@ -2,10 +2,10 @@ import type { components } from "@/api/schema";
 import type { QueueItem } from "./queue-types";
 import type { ConversationCard, AttendancePhase } from "@/features/conversation/workspace-types";
 
-type Item = components["schemas"]["RealtimeStoreQueueItem"];
+type Item = components["schemas"]["RealtimeStoreQueueItem"] & { wait_alert?: boolean };
 
 export function queueItem(item: Item): QueueItem {
-  return { id: item.id, contactLabel: item.unread && item.unread_count === 0 ? `${item.contact_label} — Não lida` : item.contact_label, protocol: item.protocol, priorityLabel: item.priority === "urgent" ? "Urgente" : null, unreadCount: item.unread_count };
+  return { id: item.id, contactLabel: item.unread && item.unread_count === 0 ? `${item.contact_label} — Não lida` : item.contact_label, protocol: item.protocol, priorityLabel: item.priority === "urgent" ? "Urgente" : null, unreadCount: item.unread_count, waitAlert: item.wait_alert === true };
 }
 
 export function queueCard(item: Item, labels?: ReadonlyMap<string, string>): ConversationCard {

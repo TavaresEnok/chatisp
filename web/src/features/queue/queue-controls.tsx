@@ -104,10 +104,12 @@ export function QueueControls(props: QueueControlsProps) {
             {props.items.map((item) => (
               <li key={item.id}>
                 <button type="button" aria-pressed={props.selectedId === item.id} onClick={() => props.onSelect(item.id)}
-                  className="flex min-h-11 w-full flex-wrap items-center gap-2 rounded-lg border p-2 text-left focus-visible:outline-2">
+                  data-wait-alert={item.waitAlert ? "true" : undefined}
+                  className={`flex min-h-11 w-full flex-wrap items-center gap-2 rounded-lg border p-2 text-left focus-visible:outline-2${item.waitAlert ? " border-destructive bg-destructive/10" : ""}`}>
                   <span>{item.contactLabel}</span><span>Protocolo {item.protocol}</span>
                   {item.priorityLabel && <span>Prioridade: {item.priorityLabel}</span>}
                   {item.unreadCount > 0 && <span>{item.unreadCount} não lida(s)</span>}
+                  {item.waitAlert && <span>Passou do tempo de espera.</span>}
                 </button>
               </li>
             ))}
