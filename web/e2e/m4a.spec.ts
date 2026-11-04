@@ -296,7 +296,6 @@ export async function runM4A(browser: Browser, testInfo: { attach(name: string, 
     await expect.poll(async () => (await history()).body.messages.some(message => message.body === `${email}: Olá Cliente Simulado, protocolo ${protocol}.`)).toBe(true);
     evidence.signature = "prefixo do e-mail aplicado uma vez na aceitação";
 
-    const contact = (await history()).body.head.contact_id;
     const consent = agent.page.getByRole("form", { name: "Consentimento do contato" });
     await consent.getByLabel("Finalidade do consentimento").fill("cobranca");
     await consent.getByLabel("Origem").fill("painel");

@@ -160,7 +160,7 @@ export async function runM4BM6(browser: Browser, testInfo: { attach(name: string
       await inbox.waitFor({ state: "visible", timeout: 40_000 });
     } catch (error) {
       const detail = await agent.page.locator("body").innerText({ timeout: 2_000 }).catch(() => "");
-      throw new Error(`painel sem caixa em ${agent.page.url()}: ${detail.slice(0, 500)} | ${error}`);
+      throw new Error(`painel sem caixa em ${agent.page.url()}: ${detail.slice(0, 500)}`, { cause: error });
     }
     await inbox.selectOption(fixture.M3B.Inbox);
     await agent.page.getByRole("tab", { name: "Todas", exact: true }).click();
