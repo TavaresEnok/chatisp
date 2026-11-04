@@ -20,6 +20,7 @@ import { HoursSettings } from "@/features/businesshours/hours-settings";
 import { EmbedSettings } from "@/features/embed/embed-settings";
 import { AuditLog } from "@/features/audit/audit-log";
 import { OpsAlerts } from "@/features/opsalert/ops-alerts";
+import { RetentionPanel } from "@/features/retention/retention-panel";
 import { useState } from "react";
 
 export function SettingsPage() {
@@ -34,6 +35,7 @@ export function SettingsPage() {
       {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <Link to="/configuracoes/canais">Caixas Meta</Link> : null}
       {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <AuditLog key={principal.sessionId} principal={principal} /> : null}
       {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <OpsAlerts key={principal.sessionId} sessionId={principal.sessionId} /> : null}
+      {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <RetentionPanel key={principal.membershipId} /> : null}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <Capacity key={principal.sessionId} principal={principal} />}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <CannedSettings key={principal.membershipId} principal={principal} />}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <HoursSettings key={principal.membershipId} principal={principal} />}

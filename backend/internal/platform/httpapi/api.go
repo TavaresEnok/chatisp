@@ -52,6 +52,7 @@ import (
 	"chatisp/internal/presence"
 	presenceHTTP "chatisp/internal/presence/httpapi"
 	"chatisp/internal/publicapi"
+	retentionHTTP "chatisp/internal/retention/httpapi"
 	"chatisp/internal/sectors"
 	sectorHTTP "chatisp/internal/sectors/httpapi"
 	"chatisp/internal/triage"
@@ -238,6 +239,11 @@ func New(deps Dependencies) *API {
 	registerDistribution(api, deps)
 	registerReports(api, deps)
 	auditview.Mount(router, auditview.Dependencies{Auth: deps.Auth, Store: deps.Store})
+	var retentionAuth retentionHTTP.Authenticator
+	if deps.Auth != nil {
+		retentionAuth = deps.Auth
+	}
+	retentionHTTP.Register(router, retentionHTTP.Dependencies{Auth: retentionAuth, Store: deps.Store, TrustedOrigins: deps.TrustedOrigins})
 	registerRealtimeContract(api)
 	embed.Mount(router, embed.Dependencies{Auth: deps.Auth, Panels: deps.Embed, TrustedOrigins: deps.TrustedOrigins})
 
