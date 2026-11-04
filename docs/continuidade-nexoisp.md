@@ -181,7 +181,7 @@ dependências externas conforme a seção de lacunas acima. Próximo bloco suger
 M7 (relatórios e CSV a partir de eventos/intervalos persistidos) ou M6 contrato/fake
 do ERP e API pública; confirmar prioridade com o proprietário.
 
-## Continuação em 03/11/2026 (relatórios)
+## Relatórios M7, nesta sessão (depois de `a294763`)
 
 ### Implementado
 Relatórios V1 a partir de ciclos, eventos, mensagens, fila e adiamentos já
@@ -202,8 +202,9 @@ gravado (urgente não entra). Atendente não lê outro setor: pedido explícito 
   PostgreSQL desses dois casos e isolamento do atendente de outro setor.
 - `go vet ./internal/reports/ ./internal/platform/httpapi/`: passou.
 - `tsc -b` e Vitest de `attendance-report` mais `panel.test`: passaram (14).
-- Não rodei `go test ./...`, Vitest completo nem E2E. O ESLint global não foi
-  alterado.
+- ESLint só nos arquivos web deste bloco: passou. O ESLint global não foi
+  alterado e não foi reexecutado.
+- Não rodei `go test ./...`, Vitest completo nem E2E.
 
 ### Lacunas que permanecem
 M4B (sem ffmpeg no host), gancho de bot externo, M6 (API pública, webhooks e
