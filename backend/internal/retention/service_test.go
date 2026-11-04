@@ -168,7 +168,7 @@ func TestPurgeRefusesAndDeletesNothing(t *testing.T) {
 		if err := tx.QueryRow(ctx, `SELECT count(*) FROM retention_tasks WHERE tenant_id=$1 AND status='refused'`, s.tenant).Scan(&refused); err != nil {
 			return err
 		}
-		return tx.QueryRow(ctx, `SELECT count(*) FROM deletion_records WHERE tenant_id=$1`, s.tenant).Scan(&deletions)
+		return tx.QueryRow(ctx, `SELECT count(*) FROM retention_deletion_records WHERE tenant_id=$1`, s.tenant).Scan(&deletions)
 	}); err != nil {
 		t.Fatal(err)
 	}

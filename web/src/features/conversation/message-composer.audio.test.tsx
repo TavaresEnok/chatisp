@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MessageComposer } from "@/features/conversation/message-composer";
-import type { ConversationScope } from "@/features/conversation/types";
+import type { ConversationScope, SendAudioCommand } from "@/features/conversation/types";
 
 const scope: ConversationScope = {
   tenantId: "tenant-fixture-a",
@@ -41,7 +41,7 @@ describe("compositor de áudio", () => {
       configurable: true,
       value: { getUserMedia: vi.fn(async () => ({ getTracks: () => [{ stop() {} }] })) },
     });
-    const onSendAudio = vi.fn(async () => undefined);
+    const onSendAudio = vi.fn(async (_command: SendAudioCommand) => undefined);
     render(
       <MessageComposer
         scope={scope}
@@ -58,7 +58,10 @@ describe("compositor de áudio", () => {
     await user.click(screen.getByRole("button", { name: "Enviar áudio original" }));
 
     expect(onSendAudio).toHaveBeenCalledTimes(1);
-    const command = onSendAudio.mock.calls[0][0];
+    const command = onSendAudio.mock.calls[0]?.[0];
+    if (!command) {
+      throw new Error("áudio não enviado");
+    }
     expect(command.intentKey).toBe("chave-audio");
     expect(command.mimeType).toBe("audio/webm");
     expect(command.replyToMessageId).toBe(replyId);

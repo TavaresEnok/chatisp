@@ -24,7 +24,7 @@ A exportação grava `demand.export` na auditoria do provedor, sem o conteúdo d
 
 A política guarda prazos separados para conteúdo, mídia, envelope, log e job, além de um nome curto do provedor. Prazo vazio significa que ainda não foi definido. O teto de 36500 dias é limite do campo, não um prazo legal. D2-06 continua aberta: este software não declara conformidade.
 
-`automatic_purge` só aceita falso. A restrição no banco recusa `true`. `POST /api/panel/retention/purge` grava uma tarefa `refused` por classe, responde 409 e não apaga mensagem, anexo, conversa nem ciclo. Não há agendamento. `deletion_records` existe para uma exclusão futura reaplicável depois de restore; o expurgo desligado não escreve nela.
+`automatic_purge` só aceita falso. A restrição no banco recusa `true`. `POST /api/panel/retention/purge` grava uma tarefa `refused` por classe, responde 409 e não apaga mensagem, anexo, conversa nem ciclo. Não há agendamento. `retention_deletion_records` é a trilha por classe do provedor. A tabela `deletion_records` da migração 00040 continua sendo a que o ensaio de restore reaplica (`attachment` ou `credential_secret`). O expurgo desligado não escreve em nenhuma das duas.
 
 ## Limites do plano
 

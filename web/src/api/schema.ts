@@ -616,6 +616,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panel/inboxes/{inbox_id}/conversations/{conversation_id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["media-accept"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/inboxes/{inbox_id}/conversations/{conversation_id}/media/{media_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["media-get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/inboxes/{inbox_id}/conversations/{conversation_id}/media/{media_id}/convert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["media-convert"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panel/inboxes/{inbox_id}/conversations/{conversation_id}/messages": {
         parameters: {
             query?: never;
@@ -1512,6 +1560,12 @@ export interface components {
             /** @description Token de uso único recebido no convite. */
             token: string;
         };
+        AcceptRequestBody: {
+            attachment_id: string;
+            message_id?: string;
+            reply_to_message_id?: string;
+            voice?: boolean;
+        };
         AcceptedBody: {
             /**
              * @description Pedido recebido.
@@ -2148,6 +2202,23 @@ export interface components {
             phone_number_id: string;
             waba_id: string;
         };
+        MediaMediaItem: {
+            attachment_id: string;
+            conversion_error?: string;
+            conversion_state: string;
+            direction: string;
+            /** Format: int64 */
+            duration_ms?: number;
+            duration_source: string;
+            id: string;
+            kind: string;
+            media_type: string;
+            message_id?: string;
+            output_attachment_id?: string;
+            reply_to_message_id?: string;
+            /** Format: int64 */
+            size_bytes: number;
+        };
         MembershipBody: {
             /**
              * Format: date-time
@@ -2453,6 +2524,7 @@ export interface components {
             unread: boolean;
             /** Format: int64 */
             unread_count: number;
+            wait_alert: boolean;
             /** Format: date-time */
             wait_since: string;
         };
@@ -7561,6 +7633,312 @@ export interface operations {
             };
             /** @description Conflito */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "media-accept": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                inbox_id: string;
+                conversation_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaMediaItem"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "media-get": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                inbox_id: string;
+                conversation_id: string;
+                media_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaMediaItem"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "media-convert": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                inbox_id: string;
+                conversation_id: string;
+                media_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaMediaItem"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };

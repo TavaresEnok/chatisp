@@ -29,7 +29,13 @@ export function usageBounds(startDay: string, endDay: string): { from: string; t
 }
 
 function nextCalendarDay(day: string): string {
-  const [year, month, date] = day.split("-").map(Number);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!match) {
+    return day;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const date = Number(match[3]);
   const cursor = new Date(Date.UTC(year, month - 1, date));
   cursor.setUTCDate(cursor.getUTCDate() + 1);
   const y = cursor.getUTCFullYear();

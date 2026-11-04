@@ -39,7 +39,7 @@ it("atualiza histórico nos eventos reais e remove dados do supervisor ao trocar
   let status = "open"; let added = false; let historyCalls = 0;
   const head = { id: "c1", protocol: "PRIVADO-123", contact_id: "cliente", assignee_id: "operador", status: "open", version: 3 };
   const queue: components["schemas"]["RealtimeStoreQueuePage"] = {
-    items: [{ id: head.id, protocol: head.protocol, contact_id: head.contact_id, assignee_id: head.assignee_id, status: head.status, inbox_id: "i1", sector_id: "s1", contact_label: "Contato autorizado", priority: "normal", unread: false, unread_count: 0, last_message_at: "2026-10-31T12:00:00Z", wait_since: "2026-10-31T12:00:00Z" }],
+    items: [{ id: head.id, protocol: head.protocol, contact_id: head.contact_id, assignee_id: head.assignee_id, status: head.status, inbox_id: "i1", sector_id: "s1", contact_label: "Contato autorizado", priority: "normal", unread: false, unread_count: 0, last_message_at: "2026-10-31T12:00:00Z", wait_since: "2026-10-31T12:00:00Z", wait_alert: false }],
     counts: { mine: 1, all: 1, unassigned: 0 }, event_next_cursor: 0, page_cursor: "",
   };
   const directory: components["schemas"]["OperatorDirectoryPage"] = { items: [{ membership_id: "operador", label: "operador@example.test", role: "agent" }], next_cursor: null };

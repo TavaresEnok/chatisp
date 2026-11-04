@@ -45,7 +45,9 @@ CREATE TABLE retention_tasks (
 
 CREATE INDEX retention_tasks_created_idx ON retention_tasks (tenant_id, created_at);
 
-CREATE TABLE deletion_records (
+-- Nome distinto de deletion_records (00040): o ensaio de restore reaplica
+-- anexo e segredo nessa tabela. Esta trilha é a do provedor, por classe.
+CREATE TABLE retention_deletion_records (
     tenant_id uuid NOT NULL REFERENCES tenants (id),
     id uuid NOT NULL,
     class text NOT NULL,
@@ -54,20 +56,20 @@ CREATE TABLE deletion_records (
     note text NOT NULL,
     recorded_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id),
-    CONSTRAINT deletion_records_class_chk CHECK (class IN ('content', 'media', 'envelope', 'log', 'job')),
-    CONSTRAINT deletion_records_target_chk CHECK (
+    CONSTRAINT retention_deletion_records_class_chk CHECK (class IN ('content', 'media', 'envelope', 'log', 'job')),
+    CONSTRAINT retention_deletion_records_target_chk CHECK (
         char_length(btrim(target_type)) BETWEEN 1 AND 64
         AND target_type = btrim(target_type)
     ),
-    CONSTRAINT deletion_records_note_chk CHECK (char_length(btrim(note)) BETWEEN 1 AND 500)
+    CONSTRAINT retention_deletion_records_note_chk CHECK (char_length(btrim(note)) BETWEEN 1 AND 500)
 );
 
 ALTER TABLE tenant_retention_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenant_retention_profiles FORCE ROW LEVEL SECURITY;
 ALTER TABLE retention_tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE retention_tasks FORCE ROW LEVEL SECURITY;
-ALTER TABLE deletion_records ENABLE ROW LEVEL SECURITY;
-ALTER TABLE deletion_records FORCE ROW LEVEL SECURITY;
+ALTER TABLE retention_deletion_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE retention_deletion_records FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON tenant_retention_profiles
     FOR ALL TO chatisp_app
@@ -79,14 +81,14 @@ CREATE POLICY tenant_isolation ON retention_tasks
     USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
     WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
 
-CREATE POLICY tenant_isolation ON deletion_records
+CREATE POLICY tenant_isolation ON retention_deletion_records
     FOR ALL TO chatisp_app
     USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
     WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
 
 GRANT SELECT, INSERT, UPDATE ON tenant_retention_profiles TO chatisp_app;
 GRANT SELECT, INSERT ON retention_tasks TO chatisp_app;
-GRANT SELECT, INSERT ON deletion_records TO chatisp_app;
+GRANT SELECT, INSERT ON retention_deletion_records TO chatisp_app;
 
 -- +goose StatementBegin
 CREATE FUNCTION plan_guard_new_inbox()

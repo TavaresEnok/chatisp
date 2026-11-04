@@ -221,3 +221,34 @@ Entrou o bloco M4B na `continuation/m5-runtime-panel`, por merge sem rebase de `
 O merge `122e744` trouxe `continuation/m7-platform-usage`: contagens do superadmin sem corpo de conversa, auditoria e o alerta de espera na fila. O conflito em Configurações ficou com o painel externo e o registro de auditoria. `go test -count=1 ./internal/platformusage/` e `go vet ./internal/platformusage/` passaram neste repositório.
 
 O merge `e3daa70` trouxe `continuation/m8-ops-alerts`: job acima do limite gravado, conector desconectado e webhook pendente, só para o admin. Carga e restauração continuam de fora. Configurações também mostra esses alertas. `go test -count=1 ./internal/opsalert/` e `go vet ./internal/opsalert/` passaram. O Vitest dessa tela não foi repetido aqui.
+
+## Integração das frentes em 04/11/2026
+
+A árvore de `continuation/m5-runtime-panel` estava limpa em `6bf5c01`, descendente de `c2239cd`. Não houve deploy, chamada a Meta, ERP ou Evolution, nem alteração de Paseo ou das worktrees em `/home/enok/srv_projetos/worktrees`.
+
+Já estavam na branch, sem commit novo em relação a esse HEAD:
+- `continuation/m7-platform-usage` (merge `122e744`): auditoria, uso do superadmin e destaque de espera na fila.
+- `continuation/m6-public-read` (`c680fdd`, `46b3816`).
+- `continuation/m4b-media` (merge `9e39c9e`). A ref local dessa branch não existe mais; a ponta `b4bfc60` já era o segundo pai do merge.
+- `continuation/m6-embed` (ponta `dd25b4b`, já ancestral).
+
+Merges `--no-ff` desta sessão:
+- `336d7b6` traz o commit `1d24fe7` de `continuation/m8-ops-alerts` (rótulo só usa fila e tipo conhecidos). Sem conflito.
+- `53194f9` traz `continuation/m8-restore-drill` (`5f17f1d`). Sem conflito.
+- `ea55df0` traz `continuation/m6-erp-work` (`b301143`): contrato simulado e webhook de saída assinado. Sem conflito.
+- `4b704c5` traz `continuation/m5-bot-hook`. Conflito em `api.go` e `runtime.go`: ficaram o embed, o uso da plataforma, a leitura pública, os alertas e o mount do gancho.
+- `cded6e2` traz `continuation/m7-retention-export`. Conflito em `api.go` e `settings-page.tsx`: ficaram auditoria, alertas, painel externo e o painel de retenção. A recusa de expurgo permanece (409, `refused`, nada apagado).
+
+Ficou de fora `continuation/m6-erp-fake`: não estava na lista e continua em `c2239cd`.
+
+`00033` e `00040` criavam `deletion_records` com colunas incompatíveis. A trilha por classe do M7 passou a `retention_deletion_records`. `deletion_records` continua a tabela que o ensaio de restore reaplica (`attachment` ou `credential_secret`). O expurgo desligado não escreve em nenhuma das duas. `./scripts/generate.sh` atualizou OpenAPI, `schema.ts` e os modelos sqlc, inclusive `wait_alert` e a rota de mídia. O destaque de espera e o relatório M7 permanecem.
+
+### Verificações desta sessão
+
+`TMPDIR=/tmp`. `go vet` passou em `auditview`, `platformusage`, `publicapi`, `media` (e `media/httpapi`), `embed`, `opsalert`, `restoredrill`, `erp`, `outwebhook`, `bothook` (e `bothook/httpapi`), `retention` e `retention/httpapi`.
+
+`go test -count=1` dos mesmos pacotes: passaram `auditview` (3,2s), `platformusage` (2,6s), `publicapi` (1,8s), `media` (1,9s), `embed`, `opsalert`, `erp` (1,9s), `outwebhook` (1,8s), `bothook` (2,0s), `retention` (1,9s) e `retention/httpapi` (1,9s). `media/httpapi` e `bothook/httpapi` não têm testes. `restoredrill` falhou só em `TestDrillRestoresDumpAndReapplies`: o ensaio recusou com "diretório de dados do checkout real", porque o PostgreSQL embutido sobe em `chat-isp/.tmp/testdb`. Os outros testes desse pacote não foram listados como falha.
+
+`tsc -b` falhou na primeira execução: `wait_alert` ficou obrigatório no schema gerado (`history-events.test.tsx`, `m3a-attendance.test.tsx`, `queue-wait-alert.test.tsx`), `platform-usage.ts` lia mês possivelmente ausente e o mock de áudio não tinha argumento. Os fixtures passaram a declarar `wait_alert: false` quando a fila não marca espera. A segunda `tsc -b` passou.
+
+Vitest antes desse ajuste: 8 arquivos, 14 testes, todos passaram (`bot-hook-notice`, `retention-panel`, `ops-alerts`, `queue-wait-alert`, `audit-log`, `message-composer.audio`, `embed`, `attendance-report`). Depois do ajuste: 6 arquivos, 15 testes, todos passaram (`queue-wait-alert`, `message-composer.audio`, `history-events`, `m3a-attendance`, `bot-hook-notice`, `retention-panel`). Não rodei a suíte Go inteira, o Vitest completo nem E2E.

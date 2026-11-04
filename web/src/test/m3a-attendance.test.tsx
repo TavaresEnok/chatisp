@@ -114,7 +114,7 @@ it("revogação pelo socket confirmada pela sessão limpa conversa, histórico, 
   vi.stubGlobal("WebSocket", Socket);
   const head = { id: "c1", protocol: "M3A-SUPORTE", contact_id: "p1", assignee_id: "", summary: "Atendimento", status: "open", version: 2 };
   const queue: components["schemas"]["RealtimeStoreQueuePage"] = {
-    items: [{ id: head.id, protocol: head.protocol, contact_id: head.contact_id, assignee_id: null, status: head.status, inbox_id: "i1", sector_id: "s1", contact_label: "Contato autorizado", priority: "normal", unread: false, unread_count: 0, last_message_at: "2026-10-31T12:00:00Z", wait_since: "2026-10-31T12:00:00Z" }],
+    items: [{ id: head.id, protocol: head.protocol, contact_id: head.contact_id, assignee_id: null, status: head.status, inbox_id: "i1", sector_id: "s1", contact_label: "Contato autorizado", priority: "normal", unread: false, unread_count: 0, last_message_at: "2026-10-31T12:00:00Z", wait_since: "2026-10-31T12:00:00Z", wait_alert: false }],
     counts: { mine: 1, all: 1, unassigned: 1 }, event_next_cursor: 1, page_cursor: "",
   };
   const directory: components["schemas"]["OperatorDirectoryPage"] = { items: [{ membership_id: "member", label: principal.email, role: "agent" }], next_cursor: null };

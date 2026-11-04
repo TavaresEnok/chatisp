@@ -132,6 +132,48 @@ type AutomationDispatch struct {
 	AttemptID      *uuid.UUID
 }
 
+type BotHook struct {
+	TenantID         uuid.UUID
+	InboxID          uuid.UUID
+	TokenHash        []byte
+	TokenPrefix      string
+	DeadlineSeconds  int32
+	Enabled          bool
+	SwitchGeneration int64
+	Version          int64
+	Simulation       string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type BotHookCommand struct {
+	TenantID    uuid.UUID
+	ScopeID     uuid.UUID
+	Operation   string
+	RequestID   uuid.UUID
+	RequestHash []byte
+	Response    json.RawMessage
+	CreatedAt   pgtype.Timestamptz
+}
+
+type BotSession struct {
+	TenantID       uuid.UUID
+	ID             uuid.UUID
+	InboxID        uuid.UUID
+	ConversationID uuid.UUID
+	GrantedEpoch   int64
+	DeadlineAt     pgtype.Timestamptz
+	State          string
+	Receipt        *string
+	HandoffID      *uuid.UUID
+	SectorID       *uuid.UUID
+	Reason         *string
+	Note           *string
+	Notice         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type BusinessHoursCommand struct {
 	TenantID     uuid.UUID
 	MembershipID uuid.UUID
@@ -379,6 +421,14 @@ type CredentialSecret struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type DeletionRecord struct {
+	ID         uuid.UUID
+	TenantID   uuid.UUID
+	Subject    string
+	SubjectID  uuid.UUID
+	RecordedAt pgtype.Timestamptz
+}
+
 type DispatchPolicyDecision struct {
 	TenantID       uuid.UUID
 	ID             uuid.UUID
@@ -415,6 +465,44 @@ type DistributionSetting struct {
 	TenantID         uuid.UUID
 	WaitAlertSeconds int32
 	Version          int64
+}
+
+type ErpAction struct {
+	TenantID       uuid.UUID
+	ID             uuid.UUID
+	ConnectionID   uuid.UUID
+	ConversationID *uuid.UUID
+	Capability     string
+	LocalKey       string
+	RequestHash    []byte
+	Effect         string
+	Outcome        string
+	ExternalRef    *string
+	CreatedAt      pgtype.Timestamptz
+}
+
+type ErpConnection struct {
+	TenantID     uuid.UUID
+	ID           uuid.UUID
+	Driver       string
+	Simulated    bool
+	Enabled      bool
+	Availability string
+	SectorID     *uuid.UUID
+	Capabilities []string
+	CreatedAt    pgtype.Timestamptz
+}
+
+type ErpLink struct {
+	TenantID           uuid.UUID
+	ID                 uuid.UUID
+	ContactID          uuid.UUID
+	ConversationID     *uuid.UUID
+	ExternalCustomerID string
+	ExternalContractID *string
+	ExternalProtocol   *string
+	Selected           bool
+	CreatedAt          pgtype.Timestamptz
 }
 
 type IdempotencyRecord struct {
@@ -522,6 +610,25 @@ type LifecycleWarningRequest struct {
 	ResolvedAt     pgtype.Timestamptz
 }
 
+type MediaItem struct {
+	TenantID           uuid.UUID
+	ID                 uuid.UUID
+	ConversationID     uuid.UUID
+	MessageID          *uuid.UUID
+	ReplyToMessageID   *uuid.UUID
+	AttachmentID       uuid.UUID
+	OutputAttachmentID *uuid.UUID
+	Direction          string
+	Kind               string
+	MediaType          string
+	SizeBytes          int64
+	DurationMs         *int64
+	DurationSource     string
+	ConversionState    string
+	ConversionError    string
+	CreatedAt          pgtype.Timestamptz
+}
+
 type Membership struct {
 	ID        uuid.UUID
 	TenantID  uuid.UUID
@@ -552,6 +659,7 @@ type Message struct {
 	Historical         bool
 	ContentKind        string
 	ContentContext     json.RawMessage
+	ReplyToMessageID   *uuid.UUID
 }
 
 type MessageStatusEvent struct {
@@ -643,6 +751,23 @@ type NotificationPreference struct {
 	UpdatedAt    pgtype.Timestamptz
 }
 
+type OpsAlert struct {
+	TenantID   uuid.UUID
+	ID         uuid.UUID
+	Signal     string
+	SubjectKey string
+	Label      string
+	OpenedAt   pgtype.Timestamptz
+	ResolvedAt pgtype.Timestamptz
+}
+
+type OpsAlertSetting struct {
+	TenantID          uuid.UUID
+	JobAgeSeconds     int32
+	WebhookAgeSeconds int32
+	Version           int64
+}
+
 type OutboundAttempt struct {
 	TenantID          uuid.UUID
 	ID                uuid.UUID
@@ -714,6 +839,24 @@ type ProtocolCounter struct {
 	LastValue int64
 }
 
+type ProviderEmbedSetting struct {
+	TenantID      uuid.UUID
+	Version       int64
+	AllowedOrigin string
+	PanelUrl      string
+	UpdatedAt     pgtype.Timestamptz
+}
+
+type PublicReadToken struct {
+	ID           uuid.UUID
+	TenantID     uuid.UUID
+	SecretHash   []byte
+	Scope        string
+	RevokedAt    pgtype.Timestamptz
+	RequestLimit int32
+	CreatedAt    pgtype.Timestamptz
+}
+
 type RealtimeEvent struct {
 	TenantID      uuid.UUID
 	Seq           int64
@@ -730,6 +873,25 @@ type RealtimeTenantCursor struct {
 	TenantID    uuid.UUID
 	Seq         int64
 	RetainAfter int64
+}
+
+type RetentionDeletionRecord struct {
+	TenantID   uuid.UUID
+	ID         uuid.UUID
+	Class      string
+	TargetType string
+	TargetID   *uuid.UUID
+	Note       string
+	RecordedAt pgtype.Timestamptz
+}
+
+type RetentionTask struct {
+	TenantID  uuid.UUID
+	ID        uuid.UUID
+	Class     string
+	Status    string
+	Reason    string
+	CreatedAt pgtype.Timestamptz
 }
 
 type Sector struct {
@@ -799,6 +961,18 @@ type TenantJobSlot struct {
 	TenantID  uuid.UUID
 	QueueName string
 	MaxSlots  int32
+}
+
+type TenantRetentionProfile struct {
+	TenantID       uuid.UUID
+	DisplayName    *string
+	ContentDays    *int32
+	MediaDays      *int32
+	EnvelopeDays   *int32
+	LogDays        *int32
+	JobDays        *int32
+	AutomaticPurge bool
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type TriageCommand struct {
@@ -875,6 +1049,22 @@ type WaTemplate struct {
 	SyncedAt   pgtype.Timestamptz
 }
 
+type WebhookDelivery struct {
+	TenantID       uuid.UUID
+	ID             uuid.UUID
+	SubscriptionID uuid.UUID
+	EventType      string
+	SourceID       uuid.UUID
+	Body           []byte
+	Status         string
+	AttemptCount   int32
+	NextAttemptAt  pgtype.Timestamptz
+	OccurredAt     pgtype.Timestamptz
+	LastStatus     *int32
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type WebhookItem struct {
 	TenantID      uuid.UUID
 	ID            uuid.UUID
@@ -887,4 +1077,16 @@ type WebhookItem struct {
 	State         string
 	Payload       json.RawMessage
 	CreatedAt     pgtype.Timestamptz
+}
+
+type WebhookSubscription struct {
+	TenantID         uuid.UUID
+	ID               uuid.UUID
+	Url              string
+	SecretCiphertext []byte
+	SecretKeyVersion string
+	SecretAad        string
+	Events           []string
+	Enabled          bool
+	CreatedAt        pgtype.Timestamptz
 }
