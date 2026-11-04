@@ -4,6 +4,7 @@ import { listHoursInboxes, listHoursSectors } from "@/api/businesshours";
 import * as automation from "@/api/automation";
 import type { TriageOption } from "@/api/automation";
 import { PanelRequestError } from "@/api/problems";
+import { BotHookNoticePanel } from "@/features/bothook/bot-hook-notice";
 import { presenceScope } from "@/features/presence/operator-presence";
 import { useSessionStore, type PanelPrincipal } from "@/stores/session-store";
 
@@ -38,6 +39,7 @@ function AutomationBody({ principal }: { principal: PanelPrincipal }) {
     <PresenceToleranceForm principal={principal} />
     <label>Caixa <select value={inbox} onChange={e => setInbox(e.target.value)}><option value="">Selecione</option>{boxes.data?.inboxes?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
     {boxes.isError && <p role="alert">Não foi possível listar as caixas.</p>}
+    {inbox && <BotHookNoticePanel key={`${scope}:hook:${inbox}`} inbox={inbox} />}
     {inbox && <ReopenWindowForm key={`${scope}:reopen:${inbox}`} principal={principal} inbox={inbox} />}
     {inbox && <TriageMenuForm key={`${scope}:menu:${inbox}`} principal={principal} inbox={inbox} />}
   </section>;
