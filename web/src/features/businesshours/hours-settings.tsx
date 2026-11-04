@@ -88,6 +88,10 @@ function HoursBody({ principal }: { principal: PanelPrincipal }) {
   function onDenied(error: unknown) {
     denyHoursScope(client, principal, denialMessage(error));
   }
+  const onDeniedRef = useRef(onDenied);
+  useLayoutEffect(() => {
+    onDeniedRef.current = onDenied;
+  });
   const inboxes = useQuery({
     queryKey: hoursKey(principal, "inboxes"),
     queryFn: ({ signal }) => readScoped(scope, signal, () => listHoursInboxes(signal), onDenied),
@@ -115,7 +119,7 @@ function HoursBody({ principal }: { principal: PanelPrincipal }) {
   }), [token]);
   useLayoutEffect(() => {
     const error = denied(inboxes.error) ? inboxes.error : sectors.error;
-    if (denied(error)) onDenied(error);
+    if (denied(error)) onDeniedRef.current(error);
   }, [inboxes.error, sectors.error]);
   const writable = principal.role === "admin";
   if (revoked) {
@@ -178,6 +182,10 @@ function HoursEditor({
   const revokedRef = useRef(false);
   const scope: HoursLifetime = { closed, revoked: revokedRef };
   const key = hoursKey(principal, inboxId, "configuration");
+  const onDeniedRef = useRef(onDenied);
+  useLayoutEffect(() => {
+    onDeniedRef.current = onDenied;
+  });
   const stillCurrent = () => alive(parent) && alive(scope);
   const query = useQuery({
     queryKey: key,
@@ -205,10 +213,10 @@ function HoursEditor({
     revokedRef.current = true;
   }), [token]);
   useLayoutEffect(() => {
-    if (denied(query.error)) onDenied(query.error);
+    if (denied(query.error)) onDeniedRef.current(query.error);
   }, [query.error]);
   if (query.isPending) return <p>Carregando horário…</p>;
-  if (query.isError || !stillCurrent()) return <p>Não foi possível carregar o horário.</p>;
+  if (query.isError) return <p>Não foi possível carregar o horário.</p>;
   return (
     <HoursForm
       key={`${query.data.version}:${query.data.configured}`}

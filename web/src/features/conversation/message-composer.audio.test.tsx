@@ -41,7 +41,7 @@ describe("compositor de áudio", () => {
       configurable: true,
       value: { getUserMedia: vi.fn(async () => ({ getTracks: () => [{ stop() {} }] })) },
     });
-    const onSendAudio = vi.fn(async (_command: SendAudioCommand) => undefined);
+    const onSendAudio = vi.fn<(command: SendAudioCommand) => Promise<void>>(async () => undefined);
     render(
       <MessageComposer
         scope={scope}

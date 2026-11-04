@@ -73,23 +73,33 @@ function AttendancePage({ principal }: { principal: PanelPrincipal }) {
   useNotificationEvents(a.inbox ? `${scope}:${a.inbox}` : null, prefs.data ?? { sound: false, browser: false, silent: true }, a.notificationBatch, () => {});
   const contactId = !scopeBlocked && !queueRevoked && a.detail.data?.head.id === a.selected && !a.detail.isError ? a.detail.data.head.contact_id : null;
   const rows = q.result.data?.items ?? [];
+  const selectedId = a.selected;
+  const detailDenied = a.detail.isError && a.detail.error instanceof Error && "status" in a.detail.error && [403, 404].includes(Number(a.detail.error.status));
+  const missingFromQueue = q.result.isSuccess && selectedId !== null && !rows.some((row) => row.id === selectedId);
+  const selectionInvalid = selectedId !== null && (queueRevoked || a.realtime === "revoked" || missingFromQueue || detailDenied);
+  const lossKey = selectionInvalid ? `${selectedId}\0${a.inbox ?? ""}\0${queueRevoked || a.realtime === "revoked" || a.detail.isError ? "purge" : "keep"}` : null;
+  const [handledLoss, setHandledLoss] = useState<string | null>(null);
+  const [pendingPurge, setPendingPurge] = useState<{ inbox: string | null; selected: string; nonce: number } | null>(null);
+  if (lossKey === null) {
+    if (handledLoss !== null) setHandledLoss(null);
+  } else if (lossKey !== handledLoss && selectedId !== null) {
+    setHandledLoss(lossKey);
+    setWorkspaceRevision((value) => value + 1);
+    if (queueRevoked || a.realtime === "revoked" || a.detail.isError) setPendingPurge(current => ({ inbox: a.inbox, selected: selectedId, nonce: (current?.nonce ?? 0) + 1 }));
+    a.setSelected(null);
+  }
   useEffect(() => {
-    if (a.selected && (queueRevoked || a.realtime === "revoked" || (q.result.isSuccess && !rows.some(row => row.id === a.selected)) || (a.detail.isError && a.detail.error instanceof Error && "status" in a.detail.error && [403, 404].includes(Number(a.detail.error.status))))) {
-      if (queueRevoked || a.realtime === "revoked" || a.detail.isError) {
-        const scope = [principal.tenantId, principal.userId, principal.sessionId, principal.role, principal.membershipId];
-        const history = ["attendance", ...scope, a.inbox ?? "", "history", a.selected];
-        const annotations = ["m3b-annotations", ...scope, a.inbox, a.selected];
-        void client.cancelQueries({ queryKey: history }); client.removeQueries({ queryKey: history });
-        void client.cancelQueries({ queryKey: annotations }); client.removeQueries({ queryKey: annotations });
-        client.removeQueries({ queryKey: queryKeys.contactHistory(scope) });
-        void client.cancelQueries({ queryKey: ["m3b-directory", ...scope] }); client.removeQueries({ queryKey: ["m3b-directory", ...scope] });
-        forgetPolicyQueries(client, principal, a.inbox ?? undefined);
-        forgetAttachmentQueries(client, principal, a.inbox ?? undefined, a.selected);
-      }
-      a.setSelected(null);
-      setWorkspaceRevision(x => x + 1);
-    }
-  }, [a.selected, a.inbox, a.detail.isError, a.detail.error, a.realtime, q.result.isSuccess, queueRevoked, rows, a.setSelected, client, principal]);
+    if (!pendingPurge) return;
+    const scope = [principal.tenantId, principal.userId, principal.sessionId, principal.role, principal.membershipId];
+    const history = ["attendance", ...scope, pendingPurge.inbox ?? "", "history", pendingPurge.selected];
+    const annotations = ["m3b-annotations", ...scope, pendingPurge.inbox, pendingPurge.selected];
+    void client.cancelQueries({ queryKey: history }); client.removeQueries({ queryKey: history });
+    void client.cancelQueries({ queryKey: annotations }); client.removeQueries({ queryKey: annotations });
+    client.removeQueries({ queryKey: queryKeys.contactHistory(scope) });
+    void client.cancelQueries({ queryKey: ["m3b-directory", ...scope] }); client.removeQueries({ queryKey: ["m3b-directory", ...scope] });
+    forgetPolicyQueries(client, principal, pendingPurge.inbox ?? undefined);
+    forgetAttachmentQueries(client, principal, pendingPurge.inbox ?? undefined, pendingPurge.selected);
+  }, [pendingPurge, client, principal]);
   const options: QueueFilterOptions = { status: [{ value: "triage", label: "Triagem" }, { value: "open", label: "Aberta" }, { value: "waiting_customer", label: "Aguardando cliente" }, { value: "closed", label: "Encerrada" }], sector: (sectors.data ?? []).map(s => ({ value: s.id, label: s.name })), assignee: operatorEntries.map(entry => ({ value: entry.membership_id, label: entry.label })), inbox: (a.boxes.data?.inboxes ?? []).map(box => ({ value: box.id, label: box.name })), tag: (tagCatalog.data ?? []).map(t => ({ value: t.id, label: t.name })) };
   function changedSector() {
     const base = ["attendance", ...directoryKey];
