@@ -82,6 +82,8 @@ mkdir -p "$dir"
 	printf 'CHATISP_DEV_API_ORIGIN=%s\n' "${CHATISP_DEV_API_ORIGIN-}"
 	printf 'CHATISP_DEV_VITE_HOST=%s\n' "${CHATISP_DEV_VITE_HOST-}"
 	printf 'CHATISP_DEV_VITE_PORT=%s\n' "${CHATISP_DEV_VITE_PORT-}"
+	printf 'CHATISP_DEV_TLS=%s\n' "${CHATISP_DEV_TLS-}"
+	printf 'CHATISP_DEV_TLS_CERT=%s\n' "${CHATISP_DEV_TLS_CERT-}"
 } >"$dir/vite.env"
 printf '%s\n' "$@" >"$dir/vite.args"
 echo $$ >"$dir/vite.pid"
@@ -147,7 +149,7 @@ set -euo pipefail
 dir=${CHATISP_DEV_TEST_DIR:?}
 mkdir -p "$dir"
 joined="$*"
-if [[ "$joined" == *devdb* ]]; then
+if [[ "$joined" == *devdb* || "$joined" == *dev-prepare* ]]; then
 	cat <<ENV
 CHATISP_DATABASE_URL=postgresql://postgres@127.0.0.1:9/postgres?sslmode=disable
 CHATISP_APP_DATABASE_URL=postgresql://app@127.0.0.1:9/db?sslmode=disable
@@ -243,6 +245,7 @@ run_launcher() {
 		CHATISP_DEV_PG_LOG="$data.log" \
 		CHATISP_DEV_READY_TIMEOUT="$timeout" \
 		CHATISP_DEV_API_MODE="$mode" \
+		CHATISP_DEV_TLS="${CHATISP_DEV_TLS-}" \
 		CHATISP_HTTP_ADDR="$api" \
 		CHATISP_METRICS_ADDR="$metrics" \
 		CHATISP_DEV_PG_HOST=127.0.0.1 \
@@ -414,6 +417,21 @@ assert_alive "$bystander" "processo alheio"
 if ! grep -q "não altera o processo" "$scenario/log"; then
 	fail "falta aviso de que a porta ocupada não é alterada"
 fi
+
+# Modo HTTPS: origem https, certificado descartável existe durante a subida e some ao sair.
+read -r tls_api tls_metrics tls_pg tls_vite <<<"$(free_ports 4)"
+scenario=$work/tls
+mkdir -p "$scenario/run"
+CHATISP_DEV_TLS=1 run_launcher "$scenario/log" "$scenario/run" "$scenario/pg" "127.0.0.1:${tls_api}" "127.0.0.1:${tls_metrics}" "$tls_pg" "$tls_vite" "fail" "15"
+launcher=$launcher_pid
+set +e
+wait_exit "$launcher" 20
+set -e
+grep -q "CHATISP_PANEL_ORIGINS=https://127.0.0.1:${tls_vite}" "$scenario/run/api.env" || fail "modo HTTPS não passou a origem https"
+grep -q "CHATISP_DEV_TLS=1" "$scenario/run/vite.env" || fail "modo HTTPS não chegou ao Vite"
+tls_cert=$(sed -n 's/^CHATISP_DEV_TLS_CERT=//p' "$scenario/run/vite.env")
+case "$tls_cert" in /tmp/chatisp-dev-tls-*/cert.pem) ;; *) fail "certificado descartável fora do esperado: $tls_cert" ;; esac
+[ ! -e "$tls_cert" ] || fail "certificado descartável não foi apagado ao sair"
 
 # Falha da API encerra Vite e PostgreSQL.
 read -r fail_api fail_metrics fail_pg fail_vite <<<"$(free_ports 4)"

@@ -1,6 +1,6 @@
 # Matriz de requisitos V1 e V1 simples
 
-Contagem: A conferir: 2; Implementado e verificado: 185; Implementado, aguardando homologação externa: 42; Não implementado: 5; Parcial, com lacuna concreta: 23.
+Contagem: Implementado e verificado: 187; Implementado, aguardando homologação externa: 42; Não implementado: 5; Parcial, com lacuna concreta: 23.
 
 Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1 a M8 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
 
@@ -23,7 +23,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 06-fuso | M1 | V1 | Implementado e verificado | businesshours TestBoundariesAndDST, reports (fuso do provedor), lifecycle/service_test.go usam o fuso do tenant |
 | 13-painel-web | M1 | V1 | Parcial, com lacuna concreta | jornadas reais no Chromium 140 (05/11/2026) exercitaram Painel, Conversas, Relatórios e Configurações com login e sessão; Contatos e Equipes só em Vitest; responsividade e acessibilidade não auditadas |
 | 13-responsiva | M1 | V1 | Parcial, com lacuna concreta | sem verificação em navegador nesta rodada |
-| 13-pt-br | M1 | V1 | A conferir | — |
+| 13-pt-br | M1 | V1 | Implementado e verificado | web/index.html lang="pt-BR"; varredura de literais em inglês nos .tsx não achou rótulos de interface em inglês; mensagens do backend em português (problemas HTTP, validações); jornadas E2E no Chromium em 05/11/2026 só com textos em português. Sem auditoria linguística humana |
 | 13-a11y | M1 | V1 | Parcial, com lacuna concreta | sem auditoria em navegador nesta rodada; Vitest com rótulos passou |
 | 13-self-host | M1 | V1 | Parcial, com lacuna concreta | deploy/ existe; não executado sem Docker |
 | 13-saas | M1 | V1 | Implementado e verificado | testes com segundo tenant: platform/db/tenant_status_gate_test.go, ingress/authmeta/handler_test.go |
@@ -114,7 +114,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 07-editar | M3 | V1 | Implementado e verificado | TestDirectoryPGHTTP, TestContactDocuments |
 | 07-historico | M3 | V1 | Implementado e verificado | TestHistoryEvents / history-events.test.tsx, TestDirectoryPGHTTP; features/conversation/conversation-sidebar.test.tsx |
 | 07-bloquear | M3 | V1 | Implementado e verificado | TestBlockedContactQuarantinesInboundAndStopsPendingDispatch (pipeline/m3_contact_block_test.go) |
-| 07-mesmo-numero | M3 | V1 | A conferir | — |
+| 07-mesmo-numero | M3 | V1 | Implementado e verificado | TestSameNumberInTwoProvidersStaysSeparate (contactdirectory/httpapi/same_number_test.go): mesmo telefone em dois provedores gera dois contatos, leitura cruzada recusada, lista de cada provedor só com o seu; contacts_phone_idx não é único |
 | 07-email | M3 | V1 simples | Parcial, com lacuna concreta | contacts-page.tsx e DirectoryPGHTTP cobrem nome/telefone/e-mail/observações no cadastro; teste dedicado de e-mail e notas do contato não achado |
 | 07-avatar | M3 | V1 simples | Não implementado | campo avatar_reference opaco existe e nada o preenche: a Cloud API não entrega foto de perfil e não há armazenamento/serviço de avatar. Renderizar uma URL arbitrária vazaria o IP do atendente; precisa de decisão de fonte e de proxy seguro antes de exibir |
 | 07-notas | M3 | V1 simples | Parcial, com lacuna concreta | contacts-page.tsx e DirectoryPGHTTP cobrem nome/telefone/e-mail/observações no cadastro; teste dedicado de e-mail e notas do contato não achado |
