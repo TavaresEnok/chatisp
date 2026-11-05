@@ -1,6 +1,6 @@
 # Matriz de requisitos V1 e V1 simples
 
-Contagem: A conferir: 48; Implementado e verificado: 155; Implementado, aguardando homologação externa: 35; Parcial, com lacuna concreta: 19.
+Contagem: A conferir: 48; Implementado e verificado: 157; Implementado, aguardando homologação externa: 35; Parcial, com lacuna concreta: 17.
 
 Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1 a M8 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
 
@@ -174,7 +174,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 05-disponibilidade | M5 | V1 | Implementado e verificado | TestPresencePostgres (presence); features/queue |
 | 05-prioridade-espera | M5 | V1 | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
 | 05-reatribuir-desativado | M5 | V1 | Implementado e verificado | TestReleaseDisabledReturnsConversationsToTheQueue: conversa volta à fila com evento offline_unassigned e intervalo de fila; repetição não duplica. Distribuição automática posterior reutiliza a fila |
-| 05-supervisor-filas | M5 | V1 | Parcial, com lacuna concreta | auth/admin_test.go e presence/service_test.go citam desativação; reatribuição das conversas do desativado e visão do supervisor não confirmadas em teste |
+| 05-supervisor-filas | M5 | V1 | Implementado e verificado | TestQueueSupervisorSeesAllSectorsAndNoOtherTenant (service/queue_supervisor_test.go): supervisor sem vínculo de setor vê a fila, atendente sem vínculo não, supervisor de outro provedor não |
 | 05-supervisor-altera | M5 | V1 | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
 | 05-limite-vagas | M5 | V1 simples | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
 | 05-apos-transferencia | M5 | V1 simples | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
@@ -202,7 +202,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 08-timeout-bot | M5 | V1 | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
 | 08-autorizacao-acao | M5 | V1 | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
 | 08-entregar-ia | M5 | V1 simples | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
-| 08-aprovacao | M5 | V1 simples | Parcial, com lacuna concreta | aprovação humana de ação sensível: sem código encontrado em erp/; D2-02 ausente, ação sensível oculta (TestSensitiveStaysHiddenWithoutVerification) |
+| 08-aprovacao | M5 | V1 simples | Parcial, com lacuna concreta | não implementado de propósito: não existe ação sensível para aprovar enquanto a verificação do cliente (D2-02) e o adaptador real do ERP (D2-01) faltam, e TestSensitiveStaysHiddenWithoutVerification mantém a ação oculta. Um mecanismo de aprovação sem consumidor seria código morto; construir junto com a primeira ação sensível |
 | 11-gancho | M5 | V1 simples | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
 | 01-evolution | M6 | V1 simples | Implementado, aguardando homologação externa | Flag desligada; TestSupplierStaysUnwired; docs/contracts/m6-evolution.md (D2-04) |
 | 07-id-erp | M6 | V1 | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
@@ -234,7 +234,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 11-conector-erp | M6 | V1 simples | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
 | 14-circuit-breaker | M6 | V1 | Implementado e verificado | TestBreakerOpensAfterThreeFailuresAndReopensOnFailedProbe, TestCircuitOpensPerConnection, TestGuardTimeoutDoesNotWaitForTheDelay; decisão em integracoes/erp-existente.md |
 | 14-observabilidade | M6 | V1 | Implementado e verificado | opsignals/metrics, opsalert; /metrics privado verificado no E2E M7 de 04/11 |
-| 09-painel-rt | M7 | V1 | Parcial, com lacuna concreta | painel em tempo real: sem teste específico dos totais ao vivo encontrado |
+| 09-painel-rt | M7 | V1 | Implementado e verificado | reports.livePicture (fila, em atendimento, online, maior espera): TestCompute e query_test.go linhas 62-77 (inclui corte por setor); attendance-report.test.tsx modo live; pages/dashboard-page.tsx |
 | 09-sem-responsavel | M7 | V1 | Implementado e verificado | TestUrgentQueueDoesNotRaiseTheWaitAlert; queue-wait-alert.test.tsx |
 | 09-total-periodo | M7 | V1 | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
 | 09-estados | M7 | V1 | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
