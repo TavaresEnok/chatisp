@@ -1,5 +1,10 @@
 name: chatisp
 
+# Instalação dedicada de referência. Variáveis em deploy/.env (modelo em
+# deploy/.env.example). O Compose só repassa ao contêiner o que está listado
+# em "environment": uma variável presente no .env e ausente aqui não chega à
+# aplicação.
+
 x-chatisp-image: &chatisp-image
   build:
     context: ..
@@ -7,24 +12,55 @@ x-chatisp-image: &chatisp-image
     target: runtime
   image: chatisp:local
   environment: &chatisp-env
-    CHATISP_ENV: development
+    CHATISP_ENV: ${CHATISP_ENV:-production}
     CHATISP_APP_DATABASE_URL: postgres://chatisp_app:${CHATISP_APP_PASSWORD:?defina CHATISP_APP_PASSWORD}@postgres:5432/chatisp?sslmode=disable
     CHATISP_PLATFORM_DATABASE_URL: postgres://chatisp_platform:${CHATISP_PLATFORM_PASSWORD:?defina CHATISP_PLATFORM_PASSWORD}@postgres:5432/chatisp?sslmode=disable
     CHATISP_INGRESS_DATABASE_URL: postgres://chatisp_ingress:${CHATISP_INGRESS_PASSWORD:?defina CHATISP_INGRESS_PASSWORD}@postgres:5432/chatisp?sslmode=disable
     CHATISP_JOBS_DATABASE_URL: postgres://chatisp_jobs:${CHATISP_JOBS_PASSWORD:?defina CHATISP_JOBS_PASSWORD}@postgres:5432/chatisp?sslmode=disable
     CHATISP_DATA_KEYS: ${CHATISP_DATA_KEYS:?defina CHATISP_DATA_KEYS}
     CHATISP_DATA_KEY_VERSION: ${CHATISP_DATA_KEY_VERSION:-1}
-    CHATISP_META_SIMULATION: "true"
-    CHATISP_META_VERIFY_TOKEN: ${CHATISP_META_VERIFY_TOKEN:?defina CHATISP_META_VERIFY_TOKEN}
-    CHATISP_META_APP_ID: ${CHATISP_META_APP_ID:-}
     CHATISP_MIGRATIONS_DIR: /usr/share/chatisp/migrations
-    CHATISP_PANEL_ORIGINS: https://localhost:8443
+    CHATISP_PANEL_ORIGINS: ${CHATISP_PANEL_ORIGINS:-https://localhost:8443}
     CHATISP_HTTP_ADDR: 0.0.0.0:8080
+    # Métricas só na rede interna do Compose (sem porta publicada nem rota no Caddy).
     CHATISP_METRICS_ADDR: 0.0.0.0:9090
-    CHATISP_LOG_LEVEL: info
-    S3_ENDPOINT: http://garage:3900
-    S3_REGION: garage
-    S3_BUCKET: chatisp-dev
+    CHATISP_LOG_LEVEL: ${CHATISP_LOG_LEVEL:-info}
+    # Meta: desabilitada por padrão (envio falha com driver_indisponivel, sem rede).
+    # O envio oficial exige autorização explícita, versão e documentação (D2-03).
+    CHATISP_META_SIMULATION: ${CHATISP_META_SIMULATION:-false}
+    CHATISP_META_OFFICIAL_DISPATCH: ${CHATISP_META_OFFICIAL_DISPATCH:-false}
+    CHATISP_META_GRAPH_VERSION: ${CHATISP_META_GRAPH_VERSION:-}
+    CHATISP_META_PRIMARY_DOC_URL: ${CHATISP_META_PRIMARY_DOC_URL:-}
+    CHATISP_META_VERIFY_TOKEN: ${CHATISP_META_VERIFY_TOKEN:-}
+    CHATISP_META_APP_ID: ${CHATISP_META_APP_ID:-}
+    # E-mail transacional (convite e recuperação de senha). Vazio: envio indisponível.
+    CHATISP_SMTP_ADDR: ${CHATISP_SMTP_ADDR:-}
+    CHATISP_SMTP_USERNAME: ${CHATISP_SMTP_USERNAME:-}
+    CHATISP_SMTP_PASSWORD: ${CHATISP_SMTP_PASSWORD:-}
+    CHATISP_SMTP_FROM: ${CHATISP_SMTP_FROM:-}
+    # Anexos no Garage local, por TLS via Caddy (CA interna em /trust).
+    # Para S3 externo, troque endpoint, credenciais, região e bucket, remova o
+    # CA_FILE se o certificado for público e use UNVERSIONED=false se o bucket
+    # tiver versionamento.
+    CHATISP_ATTACHMENTS_S3_ENDPOINT: ${CHATISP_ATTACHMENTS_S3_ENDPOINT:-https://storage.chatisp.internal}
+    CHATISP_ATTACHMENTS_S3_PUBLIC_ENDPOINT: ${CHATISP_ATTACHMENTS_S3_PUBLIC_ENDPOINT:-https://storage.localhost:8443}
+    CHATISP_ATTACHMENTS_S3_REGION: ${CHATISP_ATTACHMENTS_S3_REGION:-garage}
+    CHATISP_ATTACHMENTS_S3_BUCKET: ${CHATISP_ATTACHMENTS_S3_BUCKET:-chatisp-anexos}
+    CHATISP_ATTACHMENTS_S3_ACCESS_KEY: ${CHATISP_ATTACHMENTS_S3_ACCESS_KEY:?defina CHATISP_ATTACHMENTS_S3_ACCESS_KEY}
+    CHATISP_ATTACHMENTS_S3_SECRET_KEY: ${CHATISP_ATTACHMENTS_S3_SECRET_KEY:?defina CHATISP_ATTACHMENTS_S3_SECRET_KEY}
+    CHATISP_ATTACHMENTS_S3_PATH_STYLE: "true"
+    CHATISP_ATTACHMENTS_S3_UNVERSIONED: ${CHATISP_ATTACHMENTS_S3_UNVERSIONED:-true}
+    CHATISP_ATTACHMENTS_S3_CA_FILE: ${CHATISP_ATTACHMENTS_S3_CA_FILE:-/trust/storage-ca.crt}
+  volumes: &chatisp-volumes
+    - trust:/trust:ro
+
+x-app-deps: &app-deps
+  chatisp-migrate:
+    condition: service_completed_successfully
+  storage-setup:
+    condition: service_completed_successfully
+  trust-export:
+    condition: service_completed_successfully
 
 services:
   postgres:
@@ -82,7 +118,29 @@ services:
       - garage-config:/etc/garage
       - garage-meta:/var/lib/garage/meta
       - garage-data:/var/lib/garage/data
+    healthcheck:
+      test: ["CMD", "/garage", "-c", "/etc/garage/garage.toml", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     restart: unless-stopped
+
+  # Bucket privado, chave da aplicação e permissões, de forma idempotente.
+  storage-setup:
+    image: chatisp:local
+    pull_policy: never
+    depends_on:
+      garage:
+        condition: service_healthy
+    environment:
+      S3_BUCKET: ${CHATISP_ATTACHMENTS_S3_BUCKET:-chatisp-anexos}
+      S3_ACCESS_KEY: ${CHATISP_ATTACHMENTS_S3_ACCESS_KEY:?defina CHATISP_ATTACHMENTS_S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${CHATISP_ATTACHMENTS_S3_SECRET_KEY:?defina CHATISP_ATTACHMENTS_S3_SECRET_KEY}
+    volumes:
+      - garage-config:/etc/garage:ro
+      - ./garage/setup.sh:/setup.sh:ro
+    entrypoint: ["/bin/sh", "/setup.sh"]
+    restart: "no"
 
   chatisp-migrate:
     <<: *chatisp-image
@@ -98,11 +156,9 @@ services:
   chatisp-api:
     <<: *chatisp-image
     command: ["api"]
-    depends_on:
-      chatisp-migrate:
-        condition: service_completed_successfully
+    depends_on: *app-deps
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/readyz"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -111,9 +167,12 @@ services:
   chatisp-worker:
     <<: *chatisp-image
     command: ["worker"]
-    depends_on:
-      chatisp-migrate:
-        condition: service_completed_successfully
+    depends_on: *app-deps
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9090/metrics", "-o", "/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     restart: unless-stopped
 
   caddy:
@@ -123,14 +182,40 @@ services:
       target: edge
     image: chatisp-caddy:local
     depends_on:
-      chatisp-api:
+      garage:
         condition: service_healthy
+    environment:
+      CHATISP_SITE_HOST: ${CHATISP_SITE_HOST:-localhost}
+      CHATISP_STORAGE_HOST: ${CHATISP_STORAGE_HOST:-storage.localhost}
     ports:
-      - "127.0.0.1:8443:443"
+      - "${CHATISP_PUBLIC_BIND:-127.0.0.1}:${CHATISP_PUBLIC_PORT:-8443}:443"
+    networks:
+      default:
+        aliases:
+          - storage.chatisp.internal
     volumes:
       - caddy-data:/data
       - caddy-config:/config
+    healthcheck:
+      test: ["CMD", "test", "-s", "/data/caddy/pki/authorities/local/root.crt"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
     restart: unless-stopped
+
+  # Copia a raiz pública da CA interna do Caddy para o volume "trust", legível
+  # pela aplicação (uid 1000), que a usa para validar o TLS do storage.
+  trust-export:
+    image: chatisp-caddy:local
+    pull_policy: never
+    depends_on:
+      caddy:
+        condition: service_healthy
+    volumes:
+      - caddy-data:/data:ro
+      - trust:/trust
+    entrypoint: ["/bin/sh", "-c", "install -m 0644 /data/caddy/pki/authorities/local/root.crt /trust/storage-ca.crt"]
+    restart: "no"
 
 volumes:
   postgres-data:
@@ -139,3 +224,4 @@ volumes:
   garage-data:
   caddy-data:
   caddy-config:
+  trust:

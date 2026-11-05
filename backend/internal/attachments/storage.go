@@ -13,6 +13,9 @@ var (
 	ErrForbidden = errors.New("attachment access denied")
 	ErrConflict  = errors.New("attachment state conflict")
 	ErrLimit     = errors.New("attachment storage limit reached")
+	// ErrPlanUnset means the provider's plan has no storage limit configured.
+	// Attachments fail closed: there is no commercial default.
+	ErrPlanUnset = errors.New("limite de armazenamento do plano não configurado")
 	ErrStorage   = errors.New("private attachment storage unavailable")
 )
 

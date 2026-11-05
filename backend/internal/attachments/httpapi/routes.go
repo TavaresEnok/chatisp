@@ -109,6 +109,8 @@ func problem(e error) error {
 		return huma.Error422UnprocessableEntity("anexo inválido")
 	case errors.Is(e, attachments.ErrConflict):
 		return huma.Error409Conflict("estado do anexo incompatível")
+	case errors.Is(e, attachments.ErrPlanUnset):
+		return huma.Error409Conflict("limite de armazenamento do plano não configurado: o superadmin define max_storage_bytes do provedor")
 	case errors.Is(e, attachments.ErrLimit):
 		return huma.Error413RequestEntityTooLarge("limite de armazenamento atingido")
 	default:

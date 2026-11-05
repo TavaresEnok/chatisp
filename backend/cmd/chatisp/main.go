@@ -63,7 +63,7 @@ modos:
   bootstrap cria o primeiro provedor e o primeiro administrador
 
 bootstrap (instalação vazia; senha pela entrada padrão, primeira linha):
-  chatisp bootstrap -email admin@exemplo.com [-superadmin] [-timezone America/Sao_Paulo]
+  chatisp bootstrap -email admin@exemplo.com [-superadmin] [-storage-bytes N] [-timezone America/Sao_Paulo]
   Exige CHATISP_DATABASE_URL (dono), CHATISP_APP_DATABASE_URL e CHATISP_PLATFORM_DATABASE_URL.
 
 openapi:
@@ -305,10 +305,11 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 	var identity *auth.Service
 	if store != nil {
 		identity, err = auth.New(auth.Options{
-			Store:  store,
-			Mail:   mail.NewSender(cfg.SMTPAddr, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom),
-			Logger: log,
-			Keys:   cfg.KeyRing,
+			Store:    store,
+			Mail:     mail.NewSender(cfg.SMTPAddr, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom),
+			Logger:   log,
+			Keys:     cfg.KeyRing,
+			PanelURL: firstOrigin(cfg.PanelOrigins),
 		})
 		if err != nil {
 			cleanupAll()
@@ -617,6 +618,11 @@ func attachmentStorage(environ []string) (attachments.Storage, error) {
 		SecretKey:    values["CHATISP_ATTACHMENTS_S3_SECRET_KEY"],
 		SessionToken: strings.TrimSpace(environValue(environ, "CHATISP_ATTACHMENTS_S3_SESSION_TOKEN")),
 		PathStyle:    strings.EqualFold(strings.TrimSpace(environValue(environ, "CHATISP_ATTACHMENTS_S3_PATH_STYLE")), "true"),
+		// Unversioned is for S3-compatible services without object versioning
+		// (Garage). CAFile adds a private root; TLS verification stays on.
+		Unversioned:    strings.EqualFold(strings.TrimSpace(environValue(environ, "CHATISP_ATTACHMENTS_S3_UNVERSIONED")), "true"),
+		CAFile:         strings.TrimSpace(environValue(environ, "CHATISP_ATTACHMENTS_S3_CA_FILE")),
+		PublicEndpoint: strings.TrimSpace(environValue(environ, "CHATISP_ATTACHMENTS_S3_PUBLIC_ENDPOINT")),
 	})
 	if err != nil {
 		return nil, errors.New("armazenamento de anexos recusou a configuração explícita")
@@ -624,16 +630,35 @@ func attachmentStorage(environ []string) (attachments.Storage, error) {
 	return storage, nil
 }
 
+// tenantAttachmentLimits reads the provider plan. The plan bytes come from
+// attachment_plan_bytes or, when absent, from max_storage_bytes (the plan
+// field the platform API and bootstrap set). Per-file bytes default to the
+// technical ceiling attachments.MaxFileBytes (not a commercial value) and the
+// incoming reserve to zero. A plan without a storage limit fails closed with
+// ErrPlanUnset: no commercial default is invented.
 func tenantAttachmentLimits(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) (attachments.Limits, error) {
-	var plan, reserve, file int64
+	var plan, storage, reserve, file int64
 	err := tx.QueryRow(ctx, `
 		SELECT COALESCE((limits->>'attachment_plan_bytes')::bigint, 0),
+		       COALESCE((limits->>'max_storage_bytes')::bigint, 0),
 		       COALESCE((limits->>'attachment_reserve_bytes')::bigint, 0),
 		       COALESCE((limits->>'attachment_file_bytes')::bigint, 0)
 		  FROM tenants
 		 WHERE id = $1
-		   AND id = NULLIF(current_setting('app.tenant_id', true), '')::uuid`, tenantID).Scan(&plan, &reserve, &file)
-	if err != nil || plan <= 0 || file <= 0 || reserve < 0 {
+		   AND id = NULLIF(current_setting('app.tenant_id', true), '')::uuid`, tenantID).Scan(&plan, &storage, &reserve, &file)
+	if err != nil {
+		return attachments.Limits{}, attachments.ErrStorage
+	}
+	if plan <= 0 {
+		plan = storage
+	}
+	if plan <= 0 {
+		return attachments.Limits{}, attachments.ErrPlanUnset
+	}
+	if file <= 0 || file > attachments.MaxFileBytes {
+		file = attachments.MaxFileBytes
+	}
+	if reserve < 0 {
 		return attachments.Limits{}, attachments.ErrStorage
 	}
 	return attachments.Limits{PlanBytes: plan, IncomingReserveBytes: reserve, FileBytes: file}, nil
@@ -758,4 +783,12 @@ func logMetaCapability(ctx context.Context, log *slog.Logger, cfg config.Config)
 	if strings.TrimSpace(cfg.MetaVerifyToken) == "" {
 		log.WarnContext(ctx, "CHATISP_META_VERIFY_TOKEN ausente: a verificação de assinatura do webhook (GET) é recusada", "component", "runtime")
 	}
+}
+
+// firstOrigin is the panel origin used in e-mail links.
+func firstOrigin(origins []string) string {
+	if len(origins) == 0 {
+		return ""
+	}
+	return origins[0]
 }

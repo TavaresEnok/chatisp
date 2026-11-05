@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	"chatisp/internal/platform/mail"
 )
 
 // A new provider gets its first administrator through a platform invite, without SQL.
@@ -87,5 +89,45 @@ func TestProviderAdminInviteRefusals(t *testing.T) {
 	other := loginPrincipal(t, svc, plain.email, password)
 	if _, err := svc.InviteProviderAdmin(ctx, other, created.ID, "x@example.com"); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("admin comum convidou em outro provedor: %v", err)
+	}
+}
+
+// Invitation and reset e-mails carry a panel link built from the configured
+// https origin; the token stays the last line and never reaches the API reply.
+func TestMailLinksUsePanelOrigin(t *testing.T) {
+	ctx := context.Background()
+	box := &mail.Fake{}
+	svc, err := New(Options{Store: testStore, Mail: box, Policy: testPolicy(), PanelURL: "https://painel.exemplo.test:8443"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	password := "senha-correta-10"
+	super := seedAccount(t, "admin", password)
+	markPlatformSuperadmin(t, super.user)
+	actor := loginPrincipal(t, svc, super.email, password)
+	created, err := svc.CreateProvider(ctx, actor, "America/Sao_Paulo", PlanLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.InviteProviderAdmin(ctx, actor, created.ID, "link-"+uuid.NewString()+"@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	sent := box.Snapshot()
+	token := lastLine(sent[0].Text)
+	if !strings.Contains(sent[0].Text, "Abra: https://painel.exemplo.test:8443/convite?token="+token+"\n") {
+		t.Fatalf("convite sem link do painel:\n%s", sent[0].Text)
+	}
+	box.Messages = nil
+	if err := svc.RequestPasswordReset(ctx, super.email, "203.0.113.71"); err != nil {
+		t.Fatal(err)
+	}
+	reset := box.Snapshot()[0].Text
+	if !strings.Contains(reset, "Abra: https://painel.exemplo.test:8443/recuperar-senha/confirmar?token="+lastLine(reset)+"\n") {
+		t.Fatalf("recuperação sem link do painel:\n%s", reset)
+	}
+	for _, bad := range []string{"http://painel.exemplo.test", "https://painel.exemplo.test/caminho", "https://u:p@painel.exemplo.test"} {
+		if panelBase(bad) != "" {
+			t.Fatalf("origem insegura aceita: %s", bad)
+		}
 	}
 }

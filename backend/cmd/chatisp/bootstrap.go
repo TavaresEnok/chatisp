@@ -33,11 +33,16 @@ func bootstrap(parent context.Context, args, environ []string, stdin io.Reader, 
 	email := flags.String("email", "", "e-mail do primeiro administrador")
 	timezone := flags.String("timezone", "America/Sao_Paulo", "fuso IANA do primeiro provedor")
 	superadmin := flags.Bool("superadmin", false, "também opera a plataforma (provedores e painel técnico)")
+	storageBytes := flags.Int64("storage-bytes", 0, "max_storage_bytes do plano do primeiro provedor (anexos); sem ele os anexos ficam recusados até o superadmin definir")
 	if err := flags.Parse(args); err != nil {
 		return errors.New("argumentos inválidos para bootstrap")
 	}
-	if flags.NArg() != 0 {
+	if flags.NArg() != 0 || *storageBytes < 0 || *storageBytes >= 1<<62 {
 		return errors.New("argumentos inválidos para bootstrap")
+	}
+	var limits []byte
+	if *storageBytes > 0 {
+		limits = []byte(fmt.Sprintf(`{"max_storage_bytes":%d}`, *storageBytes))
 	}
 	normalized := strings.ToLower(strings.TrimSpace(*email))
 	if normalized == "" || !strings.Contains(normalized, "@") || len(normalized) > 320 {
@@ -102,7 +107,7 @@ func bootstrap(parent context.Context, args, environ []string, stdin io.Reader, 
 	if existing == nil {
 		userID, tenantID = uuid.New(), uuid.New()
 		err = store.WithPlatformTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-			if _, err := store.CreateTenant(ctx, db.NewTenant{ID: tenantID, Timezone: *timezone, Status: "active"}); err != nil {
+			if _, err := store.CreateTenant(ctx, db.NewTenant{ID: tenantID, Timezone: *timezone, Status: "active", Limits: limits}); err != nil {
 				return err
 			}
 			if _, err := store.CreateUser(ctx, db.NewUser{ID: userID, Email: normalized, Status: "active"}); err != nil {

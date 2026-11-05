@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -119,6 +121,9 @@ type Options struct {
 	Policy Policy
 	Now    func() time.Time
 	Keys   *crypto.Ring
+	// PanelURL is the panel origin (https://host[:port]) used to build the
+	// links in invitation and password-reset e-mails. Empty sends the token only.
+	PanelURL string
 }
 
 // Service is the panel identity use-case. It does not log secrets.
@@ -130,6 +135,7 @@ type Service struct {
 	now    func() time.Time
 	dummy  string
 	keys   *crypto.Ring
+	panel  string
 }
 
 // New prepares the service and a dummy Argon2id hash used when the account has no password.
@@ -161,6 +167,7 @@ func New(opts Options) (*Service, error) {
 		now:    now,
 		dummy:  dummy,
 		keys:   opts.Keys,
+		panel:  panelBase(opts.PanelURL),
 	}, nil
 }
 
@@ -429,6 +436,7 @@ func (s *Service) sendInvite(ctx context.Context, tenantID uuid.UUID, normalized
 		To:      normalized,
 		Subject: "Convite para o Chat ISP",
 		Text: "Você recebeu um convite para acessar o Chat ISP.\n" +
+			s.linkLine("/convite", raw) +
 			"O token abaixo só pode ser usado uma vez e deixa de valer no prazo informado.\n\n" +
 			raw + "\n",
 	}
@@ -529,6 +537,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, ip string) er
 		To:      normalized,
 		Subject: "Recuperação de senha do Chat ISP",
 		Text: "Recebemos um pedido para redefinir a senha do Chat ISP.\n" +
+			s.linkLine("/recuperar-senha/confirmar", raw) +
 			"O token abaixo só pode ser usado uma vez e deixa de valer no prazo curto desta mensagem.\n" +
 			"Se você não pediu, ignore este e-mail.\n\n" +
 			raw + "\n",
@@ -764,4 +773,22 @@ func (s *Service) issueForMembership(ctx context.Context, userID, tenantID, memb
 	}
 	issued.EnrollmentRequired = assurance == "enrollment"
 	return issued, nil
+}
+
+// panelBase accepts only an https origin without path, query or user info.
+func panelBase(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+		return ""
+	}
+	return "https://" + u.Host
+}
+
+// linkLine returns the e-mail line with the panel link for this token, or
+// nothing when no panel origin is configured.
+func (s *Service) linkLine(path, token string) string {
+	if s.panel == "" {
+		return ""
+	}
+	return "Abra: " + s.panel + path + "?token=" + url.QueryEscape(token) + "\n"
 }

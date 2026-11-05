@@ -182,7 +182,12 @@ func TestCaddyfileNamesTheInternalCertificate(t *testing.T) {
 			t.Fatalf("site do Caddy sem %s: %q", want, site)
 		}
 	}
-	if !strings.Contains(string(raw), "default_sni localhost") {
+	if !strings.Contains(string(raw), "default_sni {$CHATISP_SITE_HOST:localhost}") {
 		t.Fatal("Caddyfile sem default_sni: conexão por IP sem SNI falharia no TLS")
+	}
+	// Prometheus metrics stay on the internal network: the public site answers
+	// 404 for /metrics and never proxies to the metrics port.
+	if strings.Contains(string(raw), "reverse_proxy chatisp-api:9090") || strings.Contains(string(raw), "reverse_proxy chatisp-worker:9090") || !strings.Contains(string(raw), "handle /metrics* {\n\t\trespond 404") {
+		t.Fatal("Caddyfile expõe métricas na superfície pública")
 	}
 }

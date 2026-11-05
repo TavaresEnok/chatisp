@@ -1,16 +1,25 @@
 {
 	admin off
 	local_certs
-	# Conexão sem SNI (por IP) recebe o certificado de localhost em vez de falhar no TLS.
-	default_sni localhost
+	# Conexão sem SNI (por IP) recebe o certificado do painel em vez de falhar no TLS.
+	default_sni {$CHATISP_SITE_HOST:localhost}
 }
 
-# Com só ":443" o emissor interno não tem nome para emitir e o handshake falha
-# ("tlsv1 alert internal error"). Para um domínio próprio, acrescente-o a esta lista.
-localhost:443, 127.0.0.1:443 {
+# Painel e API. Com só ":443" o emissor interno não tem nome para emitir e o
+# handshake falha ("tlsv1 alert internal error"). CHATISP_SITE_HOST é o nome
+# que o navegador usa; CHATISP_PANEL_ORIGINS da aplicação deve ser
+# https://<esse nome>[:porta publicada]. local_certs emite pela CA interna do
+# Caddy: os navegadores precisam confiar nessa raiz (laboratório). Para um
+# domínio real com certificado público use deploy/Caddyfile.production.
+{$CHATISP_SITE_HOST:localhost}:443, 127.0.0.1:443 {
 	tls internal
 	encode zstd gzip
 
+	# Métricas Prometheus não passam por aqui: ficam em chatisp-api:9090 e
+	# chatisp-worker:9090, só na rede interna do Compose.
+	handle /metrics* {
+		respond 404
+	}
 	handle /api/* {
 		reverse_proxy chatisp-api:8080
 	}
@@ -20,12 +29,22 @@ localhost:443, 127.0.0.1:443 {
 	handle /readyz {
 		reverse_proxy chatisp-api:8080
 	}
-	handle /metrics {
-		reverse_proxy chatisp-api:9090
-	}
 	handle {
 		root * /srv/panel
 		try_files {path} /index.html
 		file_server
 	}
+}
+
+# Armazenamento de anexos (Garage) com TLS. Dois nomes, o mesmo bucket:
+# - storage.chatisp.internal: endpoint da aplicação dentro da rede do Compose;
+# - CHATISP_STORAGE_HOST: endpoint público das URLs assinadas (navegador).
+# O Host é repassado sem alteração porque a assinatura SigV4 cobre esse nome.
+# Só a API S3 é exposta; a API administrativa (3903) fica interna.
+{$CHATISP_STORAGE_HOST:storage.localhost}:443, storage.chatisp.internal:443 {
+	tls internal
+	request_body {
+		max_size 40MB
+	}
+	reverse_proxy garage:3900
 }
