@@ -30,6 +30,9 @@ func registerPlatform(api huma.API, deps Dependencies) {
 	huma.Register(api, platformOp("reactivate-platform-tenant", http.MethodPost, "/api/platform/tenants/{tenant_id}/reactivate", "Reativa um provedor", "Restaura o acesso operacional sem apagar nem recriar o histórico.", http.StatusOK, []int{
 		http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict, http.StatusServiceUnavailable,
 	}), platform.reactivate)
+	huma.Register(api, platformOp("invite-platform-tenant-admin", http.MethodPost, "/api/platform/tenants/{tenant_id}/admin-invitations", "Convida o administrador de um provedor", "Superadmin. Envia por e-mail um convite de uso único com papel admin no provedor; o token não volta na resposta. Auditado em platform_audit_logs. Provedor suspenso responde 409.", http.StatusCreated, []int{
+		http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusServiceUnavailable,
+	}), platform.inviteAdmin)
 }
 
 func platformOp(id, method, path, summary, description string, status int, errors []int) huma.Operation {
@@ -88,6 +91,27 @@ type tenantPathInput struct {
 	Session  string    `cookie:"__Host-session" doc:"Cookie de sessão do painel."`
 	CSRF     string    `header:"X-CSRF-Token" doc:"Token de CSRF vinculado à sessão."`
 	TenantID uuid.UUID `path:"tenant_id" doc:"Provedor."`
+}
+
+type tenantAdminInviteInput struct {
+	Session  string    `cookie:"__Host-session" doc:"Cookie de sessão do painel."`
+	CSRF     string    `header:"X-CSRF-Token" doc:"Token de CSRF vinculado à sessão."`
+	TenantID uuid.UUID `path:"tenant_id" doc:"Provedor."`
+	Body     struct {
+		Email string `json:"email" doc:"E-mail do administrador convidado." minLength:"3" maxLength:"320"`
+	}
+}
+
+func (p *platformAPI) inviteAdmin(ctx context.Context, input *tenantAdminInviteInput) (*inviteOutput, error) {
+	actor, err := p.read(ctx, input.Session, input.CSRF, true)
+	if err != nil {
+		return nil, err
+	}
+	created, err := p.auth.InviteProviderAdmin(ctx, actor, input.TenantID, input.Body.Email)
+	if err != nil {
+		return nil, authProblem(err)
+	}
+	return &inviteOutput{Body: inviteBody{ExpiresAt: created.ExpiresAt}}, nil
 }
 
 func (p *platformAPI) create(ctx context.Context, input *tenantCreateInput) (*tenantOutput, error) {

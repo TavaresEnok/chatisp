@@ -44,23 +44,16 @@ docker run --rm debian:13-slim sh -c 'apt-get update >/dev/null && echo ok'   # 
 ./scripts/compose-validate.sh
 ```
 
-O script cobre build, subida com `--wait` (healthcheck da API e dependências `service_healthy`/`service_completed_successfully`, o que inclui `chatisp-migrate`), `/healthz`, `/readyz` e o painel por HTTPS no Caddy, e desfaz o projeto com `down -v`. **Não cobre** login, persistência após reinício nem o primeiro usuário; ver a lacuna abaixo. Passos manuais para essas provas, no mesmo projeto antes do `down -v`:
+O script (reescrito nesta rodada) cobre: build com etiquetas próprias (`chatisp-validate-<pid>:runtime` e `:edge`), subida com `--wait` (healthchecks e `chatisp-migrate` concluído), `/healthz`, `/readyz` e painel pelo Caddy em HTTPS, `chatisp bootstrap -superadmin` com senha pela entrada padrão, login `POST /api/panel/session` pelo Caddy com cookie `__Host-session`, `restart` com novo login (dados preservados) e repetição do bootstrap sem recriar nada, e `down -v` com remoção das duas etiquetas e conferência de que não sobrou contêiner, volume nem rede com o rótulo do projeto. Neste host ele continua sem execução; só a sintaxe (`bash -n`) e o override (`docker compose config`) foram conferidos.
 
-```
-docker compose -p <projeto> ... restart                     # reinício
-docker compose -p <projeto> ... exec postgres psql -U chatisp -d chatisp -c 'select count(*) from tenants'
-curl -fsSk https://127.0.0.1:<porta>/readyz                  # de novo, depois do reinício
-```
+### Lacuna do primeiro usuário: implementada
 
-### Lacuna de instalação encontrada (implementação faltante)
+Encontrada nesta verificação e fechada na mesma rodada, a pedido:
 
-Numa instalação por Compose não há como criar o primeiro usuário:
-
-- `is_superadmin` só é ligado por SQL nos testes (`grep` no código de produção: nenhuma ocorrência).
-- `POST /api/platform/tenants` (`auth.CreateProvider`) cria o provedor sem administrador nem convite; `auth.Invite` exige um administrador já existente no provedor.
-- `chatisp dev-prepare` cria `dev.local@example.com`, mas é a preparação de desenvolvimento: recria papéis com senhas novas e serve ao `scripts/dev.sh`, não ao Compose.
-
-Consequência: login no Compose depende de SQL manual com hash de senha. Afeta 13-self-host, 14-provisionamento ("sem alterar código") e 12-superadmin. Falta implementar: um comando de inicialização idempotente (por exemplo `chatisp bootstrap-superadmin -email`, senha lida da entrada padrão, auditado em `platform_audit_logs`) e o convite do primeiro administrador ao criar o provedor. Prova de fechamento: teste Go do comando e do convite, e o login pelo Caddy no `compose-validate.sh` estendido.
+- `chatisp bootstrap -email <e-mail> [-superadmin] [-timezone <IANA>]` (`backend/cmd/chatisp/bootstrap.go`). Lê a senha da primeira linha da entrada padrão, nunca de argumento nem de variável. Só roda em instalação vazia: com o mesmo e-mail já ativo, não altera nada; com outro e-mail numa instalação povoada, recusa. Cria provedor, usuário e vínculo `invited` numa transação de plataforma, grava a senha, marca o superadmin com a conexão do dono (a única com permissão para `is_superadmin`) e ativa o vínculo com auditoria `platform.bootstrap` em `platform_audit_logs`. Uma execução interrompida deixa um vínculo `invited`, que não entra, e a próxima com o mesmo e-mail a conclui enquanto ele for o único usuário; numa instalação povoada um convite pendente não é ativado pelo bootstrap (só pelo token). O MFA continua obrigatório no primeiro acesso do admin. No Compose: `printf '%s\n' "$SENHA" | docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm -T chatisp-migrate bootstrap -email admin@provedor -superadmin`.
+- `POST /api/platform/tenants/{tenant_id}/admin-invitations` (`auth.InviteProviderAdmin`): o superadmin convida o primeiro administrador de um provedor criado pelo painel. O token vai por e-mail, nunca na resposta; provedor inexistente responde 404 e suspenso responde 409; auditoria `tenant.admin_invite`. O envio reaproveita o mesmo caminho do convite do painel (`sendInvite`). A interface ganhou "Convidar administrador" em cada provedor ativo (`platform-admin.tsx`).
+- Testes: `TestBootstrapFirstAdminOnEmptyInstallation` e `TestBootstrapResumesInterruptedRun` (PostgreSQL descartável: recusas antes de gravar, login, `EnrollmentOnly`, superadmin, auditoria, repetição, segundo e-mail e retomada); `TestSuperadminInvitesFirstProviderAdmin` e `TestProviderAdminInviteRefusals` (convite, aceite, papel admin no provedor novo, recusas); `roles_test.go` (403 para admin/supervisor/atendente, 201, 404, 409 pela API); `auth-flows.test.tsx` (formulário e CSRF).
+- Validação: `go vet ./...` e `go test -count=1 ./...` verdes; `scripts/lint.sh` verde (golangci-lint, govulncheck, ESLint, tsc, OpenAPI e sqlc em dia); Vitest 60 arquivos e 288 testes; E2E `ux` (axe) e `m7-ops` passaram.
 
 ### Recursos criados por esta tarefa (05/11/2026)
 
@@ -91,15 +84,15 @@ Fonte: transcrição da sessão anterior (`~/.claude/projects/-home-enok-srv-pro
 
 ## 3. Matriz final
 
-Contagem nova em `docs/matriz-requisitos.md`: 202 verificados, 33 aguardando homologação externa, 22 parciais, 0 não implementados (257). Mudanças: 14 linhas saíram de "aguardando homologação" por terem implementação faltante (adaptador real do ERP e conector Evolution), e 12-superadmin e 14-provisionamento saíram de "verificado" pela lacuna do primeiro usuário.
+Contagem em `docs/matriz-requisitos.md`: 204 verificados, 33 aguardando homologação externa, 20 parciais, 0 não implementados (257). Mudanças: 14 linhas saíram de "aguardando homologação" por terem implementação faltante (adaptador real do ERP e conector Evolution). 12-superadmin e 14-provisionamento saíram de "verificado" pela lacuna do primeiro usuário e voltaram depois de `chatisp bootstrap` e do convite do admin do provedor, com testes.
 
 ### Os seis parciais anteriores
 
 | Requisito | Código que já existe | O que falta implementar | Informação ou ambiente externo | Prova que encerra |
 | --- | --- | --- | --- | --- |
-| 12-https | `deploy/Caddyfile` (TLS e proxy para a API); cookies `__Host-session` com `Secure; HttpOnly; SameSite=Lax`, conferidos pelo proxy HTTPS do `scripts/dev.sh` | nada no proxy; o primeiro usuário (lacuna acima) para provar login | host com Docker ≥ 20.10.10 e rede de build | `compose-validate.sh` verde com login pelo Caddy |
-| 13-self-host | `deploy/compose.yaml`, `deploy/Dockerfile`, `.env.example` com teste de guarda (`deploy_files_test.go`), `compose-validate.sh` | comando de inicialização do superadmin/primeiro admin | idem | instalação do zero, login e reinício com dados preservados |
-| 13-compose | idem; `docker compose config -q` passa | nenhum código além do anterior | idem | `compose-validate.sh` verde, mais reinício e `down -v` sem sobras |
+| 12-https | `deploy/Caddyfile` (TLS e proxy para a API); cookies `__Host-session` com `Secure; HttpOnly; SameSite=Lax`, conferidos pelo proxy HTTPS do `scripts/dev.sh`; `chatisp bootstrap` e login no `compose-validate.sh` | nada | host com Docker ≥ 20.10.10 e rede de build | `compose-validate.sh` verde com login pelo Caddy |
+| 13-self-host | `deploy/compose.yaml`, `deploy/Dockerfile`, `.env.example` com teste de guarda (`deploy_files_test.go`), `compose-validate.sh`, `chatisp bootstrap` e convite do admin do provedor | nada | idem | instalação do zero, login e reinício com dados preservados |
+| 13-compose | idem; `docker compose config -q` passa | nada | idem | `compose-validate.sh` verde (já inclui reinício e `down -v` sem sobras) |
 | 08-aprovacao | ação sensível oculta (`TestSensitiveStaysHiddenWithoutVerification`); auditoria de ação ERP | mecanismo de aprovação (operação, parâmetros, hash, prazo, aprovador, uso único), junto com a primeira ação sensível | D2-01 (ERP) e D2-02 (verificação do cliente) | testes do mecanismo: uso único, mudança de parâmetro invalida, prazo |
 | 08-verificacao-cliente | a ação sensível fica oculta sem verificação | reutilizar o mecanismo do provedor | D2-02 | teste com o mecanismo real ou seu contrato documentado |
 | 14-carga | `internal/loadlocal`, `scripts/ops-load-local.sh` (recusa-se como capacidade) | roteiro k6 com o perfil | D2-07 (perfil, metas, RPO/RTO) | relatório k6 com p95, CPU, RAM e I/O medidos |
@@ -137,4 +130,4 @@ Modo `-scan module` com padrão não é aceito pelo v1.9.0 ("patterns are not ac
 
 ## Reexecução
 
-Reutilizados os testes válidos da rodada `b2b6910`. Nesta rodada só foram executados: sondas Docker, verificação dos contêineres e imagens do host, govulncheck (símbolo e pacote) e `go list` do grafo. Nenhum código de produção mudou, então a suíte Go, o Vitest e os E2E não foram repetidos.
+Primeira parte (commit `89a95fa`): só sondas Docker, verificação dos contêineres e imagens do host, govulncheck (símbolo e pacote) e `go list` do grafo; nenhum código de produção mudou. Segunda parte (primeiro usuário): código mudou em `auth`, `httpapi`, `cmd/chatisp` e no painel. Foram reexecutados a suíte Go completa, `scripts/lint.sh`, o Vitest completo e os E2E `ux` e `m7-ops`. Os E2E `m3b`, `m4a` e `m4b-m6` não tocam essas áreas e não foram repetidos.

@@ -115,6 +115,14 @@ O Compose sobe:
 
 `deploy/.env.example` só tem placeholders. Segredos reais ficam em `deploy/.env`, que não entra no Git.
 
+Primeiro administrador, uma vez, com a senha pela entrada padrão:
+
+```sh
+printf '%s\n' "$SENHA_DO_ADMIN" | docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm -T chatisp-migrate bootstrap -email admin@provedor.example -superadmin
+```
+
+Requisitos do host: Docker Engine 20.10.10 ou mais novo e Compose 2.24.4 ou mais novo. Validação completa em ambiente isolado: `./scripts/compose-validate.sh` (ver `docs/operacao.md`).
+
 Para produção, defina `CHATISP_ENV=production` e a chave `CHATISP_DATA_KEYS` ou `CHATISP_DATA_KEYS_FILE` com `CHATISP_DATA_KEY_VERSION`. O exemplo de Compose deixa `development` para a instalação local com Docker.
 
 Não há chamada a Meta, Evolution ou ERP neste fluxo.

@@ -250,6 +250,14 @@ describe("identidade", () => {
       await waitFor(() => {
         expect(screen.queryByText("Suspenso")).not.toBeInTheDocument();
       });
+      await user.type(screen.getByLabelText("E-mail do administrador do provedor"), "admin@novo-provedor.test");
+      await user.click(screen.getByRole("button", { name: "Convidar administrador" }));
+      expect(await screen.findByText(/Convite enviado por e-mail/)).toBeInTheDocument();
+      const invited = panel.requests.find(
+        (request) => request.method === "POST" && request.path.endsWith("/admin-invitations"),
+      );
+      expect(invited?.csrf).toBe("csrf-publico");
+      expect(invited?.body).toMatchObject({ email: "admin@novo-provedor.test" });
       const created = panel.requests.find((request) => request.method === "POST" && request.path === "/api/platform/tenants");
       expect(created?.csrf).toBe("csrf-publico");
     });

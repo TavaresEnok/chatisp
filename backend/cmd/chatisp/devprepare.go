@@ -38,77 +38,9 @@ func devPrepare(parent context.Context, args []string, stdout, stderr io.Writer)
 	ctx, cancel := context.WithTimeout(parent, 2*time.Minute)
 	defer cancel()
 
-	secrets, err := db.NewRoleSecrets()
+	urls, jobsURL, err := prepareDevDatabase(ctx, *adminURL)
 	if err != nil {
 		return err
-	}
-	jobsPassword, err := randomHex(16)
-	if err != nil {
-		return err
-	}
-
-	urls, err := db.Bootstrap(ctx, *adminURL, secrets)
-	if err != nil {
-		return fmt.Errorf("falha ao preparar papéis de banco: %w", err)
-	}
-
-	conn, err := pgx.Connect(ctx, *adminURL)
-	if err != nil {
-		return fmt.Errorf("falha ao conectar como superusuário: %w", err)
-	}
-	defer conn.Close(ctx)
-
-	var exists bool
-	if err := conn.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'chatisp_jobs')`).Scan(&exists); err != nil {
-		return err
-	}
-	verb := "CREATE"
-	if exists {
-		verb = "ALTER"
-	}
-	var stmt string
-	if err := conn.QueryRow(ctx, `
-		SELECT format('%s ROLE chatisp_jobs LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD %L', $1::text, $2::text)
-	`, verb, jobsPassword).Scan(&stmt); err != nil {
-		return err
-	}
-	if _, err := conn.Exec(ctx, stmt); err != nil {
-		return fmt.Errorf("falha ao provisionar papel chatisp_jobs: %w", err)
-	}
-	for _, query := range []string{
-		`SELECT format('GRANT CONNECT, CREATE ON DATABASE %I TO chatisp_owner', current_database())`,
-		`SELECT format('GRANT CONNECT ON DATABASE %I TO chatisp_jobs', current_database())`,
-	} {
-		var grant string
-		if err := conn.QueryRow(ctx, query).Scan(&grant); err != nil {
-			return err
-		}
-		if _, err := conn.Exec(ctx, grant); err != nil {
-			return err
-		}
-	}
-
-	u, err := url.Parse(urls.App)
-	if err != nil {
-		return err
-	}
-	u.User = url.UserPassword("chatisp_jobs", jobsPassword)
-	jobsURL := u.String()
-
-	migrationsDir, err := db.MigrationsDir()
-	if err != nil {
-		return err
-	}
-	migrateCfg, err := config.Load([]string{
-		"CHATISP_ENV=development",
-		"CHATISP_DATABASE_URL=" + urls.Owner,
-		"CHATISP_MIGRATIONS_DIR=" + migrationsDir,
-	})
-	if err != nil {
-		return err
-	}
-	if err := applyMigrations(ctx, migrateCfg, nil); err != nil {
-		return fmt.Errorf("falha ao aplicar migrações (domínio e River): %w", err)
 	}
 
 	email, password, seeded, err := ensureDevUser(ctx, urls)
@@ -208,4 +140,83 @@ func randomHex(bytesLen int) (string, error) {
 		return "", errors.New("falha ao gerar segredo aleatório")
 	}
 	return hex.EncodeToString(buf), nil
+}
+
+// prepareDevDatabase creates the roles with fresh passwords, applies the migrations and returns
+// the role URLs and the River URL. It does not create any user.
+func prepareDevDatabase(ctx context.Context, adminURL string) (db.RoleURLs, string, error) {
+	secrets, err := db.NewRoleSecrets()
+	if err != nil {
+		return db.RoleURLs{}, "", err
+	}
+	jobsPassword, err := randomHex(16)
+	if err != nil {
+		return db.RoleURLs{}, "", err
+	}
+
+	urls, err := db.Bootstrap(ctx, adminURL, secrets)
+	if err != nil {
+		return db.RoleURLs{}, "", fmt.Errorf("falha ao preparar papéis de banco: %w", err)
+	}
+
+	conn, err := pgx.Connect(ctx, adminURL)
+	if err != nil {
+		return db.RoleURLs{}, "", fmt.Errorf("falha ao conectar como superusuário: %w", err)
+	}
+	defer conn.Close(ctx)
+
+	var exists bool
+	if err := conn.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'chatisp_jobs')`).Scan(&exists); err != nil {
+		return db.RoleURLs{}, "", err
+	}
+	verb := "CREATE"
+	if exists {
+		verb = "ALTER"
+	}
+	var stmt string
+	if err := conn.QueryRow(ctx, `
+		SELECT format('%s ROLE chatisp_jobs LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD %L', $1::text, $2::text)
+	`, verb, jobsPassword).Scan(&stmt); err != nil {
+		return db.RoleURLs{}, "", err
+	}
+	if _, err := conn.Exec(ctx, stmt); err != nil {
+		return db.RoleURLs{}, "", fmt.Errorf("falha ao provisionar papel chatisp_jobs: %w", err)
+	}
+	for _, query := range []string{
+		`SELECT format('GRANT CONNECT, CREATE ON DATABASE %I TO chatisp_owner', current_database())`,
+		`SELECT format('GRANT CONNECT ON DATABASE %I TO chatisp_jobs', current_database())`,
+	} {
+		var grant string
+		if err := conn.QueryRow(ctx, query).Scan(&grant); err != nil {
+			return db.RoleURLs{}, "", err
+		}
+		if _, err := conn.Exec(ctx, grant); err != nil {
+			return db.RoleURLs{}, "", err
+		}
+	}
+
+	u, err := url.Parse(urls.App)
+	if err != nil {
+		return db.RoleURLs{}, "", err
+	}
+	u.User = url.UserPassword("chatisp_jobs", jobsPassword)
+	jobsURL := u.String()
+
+	migrationsDir, err := db.MigrationsDir()
+	if err != nil {
+		return db.RoleURLs{}, "", err
+	}
+	migrateCfg, err := config.Load([]string{
+		"CHATISP_ENV=development",
+		"CHATISP_DATABASE_URL=" + urls.Owner,
+		"CHATISP_MIGRATIONS_DIR=" + migrationsDir,
+	})
+	if err != nil {
+		return db.RoleURLs{}, "", err
+	}
+	if err := applyMigrations(ctx, migrateCfg, nil); err != nil {
+		return db.RoleURLs{}, "", fmt.Errorf("falha ao aplicar migrações (domínio e River): %w", err)
+	}
+
+	return urls, jobsURL, nil
 }

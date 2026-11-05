@@ -2,7 +2,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { createProvider, loadPlatformAccess, setProviderSuspended } from "@/api/panel";
+import { createProvider, inviteProviderAdmin, loadPlatformAccess, setProviderSuspended } from "@/api/panel";
+import { emailSchema } from "@/components/auth/password";
 import { PlatformUsagePanel } from "@/components/settings/platform-usage";
 import { errorMessage } from "@/api/problems";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,12 @@ const createSchema = z.object({
 });
 
 type CreateValues = z.infer<typeof createSchema>;
+
+const inviteSchema = z.object({
+  email: emailSchema,
+});
+
+type InviteValues = z.infer<typeof inviteSchema>;
 
 const tenantStatus: Record<string, string> = {
   active: "Ativo",
@@ -54,6 +61,7 @@ export function PlatformAdmin() {
             <p>{tenant.timezone}</p>
             <p>{tenantStatus[tenant.status] ?? "Situação desconhecida"}</p>
             <ProviderStateButton tenantId={tenant.id} suspended={tenant.status === "suspended"} />
+            {tenant.status === "active" ? <InviteProviderAdminForm tenantId={tenant.id} /> : null}
           </li>
         ))}
       </ul>
@@ -164,5 +172,48 @@ function ProviderStateButton({ tenantId, suspended }: { tenantId: string; suspen
         {suspended ? "Reativar" : "Suspender"}
       </Button>
     </div>
+  );
+}
+
+function InviteProviderAdminForm({ tenantId }: { tenantId: string }) {
+  const fieldId = `convite-admin-${tenantId}`;
+  const form = useForm<InviteValues>({
+    resolver: zodResolver(inviteSchema),
+    defaultValues: { email: "" },
+  });
+  const invite = useMutation({
+    mutationFn: (values: InviteValues) => inviteProviderAdmin(tenantId, values.email),
+    onSuccess: () => {
+      form.reset();
+    },
+  });
+
+  return (
+    <form
+      noValidate
+      className="flex max-w-md flex-col gap-2"
+      onSubmit={form.handleSubmit((values) => {
+        invite.mutate(values);
+      })}
+    >
+      {invite.isError ? (
+        <p role="alert" className="text-sm text-destructive">
+          {errorMessage(invite.error)}
+        </p>
+      ) : null}
+      {invite.isSuccess ? (
+        <p role="status" className="text-sm">
+          Convite enviado por e-mail. Vale até {new Date(invite.data.expires_at).toLocaleString("pt-BR")}.
+        </p>
+      ) : null}
+      <Label htmlFor={fieldId}>E-mail do administrador do provedor</Label>
+      <Input id={fieldId} type="email" autoComplete="off" {...form.register("email")} />
+      {form.formState.errors.email?.message ? (
+        <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>
+      ) : null}
+      <Button type="submit" variant="outline" disabled={invite.isPending} className="h-11 w-fit px-3">
+        Convidar administrador
+      </Button>
+    </form>
   );
 }

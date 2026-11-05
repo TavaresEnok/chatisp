@@ -380,20 +380,32 @@ func (s *Service) Invite(ctx context.Context, actor Principal, email, role strin
 	if !validRole(role) {
 		return Invite{}, ErrInvalidRole
 	}
+	userID, expires, err := s.sendInvite(ctx, actor.TenantID, normalized, role)
+	if err != nil {
+		return Invite{}, err
+	}
+	s.audit(ctx, actor.TenantID, actor.UserID, actor.MembershipID, "invitation.create", "user", &userID, "success")
+	s.log.InfoContext(ctx, "convite enviado", "component", "auth")
+	return Invite{ExpiresAt: expires}, nil
+}
+
+// sendInvite prepares the user and the invited membership, stores a single-use token and mails it.
+// Callers check permission and write their own audit record.
+func (s *Service) sendInvite(ctx context.Context, tenantID uuid.UUID, normalized, role string) (uuid.UUID, time.Time, error) {
 	user, err := s.ensureUser(ctx, normalized)
 	if err != nil {
-		return Invite{}, err
+		return uuid.Nil, time.Time{}, err
 	}
 	if user.Status == "disabled" {
-		return Invite{}, ErrForbidden
+		return uuid.Nil, time.Time{}, ErrForbidden
 	}
-	membership, err := s.ensureInvitedMembership(ctx, actor.TenantID, user.ID, role)
+	membership, err := s.ensureInvitedMembership(ctx, tenantID, user.ID, role)
 	if err != nil {
-		return Invite{}, err
+		return uuid.Nil, time.Time{}, err
 	}
 	raw, hash, err := NewSecret()
 	if err != nil {
-		return Invite{}, ErrUnavailable
+		return uuid.Nil, time.Time{}, ErrUnavailable
 	}
 	now := s.now()
 	expires := now.Add(s.policy.InviteTTL)
@@ -403,7 +415,7 @@ func (s *Service) Invite(ctx context.Context, actor Principal, email, role strin
 			TokenHash:    hash,
 			Purpose:      purposeInvite,
 			UserID:       user.ID,
-			TenantID:     actor.TenantID,
+			TenantID:     tenantID,
 			MembershipID: membership.ID,
 			ExpiresAt:    expires,
 			Now:          now,
@@ -411,7 +423,7 @@ func (s *Service) Invite(ctx context.Context, actor Principal, email, role strin
 	})
 	if err != nil {
 		s.log.ErrorContext(ctx, "falha ao gravar convite", "component", "auth")
-		return Invite{}, ErrUnavailable
+		return uuid.Nil, time.Time{}, ErrUnavailable
 	}
 	message := mail.Message{
 		To:      normalized,
@@ -425,11 +437,9 @@ func (s *Service) Invite(ctx context.Context, actor Principal, email, role strin
 			return s.store.InvalidateAuthToken(ctx, hash, s.now())
 		})
 		s.log.ErrorContext(ctx, "falha ao enviar convite", "component", "auth")
-		return Invite{}, ErrMail
+		return uuid.Nil, time.Time{}, ErrMail
 	}
-	s.audit(ctx, actor.TenantID, actor.UserID, actor.MembershipID, "invitation.create", "user", &user.ID, "success")
-	s.log.InfoContext(ctx, "convite enviado", "component", "auth")
-	return Invite{ExpiresAt: expires}, nil
+	return user.ID, expires, nil
 }
 
 // AcceptInvite consumes an invite and opens a session.

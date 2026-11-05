@@ -323,6 +323,24 @@ export class PanelDouble {
       sendJson(res, 201, tenant);
       return;
     }
+    const adminInvite = path.match(/^\/api\/platform\/tenants\/([^/]+)\/admin-invitations$/);
+    if (method === "POST" && adminInvite) {
+      if (!this.accounts.some((account) => account.email === this.issued?.email && account.superadmin)) {
+        problem(res, 403, "acesso negado");
+        return;
+      }
+      const tenant = this.tenants.find((item) => item.id === adminInvite[1]);
+      if (!tenant) {
+        problem(res, 404, "provedor não encontrado");
+        return;
+      }
+      if (tenant.status !== "active") {
+        problem(res, 409, "o provedor já está nesse estado");
+        return;
+      }
+      sendJson(res, 201, { expires_at: "2026-11-06T12:00:00Z" });
+      return;
+    }
     const tenantAction = path.match(/^\/api\/platform\/tenants\/([^/]+)\/(suspend|reactivate)$/);
     if (method === "POST" && tenantAction) {
       const tenant = this.tenants.find((item) => item.id === tenantAction[1]);

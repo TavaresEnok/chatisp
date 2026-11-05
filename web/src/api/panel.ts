@@ -158,3 +158,11 @@ export async function setProviderSuspended(tenantId: string, suspended: boolean)
   });
   return unwrap(result);
 }
+
+export async function inviteProviderAdmin(tenantId: string, email: string) {
+  const result = await api.POST("/api/platform/tenants/{tenant_id}/admin-invitations", {
+    params: { path: { tenant_id: tenantId } },
+    body: { email },
+  });
+  return unwrap(result);
+}

@@ -240,4 +240,6 @@ Relatório: `docs/medicoes/verificacao-entrega-20261105.md`. Nenhum código de p
 - **Matriz:** 202 verificados, 33 aguardando homologação, 22 parciais. 13 linhas de ERP e 01-evolution saíram de "homologação" porque `erp/real.go` é stub e o Evolution é só contrato.
 - **Segurança:** `docs/medicoes/govulncheck-20261105/`. GO-2026-5932 (`x/crypto/openpgp`) não está no grafo de build (`go list -deps -test`, `vendor/modules.txt`, `-scan package` = 0).
 
-Próxima tarefa: implementar a inicialização do superadmin e o convite do primeiro admin (plano pelo `paseo-flow`), depois rodar `scripts/compose-validate.sh` num host com Docker ≥ 20.10.10.
+Atualização (mesmo dia): a lacuna do primeiro usuário foi implementada direto nesta sessão (o projeto não usa mais o `paseo-flow`). `chatisp bootstrap -email ... [-superadmin]` (senha pela entrada padrão, só em instalação vazia, retomável, auditado) e `POST /api/platform/tenants/{id}/admin-invitations` com "Convidar administrador" no painel. `compose-validate.sh` passou a provar bootstrap, login pelo Caddy, reinício e encerramento sem sobras, com etiquetas de imagem próprias. Go completo, `lint.sh`, Vitest (60/288) e E2E `ux`/`m7-ops` verdes. Matriz: 204 verificados, 33 aguardando homologação, 20 parciais.
+
+Próxima tarefa: rodar `scripts/compose-validate.sh` num host com Docker ≥ 20.10.10 (este host não serve) e fechar 12-https, 13-self-host e 13-compose com o resultado.

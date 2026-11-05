@@ -4439,6 +4439,21 @@
         ],
         "type": "object"
       },
+      "TenantAdminInviteInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "description": "E-mail do administrador convidado.",
+            "maxLength": 320,
+            "minLength": 3,
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "type": "object"
+      },
       "TenantBody": {
         "additionalProperties": false,
         "properties": {
@@ -19015,6 +19030,138 @@
           }
         },
         "summary": "Mostra um provedor",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/api/platform/tenants/{tenant_id}/admin-invitations": {
+      "post": {
+        "description": "Superadmin. Envia por e-mail um convite de uso único com papel admin no provedor; o token não volta na resposta. Auditado em platform_audit_logs. Provedor suspenso responde 409.",
+        "operationId": "invite-platform-tenant-admin",
+        "parameters": [
+          {
+            "description": "Cookie de sessão do painel.",
+            "in": "cookie",
+            "name": "__Host-session",
+            "schema": {
+              "description": "Cookie de sessão do painel.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Token de CSRF vinculado à sessão.",
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "schema": {
+              "description": "Token de CSRF vinculado à sessão.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Provedor.",
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "description": "Provedor.",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantAdminInviteInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Não autenticado"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Acesso negado"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Recurso não encontrado"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflito"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Dados inválidos"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Erro interno"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Serviço indisponível"
+          }
+        },
+        "summary": "Convida o administrador de um provedor",
         "tags": [
           "plataforma"
         ]

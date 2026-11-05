@@ -89,6 +89,7 @@ func TestRoleMatrixByEndpoint(t *testing.T) {
 		{name: "reativar usuário", method: http.MethodPost, path: "/api/panel/memberships/" + spare.membership.String() + "/reactivate", want: map[string]int{"supervisor": http.StatusForbidden, "agent": http.StatusForbidden}, write: true},
 		{name: "listar provedores", method: http.MethodGet, path: "/api/platform/tenants", want: map[string]int{"admin": http.StatusForbidden, "supervisor": http.StatusForbidden, "agent": http.StatusForbidden}},
 		{name: "criar provedor", method: http.MethodPost, path: "/api/platform/tenants", body: map[string]any{"timezone": "America/Sao_Paulo", "limits": map[string]int{"max_agents": 2}}, want: map[string]int{"admin": http.StatusForbidden, "supervisor": http.StatusForbidden, "agent": http.StatusForbidden}, write: true},
+		{name: "convidar admin de provedor", method: http.MethodPost, path: "/api/platform/tenants/" + uuid.NewString() + "/admin-invitations", body: map[string]string{"email": "novo-admin@example.com"}, want: map[string]int{"admin": http.StatusForbidden, "supervisor": http.StatusForbidden, "agent": http.StatusForbidden}, write: true},
 	}
 
 	for _, role := range roles {
@@ -160,9 +161,27 @@ func TestRoleMatrixByEndpoint(t *testing.T) {
 	if shown.Code != http.StatusOK || strings.Contains(shown.Body.String(), marker) {
 		t.Fatalf("consulta do superadmin: %d %s", shown.Code, shown.Body.String())
 	}
+	invited := panelCall(api.Handler, http.MethodPost, "/api/platform/tenants/"+createdBody.ID.String()+"/admin-invitations", "198.51.100.51", map[string]string{
+		"email": "admin-" + uuid.NewString() + "@example.com",
+	}, superCookie, superCSRF, origin, "")
+	if invited.Code != http.StatusCreated || !strings.Contains(invited.Body.String(), "expires_at") || strings.Contains(invited.Body.String(), "token") {
+		t.Fatalf("convite do admin do provedor: %d %s", invited.Code, invited.Body.String())
+	}
+	missing := panelCall(api.Handler, http.MethodPost, "/api/platform/tenants/"+uuid.NewString()+"/admin-invitations", "198.51.100.52", map[string]string{
+		"email": "ninguem@example.com",
+	}, superCookie, superCSRF, origin, "")
+	if missing.Code != http.StatusNotFound {
+		t.Fatalf("convite para provedor inexistente: %d %s", missing.Code, missing.Body.String())
+	}
 	suspended := panelCall(api.Handler, http.MethodPost, "/api/platform/tenants/"+createdBody.ID.String()+"/suspend", "198.51.100.48", nil, superCookie, superCSRF, origin, "")
 	if suspended.Code != http.StatusOK || !strings.Contains(suspended.Body.String(), `"suspended"`) {
 		t.Fatalf("suspensão: %d %s", suspended.Code, suspended.Body.String())
+	}
+	frozen := panelCall(api.Handler, http.MethodPost, "/api/platform/tenants/"+createdBody.ID.String()+"/admin-invitations", "198.51.100.53", map[string]string{
+		"email": "congelado@example.com",
+	}, superCookie, superCSRF, origin, "")
+	if frozen.Code != http.StatusConflict {
+		t.Fatalf("convite em provedor suspenso: %d %s", frozen.Code, frozen.Body.String())
 	}
 	restored := panelCall(api.Handler, http.MethodPost, "/api/platform/tenants/"+createdBody.ID.String()+"/reactivate", "198.51.100.49", nil, superCookie, superCSRF, origin, "")
 	if restored.Code != http.StatusOK || !strings.Contains(restored.Body.String(), `"active"`) {

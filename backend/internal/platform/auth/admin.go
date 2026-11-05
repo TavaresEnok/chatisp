@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	actionTenantCreate     = "tenant.create"
-	actionTenantSuspend    = "tenant.suspend"
-	actionTenantReactivate = "tenant.reactivate"
-	actionMemberDisable    = "membership.deactivate"
-	actionMemberEnable     = "membership.reactivate"
+	actionTenantCreate      = "tenant.create"
+	actionTenantSuspend     = "tenant.suspend"
+	actionTenantReactivate  = "tenant.reactivate"
+	actionTenantAdminInvite = "tenant.admin_invite"
+	actionMemberDisable     = "membership.deactivate"
+	actionMemberEnable      = "membership.reactivate"
 )
 
 // PlanLimits is the V1 plan stored on the provider. A nil field means that limit is unset.
@@ -97,6 +98,48 @@ func (s *Service) GetProvider(ctx context.Context, actor Principal, tenantID uui
 		return db.Tenant{}, s.mapProvider(err)
 	}
 	return row, nil
+}
+
+// InviteProviderAdmin sends an admin invitation for a provider, so a new provider gets its first
+// administrator without SQL. Only a superadmin with a full session may call it; the token is
+// mailed, never returned, and the call is audited in platform_audit_logs.
+func (s *Service) InviteProviderAdmin(ctx context.Context, actor Principal, tenantID uuid.UUID, email string) (Invite, error) {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
+	if err := s.requireSuperadmin(actor); err != nil {
+		return Invite{}, err
+	}
+	if tenantID == uuid.Nil {
+		return Invite{}, ErrNotFound
+	}
+	normalized, err := normalizeEmail(email)
+	if err != nil {
+		return Invite{}, ErrInvalidEmail
+	}
+	var tenant db.Tenant
+	err = s.store.WithPlatform(ctx, func(ctx context.Context) error {
+		found, err := s.store.GetTenantByID(ctx, tenantID)
+		tenant = found
+		return err
+	})
+	if err != nil {
+		return Invite{}, s.mapProvider(err)
+	}
+	if tenant.Status != "active" {
+		return Invite{}, ErrTenantState
+	}
+	_, expires, err := s.sendInvite(ctx, tenantID, normalized, "admin")
+	if err != nil {
+		return Invite{}, err
+	}
+	err = s.store.WithPlatform(ctx, func(ctx context.Context) error {
+		return s.writePlatformAudit(ctx, actor.UserID, actionTenantAdminInvite, tenantID)
+	})
+	if err != nil {
+		s.log.ErrorContext(ctx, "falha ao auditar convite de administrador", "component", "auth")
+		return Invite{}, ErrUnavailable
+	}
+	s.log.InfoContext(ctx, "convite de administrador do provedor enviado", "component", "auth")
+	return Invite{ExpiresAt: expires}, nil
 }
 
 // ListProviders returns the provider registry. It does not read attendance.

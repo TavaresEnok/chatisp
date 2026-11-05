@@ -75,7 +75,13 @@ O painel com Caddy fica em `https://localhost:8443`. `deploy/.env.example` só t
 
 Requisitos do host: Docker Engine 20.10.10 ou mais novo (o 20.10.9 nega `clone3` com EPERM e quebra o `apt` do Debian 13 e o Node 24), ponte padrão funcional com saída para a internet durante o build, Compose 2.24.4 ou mais novo. Prova rápida antes de subir: `docker run --rm debian:13-slim sh -c 'apt-get update >/dev/null && echo ok'`.
 
-**Lacuna conhecida (05/11/2026):** a instalação por Compose não cria o primeiro usuário. Não existe comando de produção para criar o superadmin nem o primeiro administrador de um provedor; `chatisp dev-prepare` é só do ambiente de desenvolvimento e não deve ser apontado para o banco do Compose. Até a implementação, login no Compose exige inserção manual por SQL. Detalhes em `docs/medicoes/verificacao-entrega-20261105.md`.
+Primeiro acesso, uma vez, numa instalação vazia (a senha vai pela entrada padrão e não aparece em argumento, variável nem log):
+
+```
+printf '%s\n' "$SENHA_DO_ADMIN" | docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm -T chatisp-migrate bootstrap -email admin@provedor.example -superadmin
+```
+
+O comando cria o primeiro provedor e o administrador (com `-superadmin`, também o operador da plataforma). Repetido com o mesmo e-mail, não altera nada; com outro e-mail numa instalação povoada, recusa. Entre em `https://localhost:8443/entrar`; o MFA é exigido no primeiro acesso. Provedores seguintes: o superadmin cria em Configurações › Provedores e usa "Convidar administrador" (exige SMTP em `CHATISP_SMTP_*`; o token vai só por e-mail). `chatisp dev-prepare` é do ambiente de desenvolvimento e não deve ser apontado para o banco do Compose.
 
 ## O que a operação local não faz
 
@@ -91,7 +97,7 @@ Requisitos do host: Docker Engine 20.10.10 ou mais novo (o 20.10.9 nega `clone3`
 ./scripts/compose-validate.sh
 ```
 
-O script usa projeto, volumes e rede próprios (`chatisp-validate-<pid>`), segredos descartáveis gerados na hora, porta de loopback livre para o Caddy, e se desfaz no fim (`down -v`). Não toca em outros projetos. Requer Docker com a ponte `docker0` e versão que rode imagens Debian 13/Node 24 (20.10.10 ou mais nova) e Compose 2.24.4 ou mais novo (por causa de `!override`).
+O script usa projeto, volumes, rede e etiquetas de imagem próprios (`chatisp-validate-<pid>`), segredos descartáveis gerados na hora, porta de loopback livre para o Caddy, e se desfaz no fim (`down -v`). Não toca em outros projetos. Requer Docker com a ponte `docker0` e versão que rode imagens Debian 13/Node 24 (20.10.10 ou mais nova) e Compose 2.24.4 ou mais novo (por causa de `!override`).
 
 Estado verificado em 05/11/2026 na máquina de desenvolvimento (Docker 20.10.9, sem a ponte `docker0`; diagnóstico completo, logs e procedimento em `docs/medicoes/verificacao-entrega-20261105.md` e `docs/medicoes/docker-20261105/`):
 

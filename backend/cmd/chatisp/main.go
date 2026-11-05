@@ -60,6 +60,11 @@ modos:
   migrate   aplica migrações SQL com goose
   all       API, worker e métricas
   openapi   grava o OpenAPI em JSON
+  bootstrap cria o primeiro provedor e o primeiro administrador
+
+bootstrap (instalação vazia; senha pela entrada padrão, primeira linha):
+  chatisp bootstrap -email admin@exemplo.com [-superadmin] [-timezone America/Sao_Paulo]
+  Exige CHATISP_DATABASE_URL (dono), CHATISP_APP_DATABASE_URL e CHATISP_PLATFORM_DATABASE_URL.
 
 openapi:
   chatisp openapi [-output caminho]
@@ -70,13 +75,17 @@ Execute a partir de backend/ para o caminho padrão api/openapi.json.
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	if err := run(ctx, os.Args[1:], os.Environ(), os.Stdout, os.Stderr); err != nil {
+	if err := runWithInput(ctx, os.Args[1:], os.Environ(), os.Stdin, os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintf(os.Stderr, "chatisp: %s\n", err.Error())
 		os.Exit(1)
 	}
 }
 
 func run(ctx context.Context, args []string, environ []string, stdout, stderr io.Writer) error {
+	return runWithInput(ctx, args, environ, nil, stdout, stderr)
+}
+
+func runWithInput(ctx context.Context, args []string, environ []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		fmt.Fprint(stdout, usageText)
 		return errors.New("informe o modo: api, worker, migrate, all ou openapi")
@@ -89,6 +98,8 @@ func run(ctx context.Context, args []string, environ []string, stdout, stderr io
 		return exportOpenAPI(args[1:], stdout, stderr)
 	case "dev-prepare":
 		return devPrepare(ctx, args[1:], stdout, stderr)
+	case "bootstrap":
+		return bootstrap(ctx, args[1:], environ, stdin, stdout, stderr)
 	case "api", "worker", "migrate", "all":
 		load := config.LoadRuntime
 		if args[0] == "migrate" {

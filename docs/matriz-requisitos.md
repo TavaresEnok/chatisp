@@ -1,6 +1,6 @@
 # Matriz de requisitos V1 e V1 simples
 
-Contagem: Implementado e verificado: 202; Implementado, aguardando homologação externa: 33; Não implementado: 0; Parcial, com lacuna concreta: 22.
+Contagem: Implementado e verificado: 204; Implementado, aguardando homologação externa: 33; Não implementado: 0; Parcial, com lacuna concreta: 20.
 
 Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1 a M8 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
 
@@ -25,7 +25,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 13-responsiva | M1 | V1 | Implementado e verificado | Chromium 140 em 1280×800, 768×1024, 360×640 e 320×256 (reflow WCAG 1.4.10) em 9 páginas com sessão e 5 sem sessão: 0 px de rolagem horizontal depois das correções (grade da conversa, filtros da fila, seletor de caixa, tabelas e campos de arquivo) |
 | 13-pt-br | M1 | V1 | Implementado e verificado | web/index.html lang="pt-BR"; varredura de literais em inglês nos .tsx não achou rótulos de interface em inglês; mensagens do backend em português (problemas HTTP, validações); jornadas E2E no Chromium em 05/11/2026 só com textos em português. Sem auditoria linguística humana |
 | 13-a11y | M1 | V1 | Implementado e verificado | axe-core 4.10.2 com WCAG 2.0/2.1/2.2 A e AA: 0 violações nas 52 visões (inclui MFA, convite, recuperação de senha e reflow 320 px); Tab sem armadilha, com foco visível (corrigido o anel invisível do Tailwind v4), nomes acessíveis e alvos ≥ 24 px; sem chave React repetida. Sem leitor de tela real nem navegador além do Chromium (docs/medicoes/a11y-notificacoes.md) |
-| 13-self-host | M1 | V1 | Parcial, com lacuna concreta | deploy/ corrigido (um só compose.yaml, .env.example completo, ffmpeg na imagem) e scripts/compose-validate.sh; não executado: Docker 20.10.9 sem docker0 (docs/operacao.md) |
+| 13-self-host | M1 | V1 | Parcial, com lacuna concreta | deploy/ corrigido (um só compose.yaml, .env.example completo, ffmpeg na imagem) e scripts/compose-validate.sh; não executado: Docker 20.10.9 sem docker0 (docs/operacao.md); primeiro usuário por `chatisp bootstrap` e login, reinício e encerramento incluídos no compose-validate.sh |
 | 13-saas | M1 | V1 | Implementado e verificado | testes com segundo tenant: platform/db/tenant_status_gate_test.go, ingress/authmeta/handler_test.go |
 | 13-compose | M1 | V1 | Parcial, com lacuna concreta | docker compose config -q ok com segredos descartáveis; o build falha neste host (sem docker0; apt do Debian 13 e npm ci do Node 24 abortam em Docker 20.10.9); a validação isolada fica em scripts/compose-validate.sh |
 | 14-rls | M1 | V1 | Implementado e verificado | TestSchemaForcesTenantRLSAndCompositeFK |
@@ -36,7 +36,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 14-migracoes | M1 | V1 | Implementado e verificado | TestBootstrapAndMigrationsAreIdempotent; migrações aplicadas em banco novo pela suíte |
 | 14-jobs-restart | M1 | V1 | Implementado e verificado | TestDispatch_RealHttptest_CrashRecoveryAndRiverRestart; platform/jobs/postgres_test.go |
 | 14-modos | M1 | V1 | Implementado e verificado | platform/runtime/runtime_test.go, cmd/chatisp/smoke_test.go |
-| 14-provisionamento | M1 | V1 | Parcial, com lacuna concreta | platform/httpapi/panel_test.go; web/src/pages/platform-tenants-page.tsx. 05/11/2026: não há caminho de produção para criar o superadmin nem o primeiro admin de um provedor novo (is_superadmin só por SQL nos testes; CreateProvider não convida admin); ver docs/medicoes/verificacao-entrega-20261105.md |
+| 14-provisionamento | M1 | V1 | Implementado e verificado | platform/httpapi/panel_test.go; web/src/pages/platform-tenants-page.tsx. 05/11/2026: primeiro superadmin por `chatisp bootstrap -superadmin` (TestBootstrapFirstAdminOnEmptyInstallation, TestBootstrapResumesInterruptedRun) e primeiro admin de provedor novo por convite de plataforma (TestSuperadminInvitesFirstProviderAdmin, TestProviderAdminInviteRefusals, roles_test.go), sem SQL |
 | 01-cloud-api | M2 | V1 | Implementado, aguardando homologação externa | integracoes/meta.md (D2-03) |
 | 01-config-manual | M2 | V1 | Implementado, aguardando homologação externa | TestManualConfigurationIsolationVersionAndSecret; servidor falso, sem Meta real (D2-03) |
 | 01-multi-numeros | M2 | V1 | Implementado e verificado | channel/configuration/service_test.go, shared_app_test.go |
@@ -256,7 +256,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 12-historico-demandas | M7 | V1 simples | Implementado e verificado | TestExportDemandsKeepsProtocolAndHidesOtherSectors |
 | 12-logo | M7 | V1 simples | Implementado e verificado | branding: TestNormalizeRejectsActiveContentMisleadingTypeAndLimits, TestHTTPRolesMFAOriginAndImageHeaders; E2E M7 de 04/11 |
 | 12-limites-plano | M7 | V1 simples | Implementado e verificado | TestPlanLimitsBlockNewRowsAndKeepHistory |
-| 12-superadmin | M7 | V1 | Parcial, com lacuna concreta | TestAdminSeesOwnTenantAudit, TestUsageHidesMessageBodyAndRejectsProviderRoles; platform/httpapi/panel_test.go. 05/11/2026: não há caminho de produção para criar o superadmin nem o primeiro admin de um provedor novo (is_superadmin só por SQL nos testes; CreateProvider não convida admin); ver docs/medicoes/verificacao-entrega-20261105.md |
+| 12-superadmin | M7 | V1 | Implementado e verificado | TestAdminSeesOwnTenantAudit, TestUsageHidesMessageBodyAndRejectsProviderRoles; platform/httpapi/panel_test.go. 05/11/2026: primeiro superadmin por `chatisp bootstrap -superadmin` (TestBootstrapFirstAdminOnEmptyInstallation, TestBootstrapResumesInterruptedRun) e primeiro admin de provedor novo por convite de plataforma (TestSuperadminInvitesFirstProviderAdmin, TestProviderAdminInviteRefusals, roles_test.go), sem SQL |
 | 12-criar-suspender | M7 | V1 | Implementado e verificado | platform/db/tenant_status_gate_test.go; panel_test.go |
 | 14-retencao | M7 | V1 simples | Implementado, aguardando homologação externa | mesma situação de 12-retencao: classes conteúdo, mídia, envelope, log e job registradas e expurgo recusado sem apagar nada; exclusão aguarda D2-06 |
 | 14-suspensao | M7 | V1 | Implementado e verificado | platform/db/tenant_status_gate_test.go; panel_test.go |

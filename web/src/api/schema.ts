@@ -1504,6 +1504,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform/tenants/{tenant_id}/admin-invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Convida o administrador de um provedor
+         * @description Superadmin. Envia por e-mail um convite de uso único com papel admin no provedor; o token não volta na resposta. Auditado em platform_audit_logs. Provedor suspenso responde 409.
+         */
+        post: operations["invite-platform-tenant-admin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/platform/tenants/{tenant_id}/reactivate": {
         parameters: {
             query?: never;
@@ -2852,6 +2872,10 @@ export interface components {
         };
         TemplateOutputBody: {
             templates: components["schemas"]["ChannelPolicyTemplate"][] | null;
+        };
+        TenantAdminInviteInputBody: {
+            /** @description E-mail do administrador convidado. */
+            email: string;
         };
         TenantBody: {
             /**
@@ -13191,6 +13215,102 @@ export interface operations {
             };
             /** @description Recurso não encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "invite-platform-tenant-admin": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token de CSRF vinculado à sessão. */
+                "X-CSRF-Token"?: string;
+            };
+            path: {
+                /** @description Provedor. */
+                tenant_id: string;
+            };
+            cookie?: {
+                /** @description Cookie de sessão do painel. */
+                "__Host-session"?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantAdminInviteInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteBody"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
