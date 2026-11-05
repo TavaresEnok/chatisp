@@ -34,7 +34,7 @@ func (s *Service) loginLocked(ctx context.Context, email, ip string) (bool, erro
 		return nil
 	})
 	if err != nil {
-		s.log.Error("falha ao consultar bloqueio", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao consultar bloqueio", "component", "auth")
 		return false, ErrUnavailable
 	}
 	return locked, nil
@@ -51,7 +51,7 @@ func (s *Service) loadIdentity(ctx context.Context, email string) (db.LoginIdent
 		return db.LoginIdentity{}, false, nil
 	}
 	if err != nil {
-		s.log.Error("falha ao ler identidade", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao ler identidade", "component", "auth")
 		return db.LoginIdentity{}, false, ErrUnavailable
 	}
 	return identity, true, nil
@@ -65,7 +65,7 @@ func (s *Service) recordLoginFailure(ctx context.Context, email, ip string) erro
 		return s.bumpLock(ctx, kindLoginIP, normalizeIP(ip), s.policy.LockoutThreshold)
 	})
 	if err != nil {
-		s.log.Error("falha ao registrar tentativa", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao registrar tentativa", "component", "auth")
 		return ErrUnavailable
 	}
 	return nil
@@ -122,7 +122,7 @@ func (s *Service) audit(ctx context.Context, tenantID, actor, membershipID uuid.
 		return err
 	})
 	if err != nil {
-		s.log.Error("falha ao auditar", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao auditar", "component", "auth")
 	}
 }
 
@@ -137,7 +137,7 @@ func (s *Service) auditPasswordReset(ctx context.Context, userID uuid.UUID) {
 		return nil
 	})
 	if err != nil {
-		s.log.Error("falha ao auditar", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao auditar", "component", "auth")
 		return
 	}
 	identity, found, err := s.loadIdentity(ctx, email)
@@ -213,7 +213,7 @@ func (s *Service) ensureUser(ctx context.Context, email string) (db.User, error)
 		if errors.Is(err, db.ErrInvalidEmail) {
 			return db.User{}, ErrInvalidEmail
 		}
-		s.log.Error("falha ao preparar usuário", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao preparar usuário", "component", "auth")
 		return db.User{}, ErrUnavailable
 	}
 	return user, nil
@@ -273,7 +273,7 @@ func (s *Service) ensureInvitedMembership(ctx context.Context, tenantID, userID 
 			}
 			return db.Membership{}, err
 		}
-		s.log.Error("falha ao preparar convite", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao preparar convite", "component", "auth")
 		return db.Membership{}, ErrUnavailable
 	}
 	switch membership.Status {
@@ -296,7 +296,7 @@ func (s *Service) guardTokenIP(ctx context.Context, ip string) error {
 		return err
 	})
 	if err != nil {
-		s.log.Error("falha ao consultar bloqueio", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao consultar bloqueio", "component", "auth")
 		return ErrUnavailable
 	}
 	if !until.IsZero() && until.After(s.now()) {
@@ -310,7 +310,7 @@ func (s *Service) noteTokenFailure(ctx context.Context, ip string) {
 		return s.bumpLock(ctx, kindTokenIP, normalizeIP(ip), s.policy.TokenFailureLimit)
 	})
 	if err != nil {
-		s.log.Error("falha ao registrar tentativa", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao registrar tentativa", "component", "auth")
 	}
 }
 
@@ -322,7 +322,7 @@ func (s *Service) clearKind(ctx context.Context, kind, value string) error {
 		return s.store.ClearFailures(ctx, kind, SubjectHash(kind, value))
 	})
 	if err != nil {
-		s.log.Error("falha ao limpar tentativas", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao limpar tentativas", "component", "auth")
 		return ErrUnavailable
 	}
 	return nil
@@ -343,7 +343,7 @@ func (s *Service) resetSuppressed(ctx context.Context, email, ip string) (bool, 
 		return nil
 	})
 	if err != nil {
-		s.log.Error("falha ao consultar recuperação", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao consultar recuperação", "component", "auth")
 		return false, ErrUnavailable
 	}
 	return suppressed, nil

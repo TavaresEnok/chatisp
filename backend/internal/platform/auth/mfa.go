@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"chatisp/internal/platform/logging"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -35,6 +36,7 @@ type Enrollment struct {
 
 // BeginEnrollment seals a new TOTP secret and returns recovery codes a single time.
 func (s *Service) BeginEnrollment(ctx context.Context, actor Principal) (Enrollment, error) {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	if actor.UserID == uuid.Nil || actor.TenantID == uuid.Nil {
 		return Enrollment{}, ErrUnauthenticated
 	}
@@ -61,7 +63,7 @@ func (s *Service) BeginEnrollment(ctx context.Context, actor Principal) (Enrollm
 		Rand:        rand.Reader,
 	})
 	if err != nil {
-		s.log.Error("falha ao gerar TOTP", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao gerar TOTP", "component", "auth")
 		return Enrollment{}, ErrUnavailable
 	}
 	sealed, err := s.keys.Encrypt([]byte(key.Secret()), crypto.Context{
@@ -71,7 +73,7 @@ func (s *Service) BeginEnrollment(ctx context.Context, actor Principal) (Enrollm
 		Field:    totpField,
 	})
 	if err != nil {
-		s.log.Error("falha ao cifrar TOTP", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao cifrar TOTP", "component", "auth")
 		return Enrollment{}, ErrUnavailable
 	}
 	codes, hashes, err := newRecoveryCodes()
@@ -91,7 +93,7 @@ func (s *Service) BeginEnrollment(ctx context.Context, actor Principal) (Enrollm
 		return nil
 	})
 	if err != nil {
-		s.log.Error("falha ao gravar MFA", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao gravar MFA", "component", "auth")
 		return Enrollment{}, ErrUnavailable
 	}
 	return Enrollment{OTPAuthURL: key.URL(), Secret: key.Secret(), RecoveryCodes: codes}, nil
@@ -99,6 +101,7 @@ func (s *Service) BeginEnrollment(ctx context.Context, actor Principal) (Enrollm
 
 // ConfirmEnrollment checks the first TOTP code and opens the panel for this session.
 func (s *Service) ConfirmEnrollment(ctx context.Context, actor Principal, code string) error {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	if actor.UserID == uuid.Nil {
 		return ErrUnauthenticated
 	}
@@ -153,20 +156,21 @@ func (s *Service) ConfirmEnrollment(ctx context.Context, actor Principal, code s
 		return s.clearMFAFailures(ctx, actor.UserID, "")
 	})
 	if err != nil {
-		s.log.Error("falha ao confirmar MFA", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao confirmar MFA", "component", "auth")
 		return ErrUnavailable
 	}
 	s.audit(ctx, actor.TenantID, actor.UserID, actor.MembershipID, "mfa.enroll", "user", &actor.UserID, "success")
 	if record.IsSuperadmin || actor.IsSuperadmin {
 		s.auditPlatform(ctx, actor.UserID, "mfa.enroll", actor.UserID)
 	}
-	s.log.Info("mfa confirmado", "component", "auth")
+	s.log.InfoContext(ctx, "mfa confirmado", "component", "auth")
 	return nil
 }
 
 // ResetMFA clears another user's factor, or the actor's own, and revokes their sessions.
 // The actor must already have a full panel session. The reset is audited.
 func (s *Service) ResetMFA(ctx context.Context, actor Principal, target uuid.UUID) error {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	if err := s.requireOperational(ctx, actor); err != nil {
 		return err
 	}
@@ -189,7 +193,7 @@ func (s *Service) ResetMFA(ctx context.Context, actor Principal, target uuid.UUI
 		return ErrForbidden
 	}
 	if err != nil {
-		s.log.Error("falha ao localizar MFA", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao localizar MFA", "component", "auth")
 		return ErrUnavailable
 	}
 	if membership.Status == "disabled" {
@@ -203,14 +207,14 @@ func (s *Service) ResetMFA(ctx context.Context, actor Principal, target uuid.UUI
 		return s.store.ClearMFA(ctx, target, s.now())
 	})
 	if err != nil {
-		s.log.Error("falha ao redefinir MFA", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao redefinir MFA", "component", "auth")
 		return ErrUnavailable
 	}
 	s.audit(ctx, actor.TenantID, actor.UserID, actor.MembershipID, "mfa.reset", "user", &target, "success")
 	if record.IsSuperadmin || actor.IsSuperadmin {
 		s.auditPlatform(ctx, actor.UserID, "mfa.reset", target)
 	}
-	s.log.Info("mfa redefinido", "component", "auth")
+	s.log.InfoContext(ctx, "mfa redefinido", "component", "auth")
 	return nil
 }
 
@@ -262,7 +266,7 @@ func (s *Service) issueAndAudit(ctx context.Context, identity db.LoginIdentity, 
 		}
 		s.audit(ctx, membership.TenantID, issued.Principal.UserID, issued.Principal.MembershipID, "login", "session", &issued.Principal.SessionID, result)
 	}
-	s.log.Info("login aceito", "component", "auth")
+	s.log.InfoContext(ctx, "login aceito", "component", "auth")
 	return issued, nil
 }
 
@@ -305,7 +309,7 @@ func (s *Service) verifyFactor(ctx context.Context, userID uuid.UUID, membership
 	if err := s.store.WithAuth(ctx, func(ctx context.Context) error {
 		return s.clearMFAFailures(ctx, userID, ip)
 	}); err != nil {
-		s.log.Error("falha ao limpar tentativas de MFA", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao limpar tentativas de MFA", "component", "auth")
 		return false, ErrUnavailable
 	}
 	return recovery, nil
@@ -320,7 +324,7 @@ func (s *Service) consumeRecovery(ctx context.Context, userID uuid.UUID, normali
 		return err
 	})
 	if err != nil {
-		s.log.Error("falha ao ler códigos de recuperação", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao ler códigos de recuperação", "component", "auth")
 		return false, ErrUnavailable
 	}
 	var matched uuid.UUID
@@ -339,7 +343,7 @@ func (s *Service) consumeRecovery(ctx context.Context, userID uuid.UUID, normali
 		return err
 	})
 	if err != nil {
-		s.log.Error("falha ao consumir código de recuperação", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao consumir código de recuperação", "component", "auth")
 		return false, ErrUnavailable
 	}
 	return consumed, nil
@@ -369,7 +373,7 @@ func (s *Service) mfaRecord(ctx context.Context, userID uuid.UUID) (db.MFARecord
 		return err
 	})
 	if err != nil {
-		s.log.Error("falha ao ler MFA", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao ler MFA", "component", "auth")
 		return db.MFARecord{}, ErrUnavailable
 	}
 	return record, nil
@@ -400,7 +404,7 @@ func (s *Service) mfaLocked(ctx context.Context, userID uuid.UUID, ip string) (b
 		return nil
 	})
 	if err != nil {
-		s.log.Error("falha ao consultar bloqueio de MFA", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao consultar bloqueio de MFA", "component", "auth")
 		return false, ErrUnavailable
 	}
 	return locked, nil
@@ -417,7 +421,7 @@ func (s *Service) recordMFAFailure(ctx context.Context, userID uuid.UUID, ip str
 		return s.bumpLock(ctx, kindMFAIP, normalizeIP(ip), s.policy.LockoutThreshold)
 	})
 	if err != nil {
-		s.log.Error("falha ao registrar tentativa de MFA", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao registrar tentativa de MFA", "component", "auth")
 		return ErrUnavailable
 	}
 	return nil
@@ -453,7 +457,7 @@ func (s *Service) auditPlatform(ctx context.Context, actor uuid.UUID, action str
 		return err
 	})
 	if err != nil {
-		s.log.Error("falha ao auditar plataforma", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao auditar plataforma", "component", "auth")
 	}
 }
 

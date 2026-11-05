@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"chatisp/internal/platform/logging"
 	"context"
 	"encoding/json"
 	"errors"
@@ -39,6 +40,7 @@ var (
 // CreateProvider registers a provider. The caller must be a superadmin with a full session.
 // The audit row is platform audit. Attendance tables are not written or read.
 func (s *Service) CreateProvider(ctx context.Context, actor Principal, timezone string, limits PlanLimits) (db.Tenant, error) {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	if err := s.requireSuperadmin(actor); err != nil {
 		return db.Tenant{}, err
 	}
@@ -63,22 +65,25 @@ func (s *Service) CreateProvider(ctx context.Context, actor Principal, timezone 
 	if err != nil {
 		return db.Tenant{}, s.mapProvider(err)
 	}
-	s.log.Info("provedor criado", "component", "auth")
+	s.log.InfoContext(ctx, "provedor criado", "component", "auth")
 	return created, nil
 }
 
 // SuspendProvider blocks operational access and keeps every stored row.
 func (s *Service) SuspendProvider(ctx context.Context, actor Principal, tenantID uuid.UUID) (db.Tenant, error) {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	return s.changeProvider(ctx, actor, tenantID, "suspended", actionTenantSuspend)
 }
 
 // ReactivateProvider restores operational access. It does not recreate sessions.
 func (s *Service) ReactivateProvider(ctx context.Context, actor Principal, tenantID uuid.UUID) (db.Tenant, error) {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	return s.changeProvider(ctx, actor, tenantID, "active", actionTenantReactivate)
 }
 
 // GetProvider returns registry fields of one provider. It has no attendance payload.
 func (s *Service) GetProvider(ctx context.Context, actor Principal, tenantID uuid.UUID) (db.Tenant, error) {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	if err := s.requireSuperadmin(actor); err != nil {
 		return db.Tenant{}, err
 	}
@@ -96,6 +101,7 @@ func (s *Service) GetProvider(ctx context.Context, actor Principal, tenantID uui
 
 // ListProviders returns the provider registry. It does not read attendance.
 func (s *Service) ListProviders(ctx context.Context, actor Principal) ([]db.Tenant, error) {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	if err := s.requireSuperadmin(actor); err != nil {
 		return nil, err
 	}
@@ -106,7 +112,7 @@ func (s *Service) ListProviders(ctx context.Context, actor Principal) ([]db.Tena
 		return err
 	})
 	if err != nil {
-		s.log.Error("falha ao listar provedores", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao listar provedores", "component", "auth")
 		return nil, ErrUnavailable
 	}
 	if rows == nil {
@@ -117,6 +123,7 @@ func (s *Service) ListProviders(ctx context.Context, actor Principal) ([]db.Tena
 
 // ListMemberships returns the memberships of the actor's provider.
 func (s *Service) ListMemberships(ctx context.Context, actor Principal) ([]db.Membership, error) {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	if err := s.requireOperational(ctx, actor); err != nil {
 		return nil, err
 	}
@@ -130,7 +137,7 @@ func (s *Service) ListMemberships(ctx context.Context, actor Principal) ([]db.Me
 		return err
 	})
 	if err != nil {
-		s.log.Error("falha ao listar vínculos", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao listar vínculos", "component", "auth")
 		return nil, ErrUnavailable
 	}
 	if rows == nil {
@@ -142,6 +149,7 @@ func (s *Service) ListMemberships(ctx context.Context, actor Principal) ([]db.Me
 // SetMembershipStatus disables or reactivates a membership without deleting it.
 // Disabling revokes that user's sessions in the provider. History stays.
 func (s *Service) SetMembershipStatus(ctx context.Context, actor Principal, membershipID uuid.UUID, status string) error {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	if err := s.requireOperational(ctx, actor); err != nil {
 		return err
 	}
@@ -220,16 +228,17 @@ func (s *Service) SetMembershipStatus(ctx context.Context, actor Principal, memb
 			return s.store.RevokeUserTenantSessions(ctx, actor.TenantID, membership.UserID, s.now())
 		})
 		if err != nil {
-			s.log.Error("falha ao revogar sessões do usuário", "component", "auth")
+			s.log.ErrorContext(ctx, "falha ao revogar sessões do usuário", "component", "auth")
 			return ErrUnavailable
 		}
 	}
 	s.audit(ctx, actor.TenantID, actor.UserID, actor.MembershipID, auditAction, "membership", &membershipID, "success")
-	s.log.Info("vínculo atualizado", "component", "auth")
+	s.log.InfoContext(ctx, "vínculo atualizado", "component", "auth")
 	return nil
 }
 
 func (s *Service) changeProvider(ctx context.Context, actor Principal, tenantID uuid.UUID, status, action string) (db.Tenant, error) {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	if err := s.requireSuperadmin(actor); err != nil {
 		return db.Tenant{}, err
 	}
@@ -253,11 +262,11 @@ func (s *Service) changeProvider(ctx context.Context, actor Principal, tenantID 
 			return s.store.RevokeTenantSessions(ctx, tenantID, s.now())
 		})
 		if err != nil {
-			s.log.Error("falha ao revogar sessões do provedor", "component", "auth")
+			s.log.ErrorContext(ctx, "falha ao revogar sessões do provedor", "component", "auth")
 			return db.Tenant{}, ErrUnavailable
 		}
 	}
-	s.log.Info("provedor atualizado", "component", "auth")
+	s.log.InfoContext(ctx, "provedor atualizado", "component", "auth")
 	return updated, nil
 }
 
@@ -284,6 +293,7 @@ func (s *Service) requireSuperadmin(actor Principal) error {
 }
 
 func (s *Service) requireOperational(ctx context.Context, actor Principal) error {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	if err := s.requirePanel(actor); err != nil {
 		return err
 	}
@@ -300,7 +310,7 @@ func (s *Service) requireOperational(ctx context.Context, actor Principal) error
 		return ErrForbidden
 	}
 	if err != nil {
-		s.log.Error("falha ao confirmar provedor", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao confirmar provedor", "component", "auth")
 		return ErrUnavailable
 	}
 	if tenant.Status != "active" {
@@ -337,7 +347,7 @@ func (s *Service) mapProvider(err error) error {
 	case errors.Is(err, db.ErrInvalidTenantStatus):
 		return ErrTenantState
 	default:
-		s.log.Error("falha na administração do provedor", "component", "auth")
+		s.log.ErrorContext(context.Background(), "falha na administração do provedor", "component", "auth")
 		return ErrUnavailable
 	}
 }
@@ -351,7 +361,7 @@ func (s *Service) mapMembership(err error) error {
 	case errors.Is(err, db.ErrInvalidLimits):
 		return ErrInvalidLimits
 	default:
-		s.log.Error("falha ao atualizar vínculo", "component", "auth")
+		s.log.ErrorContext(context.Background(), "falha ao atualizar vínculo", "component", "auth")
 		return ErrUnavailable
 	}
 }

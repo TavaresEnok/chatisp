@@ -2,6 +2,8 @@
 package logging
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -18,7 +20,43 @@ func New(level string, w io.Writer) *slog.Logger {
 		Level:       ParseLevel(level),
 		ReplaceAttr: redact,
 	})
-	return slog.New(handler)
+	return slog.New(tenantHandler{handler})
+}
+
+type tenantKey struct{}
+
+// WithTenant returns a context whose log records carry tenant_id. Use the
+// Context variants of the logger (InfoContext, WarnContext, ErrorContext) so
+// the handler can read it.
+func WithTenant(ctx context.Context, tenant fmt.Stringer) context.Context {
+	if tenant == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, tenantKey{}, tenant.String())
+}
+
+// TenantFrom returns the tenant identifier stored by WithTenant.
+func TenantFrom(ctx context.Context) (string, bool) {
+	id, ok := ctx.Value(tenantKey{}).(string)
+	return id, ok && id != ""
+}
+
+// tenantHandler adds tenant_id to every record logged with a tenant context.
+type tenantHandler struct{ slog.Handler }
+
+func (h tenantHandler) Handle(ctx context.Context, r slog.Record) error {
+	if id, ok := TenantFrom(ctx); ok {
+		r.AddAttrs(slog.String("tenant_id", id))
+	}
+	return h.Handler.Handle(ctx, r)
+}
+
+func (h tenantHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return tenantHandler{h.Handler.WithAttrs(attrs)}
+}
+
+func (h tenantHandler) WithGroup(name string) slog.Handler {
+	return tenantHandler{h.Handler.WithGroup(name)}
 }
 
 // ParseLevel maps the configured name to a slog level. Unknown names become info.

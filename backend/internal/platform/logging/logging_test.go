@@ -2,10 +2,13 @@ package logging
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestJSONLogRedactsSecrets(t *testing.T) {
@@ -45,5 +48,23 @@ func TestMessageWithDSNIsRedacted(t *testing.T) {
 	log.Info("postgres://user:super-secret-value@127.0.0.1/chatisp")
 	if strings.Contains(buf.String(), "super-secret-value") {
 		t.Fatalf("mensagem expôs segredo: %s", buf.String())
+	}
+}
+
+func TestTenantFromContextIsLoggedAndOtherwiseAbsent(t *testing.T) {
+	var out bytes.Buffer
+	log := New("info", &out)
+	tenant := uuid.New()
+	log.InfoContext(WithTenant(context.Background(), tenant), "com tenant", "component", "teste")
+	log.Info("sem tenant", "component", "teste")
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("linhas: %q", out.String())
+	}
+	if !strings.Contains(lines[0], `"tenant_id":"`+tenant.String()+`"`) {
+		t.Fatalf("tenant_id ausente: %s", lines[0])
+	}
+	if strings.Contains(lines[1], "tenant_id") {
+		t.Fatalf("tenant_id sem contexto: %s", lines[1])
 	}
 }

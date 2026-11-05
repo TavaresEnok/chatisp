@@ -1,6 +1,6 @@
 # Matriz de requisitos V1 e V1 simples
 
-Contagem: A conferir: 3; Implementado e verificado: 182; Implementado, aguardando homologação externa: 42; Não implementado: 5; Parcial, com lacuna concreta: 25.
+Contagem: A conferir: 3; Implementado e verificado: 183; Implementado, aguardando homologação externa: 42; Não implementado: 5; Parcial, com lacuna concreta: 24.
 
 Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1 a M8 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
 
@@ -32,7 +32,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 14-csrf | M1 | V1 | Implementado e verificado | TestPanelRejectsBadOriginCSRFAndRevokedSession; realtime_test.go (Origin do WebSocket) |
 | 14-cache | M1 | V1 | Implementado e verificado | TestIdentityCacheServesTheTenantAndDropsOnWrite, TestCacheIsolatesTenantAndRejectsMessages |
 | 14-isolamento | M1 | V1 | Implementado e verificado | RLS, cache por tenant (TestCacheIsolatesTenantAndRejectsMessages) e filas/anexos por tenant nos pacotes ingress, attachments; ver testes de dois tenants |
-| 14-logs | M1 | V1 | Parcial, com lacuna concreta | TestJSONLogRedactsSecrets e TestMessageWithDSNIsRedacted cobrem a redação; o handler JSON (logging.go) não injeta tenant_id automaticamente; não há teste de que todo log carrega tenant_id |
+| 14-logs | M1 | V1 | Parcial, com lacuna concreta | logging.WithTenant + handler que grava tenant_id (TestTenantFromContextIsLoggedAndOtherwiseAbsent); aplicado ao pacote auth (logs com ctx e tenant nos métodos de ator). Os demais ~13 pontos de log fora do auth ainda não usam InfoContext, e logs de login anterior à resolução do tenant não têm tenant_id. Redação de segredos testada |
 | 14-migracoes | M1 | V1 | Implementado e verificado | TestBootstrapAndMigrationsAreIdempotent; migrações aplicadas em banco novo pela suíte |
 | 14-jobs-restart | M1 | V1 | Implementado e verificado | TestDispatch_RealHttptest_CrashRecoveryAndRiverRestart; platform/jobs/postgres_test.go |
 | 14-modos | M1 | V1 | Implementado e verificado | platform/runtime/runtime_test.go, cmd/chatisp/smoke_test.go |
@@ -67,7 +67,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 14-filas-limite | M2 | V1 | Implementado e verificado | TestReserveDispatchTenantGateOrder, TestPublishReservedBudgetAndRelease |
 | 14-retry | M2 | V1 | Implementado e verificado | TestBackoffJitterAndCap |
 | 14-dlq | M2 | V1 | Implementado e verificado | platform/jobs/telemetry_test.go, opsalert/evaluate_test.go |
-| 14-ordenacao | M2 | V1 | Parcial, com lacuna concreta | a linha do tempo ordena por ingested_at e id (messages_timeline_idx, handler.go); trusted_at do driver existe mas não entra na ordenação; sem teste de ordenação com timestamps fora de ordem |
+| 14-ordenacao | M2 | V1 | Implementado e verificado | web attendance-adapter.ts ordena por trusted_at (horário do driver) com fallback para ingested_at; servidor entrega (ingested_at, id) como desempate estável; attendance-adapter.order.test.ts cobre mensagem atrasada, sem horário do driver e empate. A ordenação no SQL continua por ingestão (a API pública também) |
 | 14-conciliacao | M2 | V1 | Implementado e verificado | TestInbound_MessageAndStatusReconciliation, TestSuccessiveAcceptedReplies_SendAndReconcile |
 | 14-concorrencia | M2 | V1 | Implementado e verificado | lifecycle/service_test.go (versão da conversa, conflito) |
 | 14-rate-limit | M2 | V1 | Implementado e verificado | TestOutboundLeaseAndDiscardedInspection, TestStaleLeaseDoesNotReplaceFence, TestOutbound_ConcurrentLease_Dispute |
@@ -116,7 +116,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 07-bloquear | M3 | V1 | Implementado e verificado | TestBlockedContactQuarantinesInboundAndStopsPendingDispatch (pipeline/m3_contact_block_test.go) |
 | 07-mesmo-numero | M3 | V1 | A conferir | — |
 | 07-email | M3 | V1 simples | Parcial, com lacuna concreta | contacts-page.tsx e DirectoryPGHTTP cobrem nome/telefone/e-mail/observações no cadastro; teste dedicado de e-mail e notas do contato não achado |
-| 07-avatar | M3 | V1 simples | Não implementado | campo avatar_reference existe no backend (contactdirectory), mas a interface não exibe avatar |
+| 07-avatar | M3 | V1 simples | Não implementado | campo avatar_reference opaco existe e nada o preenche: a Cloud API não entrega foto de perfil e não há armazenamento/serviço de avatar. Renderizar uma URL arbitrária vazaria o IP do atendente; precisa de decisão de fonte e de proxy seguro antes de exibir |
 | 07-notas | M3 | V1 simples | Parcial, com lacuna concreta | contacts-page.tsx e DirectoryPGHTTP cobrem nome/telefone/e-mail/observações no cadastro; teste dedicado de e-mail e notas do contato não achado |
 | 07-busca | M3 | V1 simples | Implementado e verificado | TestNormalizeAndMask, TestValidationErrorOmitsDocument, TestContactDocuments |
 | 07-cpf | M3 | V1 simples | Implementado e verificado | TestNormalizeAndMask, TestValidationErrorOmitsDocument, TestContactDocuments |

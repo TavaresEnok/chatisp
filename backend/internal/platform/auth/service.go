@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"chatisp/internal/platform/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -239,7 +240,7 @@ func (s *Service) LoginCode(ctx context.Context, email, password, tenantRaw, ip,
 		return IssuedSession{}, err
 	}
 	if locked {
-		s.log.Info("login bloqueado", "component", "auth")
+		s.log.InfoContext(ctx, "login bloqueado", "component", "auth")
 		return IssuedSession{}, ErrLocked
 	}
 	identity, found, err := s.loadIdentity(ctx, normalized)
@@ -266,7 +267,7 @@ func (s *Service) LoginCode(ctx context.Context, email, password, tenantRaw, ip,
 			return IssuedSession{}, err
 		}
 		s.auditLoginFailure(ctx, identity, found)
-		s.log.Info("login recusado", "component", "auth")
+		s.log.InfoContext(ctx, "login recusado", "component", "auth")
 		return IssuedSession{}, ErrInvalidCredentials
 	}
 	membership, err := chooseMembership(identity.Memberships, tenantRaw)
@@ -285,10 +286,10 @@ func (s *Service) Logout(ctx context.Context, rawToken string) error {
 		return s.store.RevokeSessionByHash(ctx, HashSecret(rawToken), s.now())
 	})
 	if err != nil {
-		s.log.Error("falha ao encerrar sessão", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao encerrar sessão", "component", "auth")
 		return ErrUnavailable
 	}
-	s.log.Info("logout", "component", "auth")
+	s.log.InfoContext(ctx, "logout", "component", "auth")
 	return nil
 }
 
@@ -305,7 +306,7 @@ func (s *Service) Authenticate(ctx context.Context, rawToken, csrf string, requi
 		return err
 	})
 	if err != nil {
-		s.log.Error("falha ao ler sessão", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao ler sessão", "component", "auth")
 		return Principal{}, ErrUnavailable
 	}
 	var gate db.SessionGate
@@ -316,7 +317,7 @@ func (s *Service) Authenticate(ctx context.Context, rawToken, csrf string, requi
 			return err
 		})
 		if err != nil {
-			s.log.Error("falha ao ler sessão", "component", "auth")
+			s.log.ErrorContext(ctx, "falha ao ler sessão", "component", "auth")
 			return Principal{}, ErrUnavailable
 		}
 	}
@@ -329,7 +330,7 @@ func (s *Service) Authenticate(ctx context.Context, rawToken, csrf string, requi
 	}
 	if requireCSRF {
 		if csrf == "" || !SecretEqual(HashSecret(csrf), record.CSRFHash) {
-			s.log.Info("csrf recusado", "component", "auth")
+			s.log.InfoContext(ctx, "csrf recusado", "component", "auth")
 			return Principal{}, ErrCSRF
 		}
 	}
@@ -344,7 +345,7 @@ func (s *Service) Authenticate(ctx context.Context, rawToken, csrf string, requi
 		return err
 	})
 	if err != nil {
-		s.log.Error("falha ao renovar sessão", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao renovar sessão", "component", "auth")
 		return Principal{}, ErrUnavailable
 	}
 	if !touched {
@@ -365,6 +366,7 @@ func (s *Service) Authenticate(ctx context.Context, rawToken, csrf string, requi
 
 // Invite creates a single-use invitation and sends it. The token is not returned.
 func (s *Service) Invite(ctx context.Context, actor Principal, email, role string) (Invite, error) {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	if err := s.requireOperational(ctx, actor); err != nil {
 		return Invite{}, err
 	}
@@ -408,7 +410,7 @@ func (s *Service) Invite(ctx context.Context, actor Principal, email, role strin
 		})
 	})
 	if err != nil {
-		s.log.Error("falha ao gravar convite", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao gravar convite", "component", "auth")
 		return Invite{}, ErrUnavailable
 	}
 	message := mail.Message{
@@ -422,11 +424,11 @@ func (s *Service) Invite(ctx context.Context, actor Principal, email, role strin
 		_ = s.store.WithAuth(ctx, func(ctx context.Context) error {
 			return s.store.InvalidateAuthToken(ctx, hash, s.now())
 		})
-		s.log.Error("falha ao enviar convite", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao enviar convite", "component", "auth")
 		return Invite{}, ErrMail
 	}
 	s.audit(ctx, actor.TenantID, actor.UserID, actor.MembershipID, "invitation.create", "user", &user.ID, "success")
-	s.log.Info("convite enviado", "component", "auth")
+	s.log.InfoContext(ctx, "convite enviado", "component", "auth")
 	return Invite{ExpiresAt: expires}, nil
 }
 
@@ -449,12 +451,12 @@ func (s *Service) AcceptInvite(ctx context.Context, token, password, ip string) 
 		return err
 	})
 	if err != nil {
-		s.log.Error("falha ao aceitar convite", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao aceitar convite", "component", "auth")
 		return IssuedSession{}, ErrUnavailable
 	}
 	if result.Status != "ok" {
 		s.noteTokenFailure(ctx, ip)
-		s.log.Info("convite recusado", "component", "auth")
+		s.log.InfoContext(ctx, "convite recusado", "component", "auth")
 		if result.Status == "blocked" {
 			return IssuedSession{}, ErrForbidden
 		}
@@ -466,7 +468,7 @@ func (s *Service) AcceptInvite(ctx context.Context, token, password, ip string) 
 		return IssuedSession{}, err
 	}
 	s.audit(ctx, result.TenantID, result.UserID, result.MembershipID, "invitation.accept", "user", &result.UserID, "success")
-	s.log.Info("convite aceito", "component", "auth")
+	s.log.InfoContext(ctx, "convite aceito", "component", "auth")
 	return issued, nil
 }
 
@@ -482,7 +484,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, ip string) er
 		return err
 	}
 	if suppressed {
-		s.log.Info("recuperação limitada", "component", "auth")
+		s.log.InfoContext(ctx, "recuperação limitada", "component", "auth")
 		return nil
 	}
 	identity, found, err := s.loadIdentity(ctx, normalized)
@@ -490,7 +492,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, ip string) er
 		return err
 	}
 	if !found || identity.Status != "active" || identity.PasswordHash == "" {
-		s.log.Info("recuperação ignorada", "component", "auth")
+		s.log.InfoContext(ctx, "recuperação ignorada", "component", "auth")
 		return nil
 	}
 	raw, hash, err := NewSecret()
@@ -510,7 +512,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, ip string) er
 		})
 	})
 	if err != nil {
-		s.log.Error("falha ao gravar recuperação", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao gravar recuperação", "component", "auth")
 		return ErrUnavailable
 	}
 	message := mail.Message{
@@ -525,13 +527,13 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, ip string) er
 		_ = s.store.WithAuth(ctx, func(ctx context.Context) error {
 			return s.store.InvalidateAuthToken(ctx, hash, s.now())
 		})
-		s.log.Error("falha ao enviar recuperação", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao enviar recuperação", "component", "auth")
 		return ErrMail
 	}
 	if membership, ok := firstActive(identity.Memberships); ok {
 		s.audit(ctx, membership.TenantID, identity.UserID, membership.MembershipID, "password_reset.request", "user", &identity.UserID, "success")
 	}
-	s.log.Info("recuperação enviada", "component", "auth")
+	s.log.InfoContext(ctx, "recuperação enviada", "component", "auth")
 	return nil
 }
 
@@ -554,12 +556,12 @@ func (s *Service) ConfirmPasswordReset(ctx context.Context, token, password, ip 
 		return err
 	})
 	if err != nil {
-		s.log.Error("falha ao confirmar recuperação", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao confirmar recuperação", "component", "auth")
 		return ErrUnavailable
 	}
 	if result.Status != "ok" {
 		s.noteTokenFailure(ctx, ip)
-		s.log.Info("recuperação recusada", "component", "auth")
+		s.log.InfoContext(ctx, "recuperação recusada", "component", "auth")
 		if result.Status == "blocked" {
 			return ErrForbidden
 		}
@@ -567,12 +569,13 @@ func (s *Service) ConfirmPasswordReset(ctx context.Context, token, password, ip 
 	}
 	_ = s.clearKind(ctx, kindTokenIP, ip)
 	s.auditPasswordReset(ctx, result.UserID)
-	s.log.Info("senha redefinida", "component", "auth")
+	s.log.InfoContext(ctx, "senha redefinida", "component", "auth")
 	return nil
 }
 
 // ListSessions returns live sessions of the actor's tenant. Only an admin may call it.
 func (s *Service) ListSessions(ctx context.Context, actor Principal) ([]SessionInfo, error) {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	if err := s.requireOperational(ctx, actor); err != nil {
 		return nil, err
 	}
@@ -586,7 +589,7 @@ func (s *Service) ListSessions(ctx context.Context, actor Principal) ([]SessionI
 		return err
 	})
 	if err != nil {
-		s.log.Error("falha ao listar sessões", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao listar sessões", "component", "auth")
 		return nil, ErrUnavailable
 	}
 	out := make([]SessionInfo, 0, len(rows))
@@ -604,6 +607,7 @@ func (s *Service) ListSessions(ctx context.Context, actor Principal) ([]SessionI
 
 // RevokeSession revokes one session of the actor's tenant.
 func (s *Service) RevokeSession(ctx context.Context, actor Principal, sessionID uuid.UUID) error {
+	ctx = logging.WithTenant(ctx, actor.TenantID)
 	if err := s.requireOperational(ctx, actor); err != nil {
 		return err
 	}
@@ -617,13 +621,13 @@ func (s *Service) RevokeSession(ctx context.Context, actor Principal, sessionID 
 		return err
 	})
 	if err != nil {
-		s.log.Error("falha ao revogar sessão", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao revogar sessão", "component", "auth")
 		return ErrUnavailable
 	}
 	switch status {
 	case "ok":
 		s.audit(ctx, actor.TenantID, actor.UserID, actor.MembershipID, "session.revoke", "session", &sessionID, "success")
-		s.log.Info("sessão revogada", "component", "auth")
+		s.log.InfoContext(ctx, "sessão revogada", "component", "auth")
 		return nil
 	case "forbidden":
 		return ErrForbidden
@@ -676,7 +680,7 @@ func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, email stri
 		return nil
 	})
 	if err != nil {
-		s.log.Error("falha ao abrir sessão", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao abrir sessão", "component", "auth")
 		return IssuedSession{}, ErrUnavailable
 	}
 	return IssuedSession{
@@ -706,7 +710,7 @@ func (s *Service) issueForMembership(ctx context.Context, userID, tenantID, memb
 		return nil
 	})
 	if err != nil {
-		s.log.Error("falha ao concluir sessão do convite", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao concluir sessão do convite", "component", "auth")
 		return IssuedSession{}, ErrUnavailable
 	}
 	var role string
@@ -722,7 +726,7 @@ func (s *Service) issueForMembership(ctx context.Context, userID, tenantID, memb
 		return nil
 	})
 	if err != nil {
-		s.log.Error("falha ao concluir sessão do convite", "component", "auth")
+		s.log.ErrorContext(ctx, "falha ao concluir sessão do convite", "component", "auth")
 		return IssuedSession{}, ErrUnavailable
 	}
 	assurance := "full"
