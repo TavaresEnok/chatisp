@@ -159,7 +159,9 @@ func healthFrom(n configuration.NumberHealth) numberHealth {
 
 type healthOutput struct {
 	Body struct {
-		Numbers []numberHealth `json:"numbers"`
+		// Dispatch is the installation's authorization to send through Meta.
+		Dispatch string         `json:"dispatch" enum:"disabled,simulation,official" doc:"disabled: envio pela Meta não autorizado nesta instalação (mensagens falham com driver_indisponivel, sem chamada externa); simulation: servidor local de teste; official: Graph API autorizada com versão explícita."`
+		Numbers  []numberHealth `json:"numbers"`
 	}
 }
 type qualityInput struct {

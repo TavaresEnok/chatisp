@@ -18,10 +18,12 @@ export async function configureChannel(body: ManualChannel) {
 export type NumberHealth = components["schemas"]["NumberHealth"];
 export type QualityReport = components["schemas"]["QualityReport"];
 
-export async function getNumberHealth() {
+export type MetaDispatch = "disabled" | "simulation" | "official";
+
+export async function getNumberHealth(): Promise<{ dispatch: MetaDispatch; numbers: NumberHealth[] }> {
   const result = await api.GET("/api/panel/channels/meta/health");
   if (!result.data) throw new Error("Não foi possível carregar a saúde dos números.");
-  return result.data.numbers ?? [];
+  return { dispatch: result.data.dispatch, numbers: result.data.numbers ?? [] };
 }
 
 export class QualityReadError extends Error {

@@ -1701,6 +1701,15 @@
       "HealthOutputBody": {
         "additionalProperties": false,
         "properties": {
+          "dispatch": {
+            "description": "disabled: envio pela Meta não autorizado nesta instalação (mensagens falham com driver_indisponivel, sem chamada externa); simulation: servidor local de teste; official: Graph API autorizada com versão explícita.",
+            "enum": [
+              "disabled",
+              "simulation",
+              "official"
+            ],
+            "type": "string"
+          },
           "numbers": {
             "items": {
               "$ref": "#/components/schemas/NumberHealth"
@@ -1712,6 +1721,7 @@
           }
         },
         "required": [
+          "dispatch",
           "numbers"
         ],
         "type": "object"

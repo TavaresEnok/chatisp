@@ -9,7 +9,7 @@ import (
 )
 
 func TestOfficialMediaFetcherRefusesSimulation(t *testing.T) {
-	fetcher, err := OfficialMediaFetcher(true, "v23.0")
+	fetcher, err := OfficialMediaFetcher(true, "v99.0")
 	if err == nil || fetcher != nil {
 		t.Fatalf("simulação não deve criar fetcher: %v %#v", err, fetcher)
 	}
@@ -21,16 +21,28 @@ func TestOfficialMediaFetcherRefusesSimulation(t *testing.T) {
 	}
 }
 
-func TestFetcherForProcessStaysLocalInSimulation(t *testing.T) {
-	fetcher, err := FetcherForProcess(true, "v23.0")
+// Only an authorized official process builds the Graph downloader, and only
+// with an explicit version. Simulation and a disabled integration never dial.
+func TestFetcherForProcessDialsOnlyWhenOfficial(t *testing.T) {
+	fetcher, err := FetcherForProcess(false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := fetcher.(whatsapp.DisabledFetcher); !ok {
-		t.Fatalf("simulação montou %T", fetcher)
+		t.Fatalf("processo sem autorização montou %T", fetcher)
 	}
 	_, err = fetcher.Fetch(context.Background(), whatsapp.MediaRef{MediaID: "100"})
 	if !errors.Is(err, whatsapp.ErrMediaDisabled) {
-		t.Fatalf("stand-in: %v", err)
+		t.Fatalf("desabilitado: %v", err)
+	}
+	if _, err := FetcherForProcess(true, ""); err == nil {
+		t.Fatal("oficial sem versão explícita foi aceito")
+	}
+	official, err := FetcherForProcess(true, "v99.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := official.(whatsapp.DisabledFetcher); ok {
+		t.Fatal("oficial autorizado não montou o cliente Graph")
 	}
 }

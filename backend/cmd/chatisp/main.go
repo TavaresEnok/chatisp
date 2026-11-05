@@ -214,13 +214,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		if cfg.KeyRing == nil {
 			return runtimeServices{}, errors.New("chaves de dados (CHATISP_DATA_KEYS) obrigatórias para o modo api")
 		}
-		if strings.TrimSpace(cfg.MetaVerifyToken) == "" {
-			return runtimeServices{}, errors.New("CHATISP_META_VERIFY_TOKEN é obrigatório para recepção de webhooks no modo api")
-		}
 	case config.ModeWorker:
-		if !cfg.MetaSimulation {
-			return runtimeServices{}, errors.New("despacho oficial Meta desabilitado no marco M2: CHATISP_META_SIMULATION=true é obrigatório para execução de workers de envio")
-		}
 		if cfg.JobsDatabaseURL == "" {
 			return runtimeServices{}, errors.New("url de banco de jobs (CHATISP_JOBS_DATABASE_URL) obrigatória para o modo worker")
 		}
@@ -231,9 +225,6 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 			return runtimeServices{}, errors.New("chaves de dados (CHATISP_DATA_KEYS) obrigatórias para o modo worker")
 		}
 	case config.ModeAll:
-		if !cfg.MetaSimulation {
-			return runtimeServices{}, errors.New("despacho oficial Meta desabilitado no marco M2: CHATISP_META_SIMULATION=true é obrigatório para execução de workers de envio")
-		}
 		if cfg.JobsDatabaseURL == "" {
 			return runtimeServices{}, errors.New("url de banco de jobs (CHATISP_JOBS_DATABASE_URL) obrigatória para o modo all")
 		}
@@ -243,11 +234,9 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		if cfg.KeyRing == nil {
 			return runtimeServices{}, errors.New("chaves de dados (CHATISP_DATA_KEYS) obrigatórias para o modo all")
 		}
-		if strings.TrimSpace(cfg.MetaVerifyToken) == "" {
-			return runtimeServices{}, errors.New("CHATISP_META_VERIFY_TOKEN é obrigatório para recepção de webhooks no modo all")
-		}
 	}
 
+	logMetaCapability(ctx, log, cfg)
 	meter := metrics.New()
 
 	var (
@@ -353,11 +342,12 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 			return runtimeServices{}, errors.New("falha ao preparar configuração de canais")
 		}
 		channelSvc.SetLogger(log)
-		// The quality_rating read exists only where Graph may be read. Official
-		// dispatch is still refused at startup (D2-03), so only the local
-		// stand-in gets a reader; elsewhere the admin read answers 503.
-		if cfg.MetaSimulation && cfg.MetaStandInURL != "" {
-			reader, err := pipeline.NewQualityReader(pipeline.DriverFactoryConfig{Simulation: true, StandInURL: cfg.MetaStandInURL})
+		channelSvc.SetDispatchMode(cfg.MetaDispatch())
+		// The quality_rating read exists only where Graph may be read: the
+		// local stand-in, or an authorized official integration with its
+		// explicit version. Disabled installations answer 503 to the admin read.
+		if (cfg.MetaSimulation && cfg.MetaStandInURL != "") || cfg.MetaDispatch() == config.MetaDispatchOfficial {
+			reader, err := pipeline.NewQualityReader(metaFactoryConfig(cfg))
 			if err != nil {
 				cleanupAll()
 				return runtimeServices{}, errors.New("falha ao preparar leitura de qualidade")
@@ -422,15 +412,8 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 
 	var workerClient *jobs.Client
 	if (mode == config.ModeWorker || mode == config.ModeAll) && workerPool != nil && store != nil && pools != nil && pools.Ingress != nil && channelSvc != nil {
-		if !cfg.MetaSimulation {
-			cleanupAll()
-			return runtimeServices{}, errors.New("despacho oficial Meta desabilitado no marco M2: CHATISP_META_SIMULATION=true é obrigatório para execução de workers de envio")
-		}
 		configServer := channelSvc.Server()
-		driverFactory, err := pipeline.NewDriverFactory(pipeline.DriverFactoryConfig{
-			Simulation: cfg.MetaSimulation,
-			StandInURL: cfg.MetaStandInURL,
-		})
+		driverFactory, err := pipeline.NewDriverFactory(metaFactoryConfig(cfg))
 		if err != nil {
 			cleanupAll()
 			return runtimeServices{}, fmt.Errorf("falha ao preparar driver factory: %w", err)
@@ -439,7 +422,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		for _, id := range cfg.TriageInboxes {
 			triageInboxes[uuid.MustParse(id)] = true
 		}
-		mediaFetcher, err := runtime.FetcherForProcess(cfg.MetaSimulation, "v23.0")
+		mediaFetcher, err := runtime.FetcherForProcess(cfg.MetaDispatch() == config.MetaDispatchOfficial, cfg.MetaGraphVersion)
 		if err != nil {
 			cleanupAll()
 			return runtimeServices{}, fmt.Errorf("falha ao selecionar download de mídia: %w", err)
@@ -741,4 +724,38 @@ func writeFileAtomic(path string, body []byte) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// metaFactoryConfig carries the explicit Meta settings to every runtime
+// consumer. GraphVersion and PrimaryDocURL come only from configuration; the
+// stand-in keeps its own fixture path inside the pipeline package.
+func metaFactoryConfig(cfg config.Config) pipeline.DriverFactoryConfig {
+	return pipeline.DriverFactoryConfig{
+		Simulation:    cfg.MetaSimulation,
+		StandInURL:    cfg.MetaStandInURL,
+		Official:      cfg.MetaDispatch() == config.MetaDispatchOfficial,
+		GraphVersion:  strings.TrimSpace(cfg.MetaGraphVersion),
+		PrimaryDocURL: strings.TrimSpace(cfg.MetaPrimaryDocURL),
+	}
+}
+
+// logMetaCapability states, once per process, which Meta capabilities are
+// available. It never logs tokens or secrets.
+func logMetaCapability(ctx context.Context, log *slog.Logger, cfg config.Config) {
+	if log == nil {
+		return
+	}
+	dispatch := cfg.MetaDispatch()
+	log.InfoContext(ctx, "integração Meta",
+		"component", "runtime",
+		"envio", dispatch,
+		"webhook_verificacao", strings.TrimSpace(cfg.MetaVerifyToken) != "",
+		"graph_version_configurada", strings.TrimSpace(cfg.MetaGraphVersion) != "",
+	)
+	if dispatch == config.MetaDispatchDisabled {
+		log.WarnContext(ctx, "envio pela Meta não autorizado: mensagens para WhatsApp falham com driver_indisponivel, sem chamada externa; demais funções seguem ativas", "component", "runtime")
+	}
+	if strings.TrimSpace(cfg.MetaVerifyToken) == "" {
+		log.WarnContext(ctx, "CHATISP_META_VERIFY_TOKEN ausente: a verificação de assinatura do webhook (GET) é recusada", "component", "runtime")
+	}
 }

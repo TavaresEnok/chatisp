@@ -13,6 +13,9 @@ var (
 	ErrForbidden = errors.New("acesso não autorizado")
 	// ErrSimulationOnly indicates a test double or fake was requested in official mode.
 	ErrSimulationOnly = errors.New("driver simulado permitido apenas em modo simulação")
+	// ErrDispatchDisabled means this installation has not authorized sending
+	// through the Meta Graph API. It is raised before any network call.
+	ErrDispatchDisabled = errors.New("envio pela Meta não autorizado nesta instalação")
 	// ErrDriverNotFound indicates no driver was available for the connector.
 	ErrDriverNotFound = errors.New("driver de envio não encontrado")
 	// ErrLeaseHeld indicates the inbox send lease is currently owned by another worker.

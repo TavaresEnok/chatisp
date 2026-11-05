@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getNumberHealth, QualityReadError, readNumberQuality, type NumberHealth } from "@/api/channels";
+import { getNumberHealth, QualityReadError, readNumberQuality, type MetaDispatch, type NumberHealth } from "@/api/channels";
 
 const dateFormat = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
 
@@ -11,10 +11,22 @@ function when(value?: string) {
 
 function qualityFailure(error: unknown) {
   if (error instanceof QualityReadError) {
-    if (error.status === 503) return "Leitura indisponível neste ambiente: a versão da Graph API ainda não foi definida (D2-03).";
+    if (error.status === 503) return "Leitura indisponível: esta instalação não tem a integração com a Meta autorizada nem a versão da Graph API definida (D2-03).";
     if (error.status === 409) return "A Meta recusou a leitura ou o token do canal é inválido. Confira os alertas do canal.";
   }
   return "Não foi possível ler a nota de qualidade.";
+}
+
+function DispatchNotice({ dispatch }: { dispatch: MetaDispatch }) {
+  if (dispatch === "official") return null;
+  if (dispatch === "simulation") {
+    return <p role="status">Envio em modo de simulação: as mensagens vão para um servidor local de teste, não para a Meta.</p>;
+  }
+  return (
+    <p role="alert">
+      Envio pela Meta não autorizado nesta instalação. Mensagens para o WhatsApp falham com o código driver_indisponivel, sem chamada externa. O recebimento e as demais funções continuam ativos.
+    </p>
+  );
 }
 
 function NumberCard({ number, onRead, reading, error }: { number: NumberHealth; onRead: () => void; reading: boolean; error: unknown }) {
@@ -74,10 +86,11 @@ export function NumberHealthPanel({ scope }: { scope: string[] }) {
   return (
     <section aria-labelledby="saude-numeros" className="space-y-3">
       <h2 id="saude-numeros">Saúde e limites dos números</h2>
+      {query.data ? <DispatchNotice dispatch={query.data.dispatch} /> : null}
       {query.isPending ? <p>Carregando saúde dos números…</p>
         : query.isError ? <p role="alert">Não foi possível carregar a saúde dos números.</p>
-          : query.data.length === 0 ? <p>Nenhum número Meta configurado.</p>
-            : query.data.map((number) => (
+          : query.data.numbers.length === 0 ? <p>Nenhum número Meta configurado.</p>
+            : query.data.numbers.map((number) => (
               <NumberCard
                 key={number.connector_id}
                 number={number}

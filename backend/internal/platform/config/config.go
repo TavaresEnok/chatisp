@@ -58,7 +58,15 @@ type Config struct {
 	MetaStandInURL  string       `env:"CHATISP_META_STANDIN_URL"`
 	MetaVerifyToken string       `env:"CHATISP_META_VERIFY_TOKEN"`
 	MetaAppID       string       `env:"CHATISP_META_APP_ID"`
-	TriageInboxes   []string     `env:"CHATISP_TRIAGE_INBOXES" envSeparator:","`
+	// MetaOfficialDispatch is the explicit authorization to send through the
+	// real Graph API. It requires MetaGraphVersion and MetaPrimaryDocURL and is
+	// refused together with MetaSimulation. Without it (and without
+	// simulation) the Meta capability is disabled: processes start, sends fail
+	// before any network with a clear code, and no fake stands in for Meta.
+	MetaOfficialDispatch bool     `env:"CHATISP_META_OFFICIAL_DISPATCH"`
+	MetaGraphVersion     string   `env:"CHATISP_META_GRAPH_VERSION"`
+	MetaPrimaryDocURL    string   `env:"CHATISP_META_PRIMARY_DOC_URL"`
+	TriageInboxes        []string `env:"CHATISP_TRIAGE_INBOXES" envSeparator:","`
 }
 
 // Load reads environ as KEY=VALUE entries and ignores the process environment.
@@ -199,6 +207,23 @@ func (c Config) validate(requireOwner bool) error {
 	if strings.TrimSpace(c.MetaStandInURL) != "" && !validStandInURL(c.MetaStandInURL) {
 		invalid = append(invalid, "CHATISP_META_STANDIN_URL")
 	}
+	if c.MetaOfficialDispatch && c.MetaSimulation {
+		invalid = append(invalid, "CHATISP_META_OFFICIAL_DISPATCH", "CHATISP_META_SIMULATION")
+	}
+	if strings.TrimSpace(c.MetaGraphVersion) != "" && !validGraphVersion(c.MetaGraphVersion) {
+		invalid = append(invalid, "CHATISP_META_GRAPH_VERSION")
+	}
+	if strings.TrimSpace(c.MetaPrimaryDocURL) != "" && !validPrimaryDocURL(c.MetaPrimaryDocURL) {
+		invalid = append(invalid, "CHATISP_META_PRIMARY_DOC_URL")
+	}
+	if c.MetaOfficialDispatch {
+		if strings.TrimSpace(c.MetaGraphVersion) == "" {
+			missing = append(missing, "CHATISP_META_GRAPH_VERSION")
+		}
+		if strings.TrimSpace(c.MetaPrimaryDocURL) == "" {
+			missing = append(missing, "CHATISP_META_PRIMARY_DOC_URL")
+		}
+	}
 
 	if !noControlChars(c.SMTPAddr) || len(c.SMTPAddr) > 256 {
 		invalid = append(invalid, "CHATISP_SMTP_ADDR")
@@ -327,6 +352,61 @@ func validDatabaseURL(raw string) bool {
 	return parsed.Host != ""
 }
 
+// Meta dispatch modes derived from the configuration.
+const (
+	MetaDispatchDisabled   = "disabled"
+	MetaDispatchSimulation = "simulation"
+	MetaDispatchOfficial   = "official"
+)
+
+// MetaDispatch reports how this process may send through WhatsApp Cloud API.
+// Configuration validation already refuses simulation together with official.
+func (c Config) MetaDispatch() string {
+	switch {
+	case c.MetaSimulation:
+		return MetaDispatchSimulation
+	case c.MetaOfficialDispatch:
+		return MetaDispatchOfficial
+	default:
+		return MetaDispatchDisabled
+	}
+}
+
+// validGraphVersion accepts the vMAJOR.MINOR shape only. It does not choose or
+// endorse a version: that is decision D2-03.
+func validGraphVersion(raw string) bool {
+	value := strings.TrimSpace(raw)
+	if len(value) < 4 || len(value) > 16 || value[0] != 'v' {
+		return false
+	}
+	major, minor, ok := strings.Cut(value[1:], ".")
+	if !ok || major == "" || minor == "" || major[0] == '0' {
+		return false
+	}
+	for _, part := range []string{major, minor} {
+		for _, r := range part {
+			if r < '0' || r > '9' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// validPrimaryDocURL accepts an https URL on developers.facebook.com, the
+// documentation used to accept the configured version. It is never fetched.
+func validPrimaryDocURL(raw string) bool {
+	value := strings.TrimSpace(raw)
+	if strings.ContainsAny(value, " \t\r\n") || len(value) > 512 {
+		return false
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme != "https" || parsed.User != nil || parsed.Hostname() != "developers.facebook.com" || parsed.Port() != "" {
+		return false
+	}
+	return true
+}
+
 func validStandInURL(raw string) bool {
 	raw = strings.TrimSpace(raw)
 	if strings.ContainsAny(raw, " \t\r\n") {
@@ -446,29 +526,32 @@ func explainEnvError(err error) error {
 
 func envName(field string) string {
 	names := map[string]string{
-		"Env":                 "CHATISP_ENV",
-		"HTTPAddr":            "CHATISP_HTTP_ADDR",
-		"MetricsAddr":         "CHATISP_METRICS_ADDR",
-		"DatabaseURL":         "CHATISP_DATABASE_URL",
-		"AppDatabaseURL":      "CHATISP_APP_DATABASE_URL",
-		"PlatformDatabaseURL": "CHATISP_PLATFORM_DATABASE_URL",
-		"IngressDatabaseURL":  "CHATISP_INGRESS_DATABASE_URL",
-		"JobsDatabaseURL":     "CHATISP_JOBS_DATABASE_URL",
-		"LogLevel":            "CHATISP_LOG_LEVEL",
-		"ShutdownTimeout":     "CHATISP_SHUTDOWN_TIMEOUT",
-		"MigrationsDir":       "CHATISP_MIGRATIONS_DIR",
-		"SMTPAddr":            "CHATISP_SMTP_ADDR",
-		"SMTPUsername":        "CHATISP_SMTP_USERNAME",
-		"SMTPPassword":        "CHATISP_SMTP_PASSWORD",
-		"SMTPFrom":            "CHATISP_SMTP_FROM",
-		"PanelOriginsRaw":     "CHATISP_PANEL_ORIGINS",
-		"DataKeys":            "CHATISP_DATA_KEYS",
-		"DataKeysFile":        "CHATISP_DATA_KEYS_FILE",
-		"DataKeyVersion":      "CHATISP_DATA_KEY_VERSION",
-		"MetaSimulation":      "CHATISP_META_SIMULATION",
-		"MetaStandInURL":      "CHATISP_META_STANDIN_URL",
-		"MetaVerifyToken":     "CHATISP_META_VERIFY_TOKEN",
-		"MetaAppID":           "CHATISP_META_APP_ID",
+		"Env":                  "CHATISP_ENV",
+		"HTTPAddr":             "CHATISP_HTTP_ADDR",
+		"MetricsAddr":          "CHATISP_METRICS_ADDR",
+		"DatabaseURL":          "CHATISP_DATABASE_URL",
+		"AppDatabaseURL":       "CHATISP_APP_DATABASE_URL",
+		"PlatformDatabaseURL":  "CHATISP_PLATFORM_DATABASE_URL",
+		"IngressDatabaseURL":   "CHATISP_INGRESS_DATABASE_URL",
+		"JobsDatabaseURL":      "CHATISP_JOBS_DATABASE_URL",
+		"LogLevel":             "CHATISP_LOG_LEVEL",
+		"ShutdownTimeout":      "CHATISP_SHUTDOWN_TIMEOUT",
+		"MigrationsDir":        "CHATISP_MIGRATIONS_DIR",
+		"SMTPAddr":             "CHATISP_SMTP_ADDR",
+		"SMTPUsername":         "CHATISP_SMTP_USERNAME",
+		"SMTPPassword":         "CHATISP_SMTP_PASSWORD",
+		"SMTPFrom":             "CHATISP_SMTP_FROM",
+		"PanelOriginsRaw":      "CHATISP_PANEL_ORIGINS",
+		"DataKeys":             "CHATISP_DATA_KEYS",
+		"DataKeysFile":         "CHATISP_DATA_KEYS_FILE",
+		"DataKeyVersion":       "CHATISP_DATA_KEY_VERSION",
+		"MetaSimulation":       "CHATISP_META_SIMULATION",
+		"MetaStandInURL":       "CHATISP_META_STANDIN_URL",
+		"MetaVerifyToken":      "CHATISP_META_VERIFY_TOKEN",
+		"MetaAppID":            "CHATISP_META_APP_ID",
+		"MetaOfficialDispatch": "CHATISP_META_OFFICIAL_DISPATCH",
+		"MetaGraphVersion":     "CHATISP_META_GRAPH_VERSION",
+		"MetaPrimaryDocURL":    "CHATISP_META_PRIMARY_DOC_URL",
 	}
 	if name, ok := names[field]; ok {
 		return name

@@ -32,7 +32,7 @@ describe("saúde e limites dos números", () => {
   afterEach(cleanup);
 
   it("mostra o limite e a nota como a Meta enviou, e os erros essenciais", async () => {
-    vi.mocked(getNumberHealth).mockResolvedValue([healthy]);
+    vi.mocked(getNumberHealth).mockResolvedValue({ dispatch: "simulation", numbers: [healthy] });
     view();
     const card = await screen.findByRole("article", { name: /Suporte/ });
     expect(card).toHaveTextContent("TIER_2K (antes TIER_250), até 2000 conversas por dia");
@@ -45,7 +45,7 @@ describe("saúde e limites dos números", () => {
   });
 
   it("explica número sem aviso, nota não lida e credencial inválida", async () => {
-    vi.mocked(getNumberHealth).mockResolvedValue([{ ...healthy, limit: undefined as never, quality: undefined as never, status: "degraded", open_credential_alert: true, failures_by_code: null, failed_sends: 0, last_inbound_at: "" }]);
+    vi.mocked(getNumberHealth).mockResolvedValue({ dispatch: "official", numbers: [{ ...healthy, limit: undefined as never, quality: undefined as never, status: "degraded", open_credential_alert: true, failures_by_code: null, failed_sends: 0, last_inbound_at: "" }] });
     view();
     const card = await screen.findByRole("article", { name: /Suporte/ });
     expect(card).toHaveTextContent("nenhum aviso de limite recebido");
@@ -56,12 +56,12 @@ describe("saúde e limites dos números", () => {
 
   it("lê a nota sob demanda e explica a leitura indisponível", async () => {
     const user = userEvent.setup();
-    vi.mocked(getNumberHealth).mockResolvedValue([healthy]);
+    vi.mocked(getNumberHealth).mockResolvedValue({ dispatch: "simulation", numbers: [healthy] });
     vi.mocked(readNumberQuality).mockRejectedValueOnce(new QualityReadError(503)).mockRejectedValueOnce(new QualityReadError(409));
     view();
     const button = await screen.findByRole("button", { name: "Ler nota de qualidade" });
     await user.click(button);
-    expect(await screen.findByRole("alert")).toHaveTextContent("versão da Graph API ainda não foi definida");
+    expect(await screen.findByText(/integração com a Meta autorizada/)).toBeInTheDocument();
     expect(readNumberQuality).toHaveBeenCalledWith("c-1", expect.anything());
     await user.click(screen.getByRole("button", { name: "Ler nota de qualidade" }));
     expect(await screen.findByText(/recusou a leitura ou o token do canal é inválido/)).toBeInTheDocument();
@@ -69,8 +69,15 @@ describe("saúde e limites dos números", () => {
   });
 
   it("não mostra números quando não há caixa", async () => {
-    vi.mocked(getNumberHealth).mockResolvedValue([]);
+    vi.mocked(getNumberHealth).mockResolvedValue({ dispatch: "official", numbers: [] });
     view();
     expect(await screen.findByText("Nenhum número Meta configurado.")).toBeInTheDocument();
+  });
+
+  it("avisa quando o envio pela Meta não está autorizado", async () => {
+    vi.mocked(getNumberHealth).mockResolvedValue({ dispatch: "disabled", numbers: [healthy] });
+    view();
+    expect(await screen.findByText(/Envio pela Meta não autorizado nesta instalação/)).toBeInTheDocument();
+    expect(screen.getByText(/driver_indisponivel/)).toBeInTheDocument();
   });
 });

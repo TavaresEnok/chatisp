@@ -82,7 +82,8 @@ func TestNumberHealthAndQualityRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	type healthBody struct {
-		Numbers []numberHealth `json:"numbers"`
+		Dispatch string         `json:"dispatch"`
+		Numbers  []numberHealth `json:"numbers"`
 	}
 	read := func(who actor) healthBody {
 		t.Helper()
@@ -93,6 +94,9 @@ func TestNumberHealthAndQualityRead(t *testing.T) {
 		return out
 	}
 	h := read(a)
+	if h.Dispatch != "disabled" {
+		t.Fatalf("instalação sem autorização deve informar envio desabilitado: %q", h.Dispatch)
+	}
 	if len(h.Numbers) != 1 || h.Numbers[0].Limit != nil || h.Numbers[0].Quality != nil || h.Numbers[0].WindowDays != 7 || h.Numbers[0].FailedSends != 0 || h.Numbers[0].QuarantinedItems != 0 {
 		t.Fatalf("saúde inicial: %+v", h)
 	}

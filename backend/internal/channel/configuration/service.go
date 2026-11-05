@@ -24,6 +24,9 @@ type Service struct {
 	now     func() time.Time
 	log     *slog.Logger
 	quality QualityReader
+	// dispatch is how this installation may send through Meta: disabled,
+	// simulation or official. Empty means disabled.
+	dispatch string
 }
 
 // Server resolves registry data for ingress and dispatch.
@@ -55,6 +58,27 @@ func (s *Service) SetLogger(log *slog.Logger) {
 func (s *Service) SetQualityReader(r QualityReader) {
 	if s != nil {
 		s.quality = r
+	}
+}
+
+// SetDispatchMode records the installation's Meta send mode for the panel.
+// It does not change dispatch; the worker's driver factory enforces it.
+func (s *Service) SetDispatchMode(mode string) {
+	if s != nil {
+		s.dispatch = mode
+	}
+}
+
+// DispatchMode reports disabled, simulation or official.
+func (s *Service) DispatchMode() string {
+	if s == nil {
+		return "disabled"
+	}
+	switch s.dispatch {
+	case "simulation", "official":
+		return s.dispatch
+	default:
+		return "disabled"
 	}
 }
 

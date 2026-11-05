@@ -169,6 +169,7 @@ func (h *handler) health(ctx context.Context, in *Credentials) (*healthOutput, e
 		return nil, problem(err)
 	}
 	out := &healthOutput{}
+	out.Body.Dispatch = h.deps.Channels.DispatchMode()
 	out.Body.Numbers = make([]numberHealth, 0, len(v))
 	for _, n := range v {
 		out.Body.Numbers = append(out.Body.Numbers, healthFrom(n))

@@ -12,10 +12,11 @@ func OfficialMediaFetcher(simulation bool, graphVersion string) (whatsapp.MediaF
 }
 
 // FetcherForProcess selects the inbound downloader for the running mode.
-// Simulation returns a stand-in that does not dial. The Graph client is built
-// only when simulation is off.
-func FetcherForProcess(simulation bool, graphVersion string) (whatsapp.MediaFetcher, error) {
-	if simulation {
+// Only an authorized official process builds the Graph client, with the
+// explicitly configured version (never a default). Simulation and a disabled
+// integration get a fetcher that does not dial and reports ErrMediaDisabled.
+func FetcherForProcess(official bool, graphVersion string) (whatsapp.MediaFetcher, error) {
+	if !official {
 		return whatsapp.DisabledFetcher{}, nil
 	}
 	return OfficialMediaFetcher(false, graphVersion)

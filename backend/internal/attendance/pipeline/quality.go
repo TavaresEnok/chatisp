@@ -24,6 +24,9 @@ func NewQualityReader(cfg DriverFactoryConfig) (*QualityReader, error) {
 	if cfg.Simulation && cfg.StandInURL == "" {
 		return nil, ErrInvalid
 	}
+	if !cfg.Simulation && !cfg.Official {
+		return nil, ErrDispatchDisabled
+	}
 	return &QualityReader{cfg: cfg}, nil
 }
 

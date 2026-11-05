@@ -2074,6 +2074,11 @@ export interface components {
             status: "ok";
         };
         HealthOutputBody: {
+            /**
+             * @description disabled: envio pela Meta não autorizado nesta instalação (mensagens falham com driver_indisponivel, sem chamada externa); simulation: servidor local de teste; official: Graph API autorizada com versão explícita.
+             * @enum {string}
+             */
+            dispatch: "disabled" | "simulation" | "official";
             numbers: components["schemas"]["NumberHealth"][] | null;
         };
         HeartbeatInputBody: {

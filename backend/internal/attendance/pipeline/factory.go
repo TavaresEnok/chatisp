@@ -21,6 +21,10 @@ type DriverFactoryConfig struct {
 	Simulation bool
 	StandInURL string
 	FakeDriver whatsapp.TextDriver
+	// Official is the explicit authorization to send through the real Graph
+	// API. Without it and without Simulation the factory is disabled: every
+	// DriverFor returns ErrDispatchDisabled and no fake stands in for Meta.
+	Official bool
 	// GraphVersion and PrimaryDocURL are required in official mode and are
 	// never defaulted: the version is the open decision D2-03. The local
 	// stand-in keeps its own fixed path value (simulationGraphVersion).
@@ -42,6 +46,9 @@ func NewDriverFactory(cfg DriverFactoryConfig) (DriverFactory, error) {
 	if !cfg.Simulation && cfg.FakeDriver != nil {
 		return nil, ErrSimulationOnly
 	}
+	if cfg.Simulation && cfg.Official {
+		return nil, ErrInvalid
+	}
 	return &driverFactory{cfg: cfg}, nil
 }
 
@@ -61,6 +68,9 @@ func (f *driverFactory) DriverFor(_ context.Context, _, _ uuid.UUID, material co
 			})
 		}
 		return whatsapp.NewFake(), nil
+	}
+	if !f.cfg.Official {
+		return nil, ErrDispatchDisabled
 	}
 
 	return metacloud.Activate(metacloud.Config{

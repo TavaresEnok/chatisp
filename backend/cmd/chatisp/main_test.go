@@ -98,56 +98,6 @@ func TestWorkerAndAllModeRequireDependencies(t *testing.T) {
 	}
 }
 
-func TestSimulationRequiredForWorkerAndAll(t *testing.T) {
-	ctx := context.Background()
-	envWithoutSim := []string{
-		"CHATISP_ENV=development",
-		"CHATISP_DATABASE_URL=postgres://user:pass@127.0.0.1/chatisp",
-		"CHATISP_APP_DATABASE_URL=postgres://user:pass@127.0.0.1/chatisp",
-		"CHATISP_PLATFORM_DATABASE_URL=postgres://user:pass@127.0.0.1/chatisp",
-		"CHATISP_INGRESS_DATABASE_URL=postgres://user:pass@127.0.0.1/chatisp",
-		"CHATISP_JOBS_DATABASE_URL=postgres://user:pass@127.0.0.1/chatisp",
-		"CHATISP_DATA_KEYS=1:dHJvcXVlLWNoYXZlLWJhc2U2NC0zMmJ5dGVzISEhISE=",
-		"CHATISP_DATA_KEY_VERSION=1",
-		"CHATISP_META_VERIFY_TOKEN=token-teste",
-	}
-
-	for _, mode := range []string{"worker", "all"} {
-		err := run(ctx, []string{mode}, envWithoutSim, ioDiscard(), ioDiscard())
-		if err == nil {
-			t.Fatalf("modo %s sem CHATISP_META_SIMULATION deveria ter falhado", mode)
-		}
-		if !strings.Contains(err.Error(), "despacho oficial Meta desabilitado") {
-			t.Fatalf("modo %s retornou erro inesperado: %v", mode, err)
-		}
-	}
-}
-
-func TestMetaVerifyTokenRequiredForAPIAndAll(t *testing.T) {
-	ctx := context.Background()
-	envWithoutToken := []string{
-		"CHATISP_ENV=development",
-		"CHATISP_DATABASE_URL=postgres://user:pass@127.0.0.1/chatisp",
-		"CHATISP_APP_DATABASE_URL=postgres://user:pass@127.0.0.1/chatisp",
-		"CHATISP_PLATFORM_DATABASE_URL=postgres://user:pass@127.0.0.1/chatisp",
-		"CHATISP_INGRESS_DATABASE_URL=postgres://user:pass@127.0.0.1/chatisp",
-		"CHATISP_JOBS_DATABASE_URL=postgres://user:pass@127.0.0.1/chatisp",
-		"CHATISP_DATA_KEYS=1:dHJvcXVlLWNoYXZlLWJhc2U2NC0zMmJ5dGVzISEhISE=",
-		"CHATISP_DATA_KEY_VERSION=1",
-		"CHATISP_META_SIMULATION=true",
-	}
-
-	for _, mode := range []string{"api", "all"} {
-		err := run(ctx, []string{mode}, envWithoutToken, ioDiscard(), ioDiscard())
-		if err == nil {
-			t.Fatalf("modo %s sem CHATISP_META_VERIFY_TOKEN deveria ter falhado", mode)
-		}
-		if !strings.Contains(err.Error(), "CHATISP_META_VERIFY_TOKEN é obrigatório") {
-			t.Fatalf("modo %s retornou erro inesperado: %v", mode, err)
-		}
-	}
-}
-
 type nopWriter struct{}
 
 func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
