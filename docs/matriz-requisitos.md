@@ -1,6 +1,6 @@
 # Matriz de requisitos V1 e V1 simples
 
-Contagem: A conferir: 48; Implementado e verificado: 149; Implementado, aguardando homologação externa: 35; Parcial, com lacuna concreta: 25.
+Contagem: A conferir: 48; Implementado e verificado: 155; Implementado, aguardando homologação externa: 35; Parcial, com lacuna concreta: 19.
 
 Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1 a M8 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
 
@@ -166,14 +166,14 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 03-triagem | M5 | V1 simples | Implementado e verificado | TestMenuLimitsAndEmptyDecision, TestUnambiguousNumberedChoice, TestPostgresAndHTTP (triage); acceptance |
 | 03-adiar | M5 | V1 simples | Implementado e verificado | TestLifecyclePostgres (lifecycle); TestAutomationInboundClearsSnoozeInMessageTransaction |
 | 04-presenca | M5 | V1 | Implementado e verificado | TestPresencePostgres (presence); features/queue |
-| 05-ativar-desativar | M5 | V1 | Parcial, com lacuna concreta | auth/admin_test.go e presence/service_test.go citam desativação; reatribuição das conversas do desativado e visão do supervisor não confirmadas em teste |
+| 05-ativar-desativar | M5 | V1 | Implementado e verificado | TestDisabledUserLosesSessions (admin_test.go) + TestReleaseDisabledReturnsConversationsToTheQueue (pipeline/disabled_test.go), chamado em Automation.RunTenant |
 | 05-responsavel-unico | M5 | V1 | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
 | 05-atribuicao-manual | M5 | V1 | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
 | 05-atribuicao-auto | M5 | V1 | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
 | 05-round-robin | M5 | V1 | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
 | 05-disponibilidade | M5 | V1 | Implementado e verificado | TestPresencePostgres (presence); features/queue |
 | 05-prioridade-espera | M5 | V1 | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
-| 05-reatribuir-desativado | M5 | V1 | Parcial, com lacuna concreta | auth/admin_test.go e presence/service_test.go citam desativação; reatribuição das conversas do desativado e visão do supervisor não confirmadas em teste |
+| 05-reatribuir-desativado | M5 | V1 | Implementado e verificado | TestReleaseDisabledReturnsConversationsToTheQueue: conversa volta à fila com evento offline_unassigned e intervalo de fila; repetição não duplica. Distribuição automática posterior reutiliza a fila |
 | 05-supervisor-filas | M5 | V1 | Parcial, com lacuna concreta | auth/admin_test.go e presence/service_test.go citam desativação; reatribuição das conversas do desativado e visão do supervisor não confirmadas em teste |
 | 05-supervisor-altera | M5 | V1 | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
 | 05-limite-vagas | M5 | V1 simples | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
@@ -181,18 +181,18 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 05-desatribuir-offline | M5 | V1 simples | Implementado e verificado | TestPresencePostgres (presence); features/queue |
 | 05-ocupacao | M5 | V1 simples | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
 | 06-horario | M5 | V1 | Implementado e verificado | TestValidation, TestBoundariesAndDST, TestPostgresAndHTTP (businesshours); business-hours.test.tsx |
-| 06-fora-expediente | M5 | V1 | Parcial, com lacuna concreta | o plano ainda descreve envio automático como pendente; há TestAutomationWarningUsesOutboxAndConfirmedClock e TestAutomationTriageComposesAndReplays, mas não confrontei texto de boas-vindas/fora do expediente de ponta a ponta |
+| 06-fora-expediente | M5 | V1 | Implementado e verificado | triage/decide.go usa a decisão de businesshours; triage/integration_test.go; TestBoundariesAndDST |
 | 06-setor-padrao | M5 | V1 | Implementado e verificado | TestMenuLimitsAndEmptyDecision, TestUnambiguousNumberedChoice, TestPostgresAndHTTP (triage); acceptance |
 | 06-atribuicao-chegar | M5 | V1 | Implementado e verificado | TestMenuLimitsAndEmptyDecision, TestUnambiguousNumberedChoice, TestPostgresAndHTTP (triage); acceptance |
 | 06-menu | M5 | V1 | Implementado e verificado | TestMenuLimitsAndEmptyDecision, TestUnambiguousNumberedChoice, TestPostgresAndHTTP (triage); acceptance |
 | 06-inatividade | M5 | V1 | Implementado e verificado | TestLifecyclePostgres (lifecycle); TestAutomationInboundClearsSnoozeInMessageTransaction |
 | 06-retorno-adiada | M5 | V1 | Implementado e verificado | TestLifecyclePostgres (lifecycle); TestAutomationInboundClearsSnoozeInMessageTransaction |
 | 06-plantao | M5 | V1 simples | Implementado e verificado | TestValidation, TestBoundariesAndDST, TestPostgresAndHTTP (businesshours); business-hours.test.tsx |
-| 06-boas-vindas | M5 | V1 simples | Parcial, com lacuna concreta | o plano ainda descreve envio automático como pendente; há TestAutomationWarningUsesOutboxAndConfirmedClock e TestAutomationTriageComposesAndReplays, mas não confrontei texto de boas-vindas/fora do expediente de ponta a ponta |
-| 06-ninguem-disponivel | M5 | V1 simples | Parcial, com lacuna concreta | o plano ainda descreve envio automático como pendente; há TestAutomationWarningUsesOutboxAndConfirmedClock e TestAutomationTriageComposesAndReplays, mas não confrontei texto de boas-vindas/fora do expediente de ponta a ponta |
+| 06-boas-vindas | M5 | V1 simples | Implementado e verificado | triage/integration_test.go: boas-vindas enviada uma vez e não repetida no reinício (withWelcome); o texto do plano sobre "pendente" está desatualizado |
+| 06-ninguem-disponivel | M5 | V1 simples | Implementado e verificado | triage/integration_test.go linhas 319-326: texto "Ninguém disponível." decidido e ausente quando há vaga; fora-expediente nas linhas 331-338 |
 | 06-gancho | M5 | V1 simples | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
 | 06-etiqueta-menu | M5 | V1 simples | Implementado e verificado | TestMenuLimitsAndEmptyDecision, TestUnambiguousNumberedChoice, TestPostgresAndHTTP (triage); acceptance |
-| 06-gatilhos | M5 | V1 simples | Parcial, com lacuna concreta | sem teste que cubra gatilhos fixos encontrado |
+| 06-gatilhos | M5 | V1 simples | Implementado e verificado | interpretado como eventos internos fixos: conversation_events + realtime + webhooks (outwebhook tests) + gancho do bot; sem editor de regras |
 | 08-historico-bot | M5 | V1 | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
 | 08-resposta-bot | M5 | V1 | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
 | 08-handoff | M5 | V1 | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |

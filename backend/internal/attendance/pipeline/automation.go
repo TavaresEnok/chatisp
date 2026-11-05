@@ -222,6 +222,9 @@ func (a Automation) RunTenant(ctx context.Context, tenant uuid.UUID, now time.Ti
 	if _, err := lifecycle.New(a.DB).ReturnDue(ctx, tenant, now); err != nil {
 		return err
 	}
+	if _, err := ReleaseDisabled(ctx, a.DB, tenant, now); err != nil {
+		return err
+	}
 	if _, err := UnassignOffline(ctx, a.DB, tenant, now); err != nil {
 		return err
 	}
