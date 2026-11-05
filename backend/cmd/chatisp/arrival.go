@@ -1,6 +1,7 @@
 package main
 
 import (
+	"chatisp/internal/platform/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -30,7 +31,7 @@ func (a arrivalInbound) ApplyInbound(ctx context.Context, tenantID, itemID uuid.
 	}
 	err := httpapi.Arrive(ctx, a.next, a.store, tenantID, itemID, now)
 	if err != nil && a.log != nil && errors.Is(err, httpapi.ErrArrivalAssign) {
-		a.log.Error("distribuição da chegada falhou", "component", "distribution")
+		a.log.ErrorContext(logging.WithTenant(ctx, tenantID), "distribuição da chegada falhou", "component", "distribution")
 	}
 	return err
 }

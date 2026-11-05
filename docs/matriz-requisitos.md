@@ -1,6 +1,6 @@
 # Matriz de requisitos V1 e V1 simples
 
-Contagem: A conferir: 3; Implementado e verificado: 183; Implementado, aguardando homologação externa: 42; Não implementado: 5; Parcial, com lacuna concreta: 24.
+Contagem: A conferir: 3; Implementado e verificado: 184; Implementado, aguardando homologação externa: 42; Não implementado: 5; Parcial, com lacuna concreta: 23.
 
 Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1 a M8 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
 
@@ -32,7 +32,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 14-csrf | M1 | V1 | Implementado e verificado | TestPanelRejectsBadOriginCSRFAndRevokedSession; realtime_test.go (Origin do WebSocket) |
 | 14-cache | M1 | V1 | Implementado e verificado | TestIdentityCacheServesTheTenantAndDropsOnWrite, TestCacheIsolatesTenantAndRejectsMessages |
 | 14-isolamento | M1 | V1 | Implementado e verificado | RLS, cache por tenant (TestCacheIsolatesTenantAndRejectsMessages) e filas/anexos por tenant nos pacotes ingress, attachments; ver testes de dois tenants |
-| 14-logs | M1 | V1 | Parcial, com lacuna concreta | logging.WithTenant + handler que grava tenant_id (TestTenantFromContextIsLoggedAndOtherwiseAbsent); aplicado ao pacote auth (logs com ctx e tenant nos métodos de ator). Os demais ~13 pontos de log fora do auth ainda não usam InfoContext, e logs de login anterior à resolução do tenant não têm tenant_id. Redação de segredos testada |
+| 14-logs | M1 | V1 | Implementado e verificado | logging.WithTenant + handler (TestTenantFromContextIsLoggedAndOtherwiseAbsent); logs com escopo de tenant convertidos para variantes com contexto: auth (65), presença no ciclo da sessão (httpapi/panel.go), realtime (connection.go), chegada/distribuição (cmd/chatisp/arrival.go), configuração de canal (configure.go, resolve.go); expansion.go já passava tenant_id. Sem tenant por natureza: runtime, migrate, panic recovery, webhook da Meta antes de resolver a rota, login antes de achar o vínculo. Os pontos de chamada foram convertidos por revisão de código e compilação, sem teste por ponto; redação de segredos testada |
 | 14-migracoes | M1 | V1 | Implementado e verificado | TestBootstrapAndMigrationsAreIdempotent; migrações aplicadas em banco novo pela suíte |
 | 14-jobs-restart | M1 | V1 | Implementado e verificado | TestDispatch_RealHttptest_CrashRecoveryAndRiverRestart; platform/jobs/postgres_test.go |
 | 14-modos | M1 | V1 | Implementado e verificado | platform/runtime/runtime_test.go, cmd/chatisp/smoke_test.go |

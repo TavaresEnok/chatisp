@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"chatisp/internal/platform/logging"
 	"context"
 	"errors"
 	"math"
@@ -144,7 +145,7 @@ func (s *Server) ReportInvalidCredential(ctx context.Context, tenantID, connecto
 	if err != nil {
 		return mapWriteErr(err)
 	}
-	s.svc.note("canal degradado", connectorID, version)
+	s.svc.note(logging.WithTenant(ctx, tenantID), "canal degradado", connectorID, version)
 	return nil
 }
 

@@ -93,11 +93,11 @@ func (s *Service) authorize(ctx context.Context, sessionHash []byte) (actor, err
 	return actor{UserID: session.UserID, TenantID: session.TenantID, MembershipID: session.MembershipID}, nil
 }
 
-func (s *Service) note(msg string, connector uuid.UUID, version int64) {
+func (s *Service) note(ctx context.Context, msg string, connector uuid.UUID, version int64) {
 	if s.log == nil {
 		return
 	}
-	s.log.Info(msg, "connector_id", connector, "version", version)
+	s.log.InfoContext(ctx, msg, "connector_id", connector, "version", version)
 }
 
 func mapWriteErr(err error) error {

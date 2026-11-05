@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"chatisp/internal/platform/logging"
 	"context"
 	"errors"
 	"net"
@@ -250,7 +251,7 @@ func (p *panelAPI) notePresence(ctx context.Context, principal auth.Principal) {
 		return
 	}
 	if _, err := p.presence.Heartbeat(ctx, principal, principal.SessionID); err != nil && p.logger != nil && !errors.Is(err, presence.ErrForbidden) {
-		p.logger.Warn("heartbeat de presença no ciclo da sessão falhou", "component", "presence")
+		p.logger.WarnContext(logging.WithTenant(ctx, principal.TenantID), "heartbeat de presença no ciclo da sessão falhou", "component", "presence")
 	}
 }
 
@@ -260,7 +261,7 @@ func (p *panelAPI) endPresence(ctx context.Context, principal auth.Principal) {
 		return
 	}
 	if _, err := p.presence.Close(ctx, principal, principal.SessionID); err != nil && p.logger != nil && !errors.Is(err, presence.ErrForbidden) {
-		p.logger.Warn("encerramento de presença no ciclo da sessão falhou", "component", "presence")
+		p.logger.WarnContext(logging.WithTenant(ctx, principal.TenantID), "encerramento de presença no ciclo da sessão falhou", "component", "presence")
 	}
 }
 

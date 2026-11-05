@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"chatisp/internal/platform/logging"
 	"context"
 	"errors"
 	"regexp"
@@ -50,7 +51,7 @@ func (s *Service) Configure(ctx context.Context, sessionHash []byte, in Manual) 
 	if err != nil {
 		return Box{}, mapWriteErr(err)
 	}
-	s.note("canal configurado", box.ConnectorID, box.Version)
+	s.note(logging.WithTenant(ctx, actor.TenantID), "canal configurado", box.ConnectorID, box.Version)
 	return box, nil
 }
 

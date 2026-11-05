@@ -1,6 +1,7 @@
 package realtime
 
 import (
+	"chatisp/internal/platform/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -357,7 +358,7 @@ func (c *conn) handleClientMessage(ctx context.Context, msg ClientMessage) {
 			})
 			if err != nil {
 				if errors.Is(err, ErrLoadLimitExceeded) {
-					c.logger.Warn("snapshot excede limites de carga", "cursor", snap.NextCursor)
+					c.logger.WarnContext(logging.WithTenant(ctx, c.principal.TenantID), "snapshot excede limites de carga", "cursor", snap.NextCursor)
 					_ = c.send(ServerMessage{
 						Type:       "resync",
 						InboxID:    msg.InboxID,
@@ -382,7 +383,7 @@ func (c *conn) handleClientMessage(ctx context.Context, msg ClientMessage) {
 			}
 
 			if len(snap.Conversations) > maxSnapshotConversations || len(snap.Messages) > maxSnapshotMessages {
-				c.logger.Warn("snapshot excede limites de carga", "conversations", len(snap.Conversations), "messages", len(snap.Messages))
+				c.logger.WarnContext(logging.WithTenant(ctx, c.principal.TenantID), "snapshot excede limites de carga", "conversations", len(snap.Conversations), "messages", len(snap.Messages))
 				_ = c.send(ServerMessage{
 					Type:       "resync",
 					InboxID:    msg.InboxID,
@@ -487,7 +488,7 @@ func (c *conn) loadSnapshot(ctx context.Context, inboxID, conversationID uuid.UU
 	})
 	if err != nil {
 		if errors.Is(err, ErrLoadLimitExceeded) {
-			c.logger.Warn("snapshot excede limites de carga", "cursor", snap.NextCursor)
+			c.logger.WarnContext(logging.WithTenant(ctx, c.principal.TenantID), "snapshot excede limites de carga", "cursor", snap.NextCursor)
 			_ = c.send(ServerMessage{
 				Type:       "resync",
 				InboxID:    inboxID,
@@ -512,7 +513,7 @@ func (c *conn) loadSnapshot(ctx context.Context, inboxID, conversationID uuid.UU
 	}
 
 	if len(snap.Conversations) > maxSnapshotConversations || len(snap.Messages) > maxSnapshotMessages {
-		c.logger.Warn("snapshot excede limites de carga", "conversations", len(snap.Conversations), "messages", len(snap.Messages))
+		c.logger.WarnContext(logging.WithTenant(ctx, c.principal.TenantID), "snapshot excede limites de carga", "conversations", len(snap.Conversations), "messages", len(snap.Messages))
 		_ = c.send(ServerMessage{
 			Type:       "resync",
 			InboxID:    inboxID,
@@ -638,7 +639,7 @@ func (c *conn) fetchAndSendEventsLocked(ctx context.Context) {
 			c.closeWithCode(websocket.StatusPolicyViolation, "authorization_lost")
 			return
 		}
-		c.logger.Debug("falha ao consultar eventos realtime", "err", err)
+		c.logger.DebugContext(logging.WithTenant(ctx, c.principal.TenantID), "falha ao consultar eventos realtime", "err", err)
 		return
 	}
 
@@ -647,7 +648,7 @@ func (c *conn) fetchAndSendEventsLocked(ctx context.Context) {
 	}
 
 	if len(page.Events) > maxEventsPerBatch {
-		c.logger.Warn("carga de eventos excede limite máximo por lote", "count", len(page.Events), "max", maxEventsPerBatch)
+		c.logger.WarnContext(logging.WithTenant(ctx, c.principal.TenantID), "carga de eventos excede limite máximo por lote", "count", len(page.Events), "max", maxEventsPerBatch)
 		_ = c.send(ServerMessage{
 			Type:       "resync",
 			InboxID:    inboxID,
@@ -666,7 +667,7 @@ func (c *conn) fetchAndSendEventsLocked(ctx context.Context) {
 		belongs, err := c.isEventForInbox(ctx, ev, inboxID)
 		if err != nil {
 			hasTransientError = true
-			c.logger.Warn("erro transitório ao resolver caixa de evento", "err", err, "conv_id", ev.AggregateID)
+			c.logger.WarnContext(logging.WithTenant(ctx, c.principal.TenantID), "erro transitório ao resolver caixa de evento", "err", err, "conv_id", ev.AggregateID)
 			break
 		}
 
