@@ -5,7 +5,8 @@
 # login pelo Caddy, reinício com dados preservados e encerramento sem sobras do próprio projeto.
 # Não toca em outros projetos e não faz limpeza global.
 # Requer Docker >= 20.10.10 com rede de build funcional e Compose >= 2.24.4. No Docker 20.10.9
-# sem docker0 o build falha antes de subir; veja docs/medicoes/verificacao-entrega-20261105.md.
+# sem docker0 o build Debian falha; CHATISP_VALIDATE_ALPINE=1 valida com base musl e rede do host
+# (veja docs/medicoes/verificacao-entrega-20261105.md).
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 project="chatisp-validate-$$"
@@ -28,25 +29,94 @@ ENV
 chmod 600 "$tmp/env"
 runtime_image="${project}:runtime"
 edge_image="${project}:edge"
+build_extra=""
+if [ "${CHATISP_VALIDATE_ALPINE:-0}" = 1 ]; then
+	# Docker 20.10.9: sem docker0 e com seccomp que nega clone3. Build na rede do host e
+	# com base musl (deploy/validacao/Dockerfile.alpine). Não prova a imagem Debian.
+	build_extra="
+    build:
+      context: ${root}
+      dockerfile: deploy/validacao/Dockerfile.alpine
+      network: host"
+fi
+postgres_extra=""
+pulled_images=()
+if [ -n "$build_extra" ]; then
+	docker image inspect postgres:18.6-alpine >/dev/null 2>&1 || pulled_images+=(postgres:18.6-alpine)
+	# O initdb do postgres:18.6-trixie também falha nesse host (clone3 negado); mesma versão em musl.
+	postgres_extra="
+  postgres:
+    image: postgres:18.6-alpine"
+fi
 cat >"$tmp/override.yaml" <<YAML
-services:
+services:${postgres_extra}
   chatisp-migrate:
-    image: ${runtime_image}
+    image: ${runtime_image}${build_extra:+${build_extra}
+      target: runtime}
   chatisp-api:
-    image: ${runtime_image}
+    image: ${runtime_image}${build_extra:+${build_extra}
+      target: runtime}
   chatisp-worker:
-    image: ${runtime_image}
+    image: ${runtime_image}${build_extra:+${build_extra}
+      target: runtime}
   caddy:
-    image: ${edge_image}
+    image: ${edge_image}${build_extra:+${build_extra}
+      target: edge}
     ports: !override
       - "127.0.0.1:${port}:443"
+YAML
+# Sub-rede própria: hosts cujo default-address-pools já está esgotado não criam a rede padrão.
+# CHATISP_VALIDATE_SUBNET escolhe uma; sem ela, a primeira 172.31.N.0/24 sem rota nem rede Docker.
+subnet=${CHATISP_VALIDATE_SUBNET:-$(python3 - <<'PY'
+import ipaddress, json, subprocess
+used = []
+for line in subprocess.run(["ip", "-4", "route"], capture_output=True, text=True).stdout.splitlines():
+    first = line.split()[0] if line.split() else ""
+    try:
+        used.append(ipaddress.ip_network(first, strict=False))
+    except ValueError:
+        pass
+ids = subprocess.run(["docker", "network", "ls", "-q"], capture_output=True, text=True).stdout.split()
+if ids:
+    out = subprocess.run(["docker", "network", "inspect", *ids], capture_output=True, text=True).stdout
+    for net in json.loads(out or "[]"):
+        for cfg in (net.get("IPAM") or {}).get("Config") or []:
+            if cfg.get("Subnet"):
+                used.append(ipaddress.ip_network(cfg["Subnet"], strict=False))
+for n in range(240, 255):
+    cand = ipaddress.ip_network(f"172.31.{n}.0/24")
+    if not any(cand.overlaps(u) for u in used):
+        print(cand)
+        break
+PY
+)}
+if [ -z "$subnet" ]; then
+	echo "nenhuma sub-rede livre; defina CHATISP_VALIDATE_SUBNET" >&2
+	exit 1
+fi
+cat >>"$tmp/override.yaml" <<YAML
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${subnet}
 YAML
 compose=(docker compose -p "$project" -f "$root/deploy/compose.yaml" -f "$tmp/override.yaml" --env-file "$tmp/env")
 base="https://127.0.0.1:${port}"
 
 cleanup() {
+	local status=$?
+	if [ "$status" -ne 0 ]; then
+		echo "falha ($status); logs do projeto ${project}:" >&2
+		"${compose[@]}" ps -a >&2 || true
+		"${compose[@]}" logs --no-color --tail 60 >&2 || true
+	fi
 	"${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
 	docker image rm "$runtime_image" "$edge_image" >/dev/null 2>&1 || true
+	# Só as imagens que este script baixou (ausentes antes da execução).
+	if [ "${#pulled_images[@]}" -gt 0 ]; then
+		docker image rm "${pulled_images[@]}" >/dev/null 2>&1 || true
+	fi
 	rm -rf "$tmp"
 }
 trap cleanup EXIT
@@ -77,7 +147,9 @@ login() {
 }
 
 "${compose[@]}" config -q
-"${compose[@]}" up -d --build --wait --wait-timeout 300
+# Uma construção por etiqueta: api e worker reutilizam a imagem do migrate (sem sobras sem etiqueta).
+"${compose[@]}" build chatisp-migrate caddy
+"${compose[@]}" up -d --no-build --wait --wait-timeout 300
 curl -fsSk "$base/healthz" >/dev/null
 wait_ready
 curl -fsSk "$base/entrar" | grep -qi '<div id="root"'

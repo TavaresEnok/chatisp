@@ -1,0 +1,30 @@
+# Só para validar o Compose em hosts com Docker 20.10.9 (seccomp nega clone3 e quebra a glibc
+# nova do Debian 13 e do Node 24 bookworm). Mesmos estágios, fontes e versões de Node, Go e
+# Caddy de deploy/Dockerfile; muda só a base (musl). Não é a imagem de instalação.
+# Uso: CHATISP_VALIDATE_ALPINE=1 ./scripts/compose-validate.sh
+FROM node:24.22.1-alpine AS web
+WORKDIR /src/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY web/ ./
+COPY backend/api/openapi.json /src/backend/api/openapi.json
+RUN npm run build
+
+FROM golang:1.27.3-alpine AS api
+WORKDIR /src/backend
+COPY backend/ ./
+ENV CGO_ENABLED=0
+RUN go build -mod=vendor -trimpath -o /out/chatisp ./cmd/chatisp
+
+FROM alpine:3.22 AS runtime
+RUN apk add --no-cache ca-certificates curl ffmpeg \
+	&& adduser -D -u 1000 -s /sbin/nologin chatisp
+COPY --from=api /out/chatisp /usr/local/bin/chatisp
+COPY backend/db/migrations /usr/share/chatisp/migrations
+USER 1000
+EXPOSE 8080 9090
+ENTRYPOINT ["chatisp"]
+
+FROM caddy:2.10.2 AS edge
+COPY --from=web /src/web/dist /srv/panel
+COPY deploy/Caddyfile /etc/caddy/Caddyfile

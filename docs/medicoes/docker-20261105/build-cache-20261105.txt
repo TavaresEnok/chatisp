@@ -1,0 +1,712 @@
+ID:		zgmafz3zbw521xm2xplryx2lo
+Parent:		b5w8cruiq1xcezrr8sscpy57f
+Created at:	2026-11-05 15:26:12.176050024 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		425.80MB
+Description:	fileop target
+Usage count:	1
+Last used:	2026-11-05 15:26:29.742794224 +0000 UTC
+Type:		regular
+
+ID:		tfuwprcbp9ntwxg5gaagl26mt
+Parent:		xgj27brrn2ytbx3yli48h54mt
+Created at:	2026-11-05 15:25:16.547073338 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		368.96MB
+Description:	mount / from exec /bin/sh -c go build -mod=vendor -trimpath -o /out/chatisp ./cmd/chatisp
+Usage count:	1
+Last used:	2026-11-05 15:25:39.917633712 +0000 UTC
+Type:		regular
+
+ID:		b5w8cruiq1xcezrr8sscpy57f
+Parent:		2ziwjw9mcb1j0p8wbtph192rp
+Created at:	2026-11-05 15:26:06.902601757 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		348.00MB
+Description:	mount / from exec /bin/sh -c npm ci --no-audit --no-fund
+Usage count:	1
+Last used:	2026-11-05 15:26:29.739920717 +0000 UTC
+Type:		regular
+
+ID:		xgj27brrn2ytbx3yli48h54mt
+Parent:		3qo89ymemqlb1c4mhnhck1lat
+Created at:	2026-11-05 15:25:16.501374463 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		319.66MB
+Description:	fileop target
+Usage count:	1
+Last used:	2026-11-05 15:25:39.911763757 +0000 UTC
+Type:		regular
+
+ID:		muf5oog5wtlj0jebsor6wna23
+Created at:	2026-11-05 15:25:40.84025177 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		319.66MB
+Description:	local source for context
+Usage count:	5
+Last used:	2026-11-05 15:29:47.19424483 +0000 UTC
+Type:		source.local
+
+ID:		lnb3rp27zom7pycg7y951xs1m
+Created at:	2026-11-05 10:06:17.460362663 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		319.42MB
+Description:	local source for context
+Usage count:	18
+Last used:	2026-11-05 15:31:44.680618879 +0000 UTC
+Type:		source.local
+
+ID:		y5tkhvilb3i1mnhobl4slk22n
+Parent:		mtavrhmu3vqouetg7yxokq7if
+Created at:	2026-11-05 15:25:13.57601633 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		133.28MB
+Description:	mount / from exec /bin/sh -c apk add --no-cache ca-certificates curl ffmpeg 	&& adduser -D -u 1000 -s /sbin/nologin chatisp
+Usage count:	16
+Last used:	2026-11-05 15:31:38.228638373 +0000 UTC
+Type:		regular
+
+ID:		bwr2ymnun7j1tblpniflncopx
+Parent:		y5tkhvilb3i1mnhobl4slk22n
+Created at:	2026-11-05 15:25:38.209177396 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		34.88MB
+Description:	fileop target
+Usage count:	16
+Last used:	2026-11-05 15:31:38.233784019 +0000 UTC
+Type:		regular
+
+ID:		bus48rcl1rg0t5rit9k21blh4
+Parent:		wgl63d1vvqcl6jkbrbxvt66zo
+Created at:	2026-11-05 15:24:38.783184187 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		5.34MB
+Description:	mount / from exec /bin/sh -c node -e "require(\"child_process\").execSync(\"true\");console.log(\"node ok\")" && apk add --no-cache curl >/dev/null && curl --version | head -1
+Usage count:	1
+Last used:	2026-11-05 15:24:38.947508537 +0000 UTC
+Type:		regular
+
+ID:		4d2y4ysg9zh28wfn5rfpjnpb7
+Parent:		vgzf2bpf751jwd3ogprftzpqo
+Created at:	2026-11-05 15:26:12.315697506 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		3.94MB
+Description:	mount / from exec /bin/sh -c npm run build
+Usage count:	1
+Last used:	2026-11-05 15:26:29.751184974 +0000 UTC
+Type:		regular
+
+ID:		sc0kslky9899wil65p8xn2bsv
+Parent:		b9a0wze2q7rq04gccb2reo94p
+Created at:	2026-11-05 15:26:29.523290194 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		984.16kB
+Description:	fileop target
+Usage count:	6
+Last used:	2026-11-05 15:31:44.615176236 +0000 UTC
+Type:		regular
+
+ID:		xw8rrlthlpqxkfaibign9owya
+Created at:	2026-10-22 15:34:29.003248199 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		605.24kB
+Description:	local source for context
+Usage count:	1
+Last used:	2026-10-22 15:34:43.451122779 +0000 UTC
+Type:		source.local
+
+ID:		vgzf2bpf751jwd3ogprftzpqo
+Parent:		zgmafz3zbw521xm2xplryx2lo
+Created at:	2026-11-05 15:26:12.262240298 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		498.39kB
+Description:	fileop target
+Usage count:	1
+Last used:	2026-11-05 15:26:29.766616872 +0000 UTC
+Type:		regular
+
+ID:		2ziwjw9mcb1j0p8wbtph192rp
+Parent:		tbqgz48grbojq3yogvihzayq4
+Created at:	2026-11-05 15:25:53.43687101 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		325.44kB
+Description:	fileop target
+Usage count:	1
+Last used:	2026-11-05 15:26:29.736431653 +0000 UTC
+Type:		regular
+
+ID:		uu761qj75b78iv7p8vekibuf7
+Parent:		bwr2ymnun7j1tblpniflncopx
+Created at:	2026-11-05 15:25:38.302513749 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		294.03kB
+Description:	fileop target
+Usage count:	16
+Last used:	2026-11-05 15:31:38.315994861 +0000 UTC
+Type:		regular
+
+ID:		q49l7io5qf3ygpodxcbmxmj04
+Created at:	2026-10-22 15:34:29.80481789 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		203.14kB
+Description:	local source for context
+Usage count:	1
+Last used:	2026-10-22 15:34:43.496498451 +0000 UTC
+Type:		source.local
+
+ID:		1smwbbb4qnag2dzu3gokkig23
+Created at:	2026-10-22 15:34:29.767547607 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		54.74kB
+Description:	http url https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64
+Usage count:	2
+Last used:	2026-10-22 15:34:43.475697675 +0000 UTC
+Type:		regular
+
+ID:		q3bxi68t2wr4hnye5sax2lg0y
+Parent:		r9txrl968nzgne3e32e7akdjx
+Created at:	2026-10-22 15:34:29.420318329 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		1.45kB
+Description:	fileop target
+Usage count:	1
+Last used:	2026-10-22 15:34:43.431872969 +0000 UTC
+Type:		regular
+
+ID:		vuxs2c4h4r2hq8zvsaypysjr4
+Created at:	2026-10-22 15:34:27.56215652 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		1.42kB
+Description:	local source for dockerfile
+Usage count:	1
+Last used:	2026-10-22 15:34:43.482467672 +0000 UTC
+Type:		source.local
+
+ID:		vl2be9rrnchmlyzr6pd80y988
+Created at:	2026-11-05 15:25:40.708467019 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		1.11kB
+Description:	local source for dockerfile
+Usage count:	5
+Last used:	2026-11-05 15:29:47.186534288 +0000 UTC
+Type:		source.local
+
+ID:		f1wpi50h41ih14hhsh58044ul
+Created at:	2026-11-05 10:05:53.593330359 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		956B
+Description:	local source for dockerfile
+Usage count:	19
+Last used:	2026-11-05 15:31:44.669543296 +0000 UTC
+Type:		source.local
+
+ID:		il00olncfkw7fgy4v31ad59e3
+Created at:	2026-10-22 15:34:27.395969957 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		842B
+Description:	local source for dockerfile
+Usage count:	1
+Last used:	2026-10-22 15:34:43.443993592 +0000 UTC
+Type:		source.local
+
+ID:		45b06827x2f794e6bp178bajz
+Parent:		sc0kslky9899wil65p8xn2bsv
+Created at:	2026-11-05 15:29:55.017474316 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		670B
+Description:	fileop target
+Usage count:	2
+Last used:	2026-11-05 15:31:44.647240447 +0000 UTC
+Type:		regular
+
+ID:		epxvwic2kqwh5d7rb27i5ut5n
+Parent:		sc0kslky9899wil65p8xn2bsv
+Created at:	2026-11-05 15:26:29.593731666 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		366B
+Description:	fileop target
+Usage count:	4
+Last used:	2026-11-05 15:28:40.027039764 +0000 UTC
+Type:		regular
+
+ID:		rintwcar9r907l6sb6xm94pn6
+Created at:	2026-11-05 15:24:30.585415891 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		176B
+Description:	local source for dockerfile
+Usage count:	1
+Last used:	2026-11-05 15:24:38.943155577 +0000 UTC
+Type:		source.local
+
+ID:		6rrqykk9ujgd7hfqofghbp4vq
+Created at:	2026-11-05 14:39:16.558129063 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		118B
+Description:	local source for dockerfile
+Usage count:	2
+Last used:	2026-11-05 14:39:19.966365645 +0000 UTC
+Type:		source.local
+
+ID:		qa3zkgm2gmz3v6gcuvmcmhr1s
+Created at:	2026-10-22 15:34:27.618879389 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		77B
+Description:	local source for context
+Usage count:	1
+Last used:	2026-10-22 15:34:43.489347938 +0000 UTC
+Type:		source.local
+
+ID:		tztilw4mcthi5k0n272gtaakv
+Created at:	2026-10-22 15:34:27.515484319 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		53B
+Description:	local source for context
+Usage count:	1
+Last used:	2026-10-22 15:34:43.468264427 +0000 UTC
+Type:		source.local
+
+ID:		z1zkydl4pgrrmp2awi0qq3bki
+Parent:		4j97v6b7qoobpz5dyf0hlgwcf
+Created at:	2026-10-22 15:34:32.12288227 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/nginx:alpine@sha256:060849a174666c53439dc7cecbf8f67e225c7cbfb1a44ca97915d9a172a81e6d
+Usage count:	1
+Last used:	2026-10-22 15:34:43.428041854 +0000 UTC
+Type:		regular
+
+ID:		xnf3exs45nxwgzllm87ke6hnx
+Parent:		so0tf91h3g5ocjl530zz4jaki
+Created at:	2026-10-22 15:34:32.005044294 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/nginx:alpine@sha256:060849a174666c53439dc7cecbf8f67e225c7cbfb1a44ca97915d9a172a81e6d
+Usage count:	1
+Last used:	2026-10-22 15:34:32.067839967 +0000 UTC
+Type:		regular
+
+ID:		wgl63d1vvqcl6jkbrbxvt66zo
+Parent:		vdtvzjvfwtgw29zh4b0dv9262
+Created at:	2026-11-05 15:24:37.435310273 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
+Usage count:	2
+Last used:	2026-11-05 15:26:29.73289235 +0000 UTC
+Type:		regular
+
+ID:		w42z9yti99k2259kqbnr2fhrg
+Created at:	2026-10-22 15:34:29.024158162 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		true
+Size:		0B
+Description:	from local 
+Usage count:	1
+Last used:	2026-10-22 15:34:29.111148178 +0000 UTC
+Type:		regular
+
+ID:		vdtvzjvfwtgw29zh4b0dv9262
+Parent:		04cxzem0qjwtv6wmpq0u9o051
+Created at:	2026-11-05 15:24:37.389724218 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
+Usage count:	2
+Last used:	2026-11-05 15:24:38.914528812 +0000 UTC
+Type:		regular
+
+ID:		uampxe1msgya20nhmuehs2mh4
+Created at:	2026-11-05 14:39:16.600554276 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	local source for context
+Usage count:	2
+Last used:	2026-11-05 14:39:19.973747805 +0000 UTC
+Type:		source.local
+
+ID:		u28djyx9ldcdlft7yuso3ghx3
+Parent:		cottllbbxid09lmpqga4w05x0
+Created at:	2026-10-22 15:34:31.894656109 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/nginx:alpine@sha256:060849a174666c53439dc7cecbf8f67e225c7cbfb1a44ca97915d9a172a81e6d
+Usage count:	1
+Last used:	2026-10-22 15:34:31.949706969 +0000 UTC
+Type:		regular
+
+ID:		tym1c80myfldnx3i3o0g5q2jc
+Parent:		p1eltqfdx5ic5j5niknxwncwz
+Created at:	2026-11-05 15:25:10.735726743 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		true
+Size:		0B
+Description:	from local 
+Usage count:	1
+Last used:	2026-11-05 15:25:10.793040495 +0000 UTC
+Type:		regular
+
+ID:		tbqgz48grbojq3yogvihzayq4
+Parent:		wgl63d1vvqcl6jkbrbxvt66zo
+Created at:	2026-11-05 15:25:46.93253929 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	fileop target
+Usage count:	1
+Last used:	2026-11-05 15:26:29.769412336 +0000 UTC
+Type:		regular
+
+ID:		so0tf91h3g5ocjl530zz4jaki
+Parent:		n5z835mb5953h4jb3ptf54dgr
+Created at:	2026-10-22 15:34:31.96823361 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/nginx:alpine@sha256:060849a174666c53439dc7cecbf8f67e225c7cbfb1a44ca97915d9a172a81e6d
+Usage count:	1
+Last used:	2026-10-22 15:34:32.027299161 +0000 UTC
+Type:		regular
+
+ID:		ry4jnhuvqgrveyw890c19c478
+Parent:		w42z9yti99k2259kqbnr2fhrg
+Created at:	2026-10-22 15:34:29.082058272 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		true
+Size:		0B
+Description:	from local 
+Usage count:	1
+Last used:	2026-10-22 15:34:29.179699501 +0000 UTC
+Type:		regular
+
+ID:		r9txrl968nzgne3e32e7akdjx
+Parent:		2zkro86ng2pync6n68zvtb3wu
+Created at:	2026-10-22 15:34:29.333628078 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	fileop target
+Usage count:	1
+Last used:	2026-10-22 15:34:43.436900947 +0000 UTC
+Type:		regular
+
+ID:		r27bxn5a2vbfjm1gbe18e3ess
+Parent:		xnf3exs45nxwgzllm87ke6hnx
+Created at:	2026-10-22 15:34:32.049677821 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/nginx:alpine@sha256:060849a174666c53439dc7cecbf8f67e225c7cbfb1a44ca97915d9a172a81e6d
+Usage count:	1
+Last used:	2026-10-22 15:34:32.106512632 +0000 UTC
+Type:		regular
+
+ID:		p1eltqfdx5ic5j5niknxwncwz
+Parent:		kcp3jcs6fqoe0rgohom0d3uq8
+Created at:	2026-11-05 15:25:10.701976455 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		true
+Size:		0B
+Description:	from local 
+Usage count:	1
+Last used:	2026-11-05 15:25:10.753682191 +0000 UTC
+Type:		regular
+
+ID:		oox15kmjbzicnqbfx7ssqwdq5
+Parent:		ry4jnhuvqgrveyw890c19c478
+Created at:	2026-10-22 15:34:29.143256087 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		true
+Size:		0B
+Description:	from local 
+Usage count:	1
+Last used:	2026-10-22 15:34:29.251505537 +0000 UTC
+Type:		regular
+
+ID:		n5z835mb5953h4jb3ptf54dgr
+Parent:		u28djyx9ldcdlft7yuso3ghx3
+Created at:	2026-10-22 15:34:31.931813893 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/nginx:alpine@sha256:060849a174666c53439dc7cecbf8f67e225c7cbfb1a44ca97915d9a172a81e6d
+Usage count:	1
+Last used:	2026-10-22 15:34:31.985397178 +0000 UTC
+Type:		regular
+
+ID:		mtavrhmu3vqouetg7yxokq7if
+Created at:	2026-11-05 15:25:10.619408095 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		true
+Size:		0B
+Description:	from local 
+Usage count:	16
+Last used:	2026-11-05 15:31:38.209606049 +0000 UTC
+Type:		regular
+
+ID:		mbx2kisj0eyq12y3drobfxsyv
+Parent:		94l6jykc9i0sk69lp3wr4wdj8
+Created at:	2026-11-05 15:25:48.235337237 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+Usage count:	7
+Last used:	2026-11-05 15:31:44.604654578 +0000 UTC
+Type:		regular
+
+ID:		kcp3jcs6fqoe0rgohom0d3uq8
+Parent:		cottllbbxid09lmpqga4w05x0
+Created at:	2026-11-05 15:25:10.660290591 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		true
+Size:		0B
+Description:	from local 
+Usage count:	1
+Last used:	2026-11-05 15:25:10.718625678 +0000 UTC
+Type:		regular
+
+ID:		dt17thojm2x0mijm8xkstn4jo
+Created at:	2026-11-05 15:24:30.62301476 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	local source for context
+Usage count:	1
+Last used:	2026-11-05 15:24:38.954425345 +0000 UTC
+Type:		source.local
+
+ID:		dheg4v5qnzcettu1e3dpxybvu
+Created at:	2026-11-05 10:05:55.203676043 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		true
+Size:		0B
+Description:	from local 
+Usage count:	4
+Last used:	2026-11-05 14:39:19.952103879 +0000 UTC
+Type:		regular
+
+ID:		cottllbbxid09lmpqga4w05x0
+Created at:	2026-10-22 15:34:31.854367534 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		true
+Size:		0B
+Description:	pulled from docker.io/library/nginx:alpine@sha256:060849a174666c53439dc7cecbf8f67e225c7cbfb1a44ca97915d9a172a81e6d
+Usage count:	4
+Last used:	2026-11-05 15:25:10.68164209 +0000 UTC
+Type:		regular
+
+ID:		ch6ocp10itgt5n2wuxj1tiyzj
+Created at:	2026-11-05 10:05:53.611339122 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	local source for context
+Usage count:	8
+Last used:	2026-11-05 15:29:47.205961631 +0000 UTC
+Type:		source.local
+
+ID:		b9a0wze2q7rq04gccb2reo94p
+Parent:		a3cjrntojsnr1j2kxtj17xfn0
+Created at:	2026-11-05 15:25:48.336335888 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+Usage count:	6
+Last used:	2026-11-05 15:31:44.612488165 +0000 UTC
+Type:		regular
+
+ID:		a3cjrntojsnr1j2kxtj17xfn0
+Parent:		60j0mnmss4elhhirs8qe5yb9w
+Created at:	2026-11-05 15:25:48.302618266 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+Usage count:	7
+Last used:	2026-11-05 15:31:44.609776299 +0000 UTC
+Type:		regular
+
+ID:		94l6jykc9i0sk69lp3wr4wdj8
+Created at:	2026-11-05 15:25:48.20568617 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+Usage count:	7
+Last used:	2026-11-05 15:31:44.601330766 +0000 UTC
+Type:		regular
+
+ID:		60j0mnmss4elhhirs8qe5yb9w
+Parent:		mbx2kisj0eyq12y3drobfxsyv
+Created at:	2026-11-05 15:25:48.267613534 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+Usage count:	7
+Last used:	2026-11-05 15:31:44.607285357 +0000 UTC
+Type:		regular
+
+ID:		4j97v6b7qoobpz5dyf0hlgwcf
+Parent:		r27bxn5a2vbfjm1gbe18e3ess
+Created at:	2026-10-22 15:34:32.086395792 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/nginx:alpine@sha256:060849a174666c53439dc7cecbf8f67e225c7cbfb1a44ca97915d9a172a81e6d
+Usage count:	1
+Last used:	2026-10-22 15:34:32.141569581 +0000 UTC
+Type:		regular
+
+ID:		3qo89ymemqlb1c4mhnhck1lat
+Parent:		23zkatd26zmmghj7a7qghccnr
+Created at:	2026-11-05 15:25:10.937960715 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	fileop target
+Usage count:	1
+Last used:	2026-11-05 15:25:39.90578079 +0000 UTC
+Type:		regular
+
+ID:		2zkro86ng2pync6n68zvtb3wu
+Parent:		oox15kmjbzicnqbfx7ssqwdq5
+Created at:	2026-10-22 15:34:29.223074658 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		true
+Size:		0B
+Description:	from local 
+Usage count:	1
+Last used:	2026-10-22 15:34:43.461237526 +0000 UTC
+Type:		regular
+
+ID:		23zkatd26zmmghj7a7qghccnr
+Parent:		tym1c80myfldnx3i3o0g5q2jc
+Created at:	2026-11-05 15:25:10.778071888 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		true
+Size:		0B
+Description:	from local 
+Usage count:	1
+Last used:	2026-11-05 15:25:39.903058481 +0000 UTC
+Type:		regular
+
+ID:		1xoefps74skfflih0whgflayn
+Created at:	2026-11-05 15:25:40.771799857 +0000 UTC
+Mutable:	true
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	local source for context
+Usage count:	16
+Last used:	2026-11-05 15:31:44.675091606 +0000 UTC
+Type:		source.local
+
+ID:		04cxzem0qjwtv6wmpq0u9o051
+Parent:		cottllbbxid09lmpqga4w05x0
+Created at:	2026-11-05 15:24:37.342165397 +0000 UTC
+Mutable:	false
+Reclaimable:	true
+Shared:		false
+Size:		0B
+Description:	pulled from docker.io/library/node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
+Usage count:	2
+Last used:	2026-11-05 15:24:38.910487856 +0000 UTC
+Type:		regular
+
+Reclaimable:	2.28GB
+Total:		2.28GB

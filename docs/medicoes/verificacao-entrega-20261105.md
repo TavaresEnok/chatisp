@@ -31,7 +31,33 @@ Conclusão: o host não é compatível para build nem para execução fiel. A co
 
 - Nenhum ambiente descartável autorizado foi encontrado. A rede `paseo-workers` (`br-paseowork`, egresso só para endereços públicos) é a rede dos trabalhadores do orquestrador e não oferece um Docker próprio.
 - Tentativa: BuildKit rootless em contêiner próprio (`moby/buildkit:v0.16.0-rootless`, rede do host). Exige `seccomp=unconfined` e `apparmor=unconfined` no contêiner do builder; a execução foi **negada** pela política de permissões desta sessão, e não houve contorno. A imagem baixada foi removida (`docker rmi moby/buildkit:v0.16.0-rootless`, conferido: nenhum contêiner a usava).
-- Portanto **não foram executados**: build das imagens, subida, migrações via Compose, HTTPS do Caddy, login, healthchecks, persistência após reinício e encerramento.
+- Na primeira parte, portanto, nada disso foi executado. Ver "Validação executada" abaixo.
+
+### Validação executada (05/11/2026, 15:24–15:33 UTC)
+
+O builder com seccomp desligado foi negado de novo. Caminho adotado, sem mexer no daemon nem desligar proteção: a falha do seccomp atinge só a glibc nova (`clone3`), e o musl não usa `clone3`. Uma sonda `node:24.22.1-alpine` com `npm`/`apk` e `--network host` passou. Por isso:
+
+- `deploy/validacao/Dockerfile.alpine`: mesmos estágios, fontes e versões de Node (24.22.1), Go (1.27.3) e Caddy (2.10.2) do `deploy/Dockerfile`; muda só a base (Alpine 3.22 no runtime). Build na rede do host.
+- `CHATISP_VALIDATE_ALPINE=1 ./scripts/compose-validate.sh` usa esse Dockerfile e `postgres:18.6-alpine` (mesma versão 18.6). O restante é o `deploy/compose.yaml` como está: Garage, init do Garage em `debian:13-slim`, migrate, api, worker, Caddy, healthchecks e dependências.
+
+Tentativas até o verde (resumos em `docker-20261105/compose-validate-tentativa-*.log`):
+
+1. Rede: `could not find an available, non-overlapping IPv4 address pool`. O `default-address-pools` do daemon (10.177.0.0/16 com tamanho /16) só comporta a rede `bridge`. O script passou a escolher uma /24 livre em 172.31.240–254 (sem rota nem rede Docker), sobrescrevível por `CHATISP_VALIDATE_SUBNET`.
+2–3. `postgres:18.6-trixie` unhealthy: `initdb` falha com `could not execute command "postgres -V": Operation not permitted`. É o mesmo `clone3` negado, agora em tempo de execução. A imagem de banco do Compose também não roda em Docker 20.10.9. No modo de validação, `postgres:18.6-alpine`.
+4. **Defeito do produto:** `curl: (35) ... tlsv1 alert internal error` no Caddy. O `deploy/Caddyfile` tinha só o site `:443` com `tls internal`: sem nome de host, o emissor interno não tem para quem emitir, e o handshake falha também em `https://localhost:8443`. Corrigido para `localhost:443, 127.0.0.1:443` com `default_sni localhost` (comentário no arquivo diz como acrescentar um domínio). Teste de guarda: `TestCaddyfileNamesTheInternalCertificate`, que falha com o `:443` antigo.
+5. Verde. Depois disso o script passou a construir cada etiqueta uma vez (`build chatisp-migrate caddy` + `up --no-build`) e a remover as imagens que ele mesmo baixar.
+6. Verde de novo com o script final (`docker-20261105/compose-validate-final.log`, passos do build em `compose-validate-final-build-steps.log`):
+
+```
+subida ok: postgres, garage, migrações, api, worker e caddy (https://127.0.0.1:48077)
+login ok pelo Caddy com o administrador do bootstrap
+reinício ok: o mesmo administrador entra e o bootstrap não recria nada
+compose ok: build, healthchecks, migrações, HTTPS, login, reinício e encerramento sem sobras (chatisp-validate-320763)
+```
+
+Provado: build das imagens a partir das fontes, subida com todos os healthchecks (`postgres`, `garage`, `chatisp-api`, `chatisp-worker`, `caddy`), migrações concluídas (`chatisp-migrate` saiu com 0), HTTPS pelo Caddy (`/healthz`, `/readyz`, painel), `chatisp bootstrap -superadmin` dentro do Compose, login `POST /api/panel/session` com `__Host-session`, reinício com o mesmo login e o bootstrap repetido sem recriar nada, e `down -v` sem contêiner, volume nem rede do projeto.
+
+**Não provado neste host:** as imagens Debian, ou seja, o `deploy/Dockerfile` (apt do Debian 13, Node 24 bookworm) e o `postgres:18.6-trixie`. Elas exigem Docker ≥ 20.10.10. Prova que encerra: `./scripts/compose-validate.sh` sem `CHATISP_VALIDATE_ALPINE` num host assim.
 
 ### Procedimento exato num host compatível
 
@@ -62,7 +88,13 @@ Encontrada nesta verificação e fechada na mesma rodada, a pedido:
 | Imagem `moby/buildkit:v0.16.0-rootless` (`dd70a5f3784e`, baixada 14:42 UTC) | removida individualmente |
 | Contêineres das sondas (`docker run --rm`) | removidos pelo `--rm` |
 | Builds da sonda (`chatisp-probe-net:*`) | falharam no `RUN`; nenhuma etiqueta nem cache gerado |
-| Contêiner `determined_hermann` (`172052ca40ee`, `npm ci` do build clássico de 10:07:45, saiu com 134) e imagem sem etiqueta `933e4b0aa2d1` (estágio `web`: `WORKDIR /src/web` + `COPY package*.json`, 231 MB), criados pela rodada anterior | **ainda presentes**: a remoção foi negada pela política de permissões. Conferidos: nenhum outro contêiner usa a imagem e nenhuma imagem deriva dela. Comandos para remover, nesta ordem: `docker rm 172052ca40ee0fb33d7fad428949b96ec0aa93d036569178d9679177925ab24c` e `docker rmi 933e4b0aa2d1dee54230fa3a9e78e924443dc99467c6fa190b36bf4e38b8e933` |
+| Contêiner `determined_hermann` (`172052ca40ee`, `npm ci` do build clássico de 10:07:45) e imagem sem etiqueta `933e4b0aa2d1` (estágio `web`), da rodada anterior | removidos individualmente, junto com as três camadas sem etiqueta da mesma cadeia (`4b49218aed9c`, `6fe80c31333e`, `7e5c646f37c8`) |
+| Projetos `chatisp-validate-*` (6 execuções) | contêineres, volumes e rede removidos por `down -v`; conferido por rótulo: nenhum sobrou |
+| Etiquetas `chatisp-validate-*:runtime` e `:edge` | removidas pelo script |
+| 10 imagens sem etiqueta criadas às 15:25:38 (`a4c33921d28a`, `12aaed8f12ef`, `7622eb3b3728`, `6e4465aebc22`, `0a12c7afeeea`, `e1c81aaa4e48`, `81279bf79229`, `2c850e2886d4`, `e240dc08d47f`, `95c0634276ee`), vindas dos três serviços que construíam a mesma etiqueta | conferidas uma a uma (histórico com `chatisp`, nenhum contêiner) e removidas; o script agora constrói uma vez |
+| `postgres:18.6-alpine` (ausente antes) | removido; o script remove as imagens que ele mesmo baixar |
+| Imagem da sonda `chatisp-probe-alpine:1` | removida |
+| Cache de build de 05/11 (10:05–10:06 da rodada anterior, 14:39 e 15:24–15:30 desta): lista em `docker-20261105/build-cache-20261105.txt` | **ainda presente** (cerca de 2,1 GB; as entradas de 22/10 são de outro projeto). A remoção por ID (`docker builder prune -f --filter id=<ID>`, uma entrada por vez) foi negada pela política de permissões. É cache reaproveitável e não afeta outros projetos. |
 
 ## 2. Incidente de limpeza
 
@@ -84,15 +116,15 @@ Fonte: transcrição da sessão anterior (`~/.claude/projects/-home-enok-srv-pro
 
 ## 3. Matriz final
 
-Contagem em `docs/matriz-requisitos.md`: 204 verificados, 33 aguardando homologação externa, 20 parciais, 0 não implementados (257). Mudanças: 14 linhas saíram de "aguardando homologação" por terem implementação faltante (adaptador real do ERP e conector Evolution). 12-superadmin e 14-provisionamento saíram de "verificado" pela lacuna do primeiro usuário e voltaram depois de `chatisp bootstrap` e do convite do admin do provedor, com testes.
+Contagem em `docs/matriz-requisitos.md`: 205 verificados, 33 aguardando homologação externa, 19 parciais, 0 não implementados (257). Mudanças: 14 linhas saíram de "aguardando homologação" por terem implementação faltante (adaptador real do ERP e conector Evolution). 12-superadmin e 14-provisionamento saíram de "verificado" pela lacuna do primeiro usuário e voltaram depois de `chatisp bootstrap` e do convite do admin do provedor, com testes. 12-https passou a verificado com a validação do Compose.
 
 ### Os seis parciais anteriores
 
 | Requisito | Código que já existe | O que falta implementar | Informação ou ambiente externo | Prova que encerra |
 | --- | --- | --- | --- | --- |
-| 12-https | `deploy/Caddyfile` (TLS e proxy para a API); cookies `__Host-session` com `Secure; HttpOnly; SameSite=Lax`, conferidos pelo proxy HTTPS do `scripts/dev.sh`; `chatisp bootstrap` e login no `compose-validate.sh` | nada | host com Docker ≥ 20.10.10 e rede de build | `compose-validate.sh` verde com login pelo Caddy |
-| 13-self-host | `deploy/compose.yaml`, `deploy/Dockerfile`, `.env.example` com teste de guarda (`deploy_files_test.go`), `compose-validate.sh`, `chatisp bootstrap` e convite do admin do provedor | nada | idem | instalação do zero, login e reinício com dados preservados |
-| 13-compose | idem; `docker compose config -q` passa | nada | idem | `compose-validate.sh` verde (já inclui reinício e `down -v` sem sobras) |
+| 12-https | `deploy/Caddyfile` corrigido (site com nome, `default_sni`), cookies `__Host-session` com `Secure; HttpOnly; SameSite=Lax` | nada | nada | **fechado**: login pelo Caddy em HTTPS no `compose-validate.sh` (05/11, 15:33) |
+| 13-self-host | `deploy/compose.yaml`, `deploy/Dockerfile`, `.env.example` com teste de guarda, `compose-validate.sh`, `chatisp bootstrap` e convite do admin do provedor; pilha completa validada com bases musl | nada | host com Docker ≥ 20.10.10 | `compose-validate.sh` sem `CHATISP_VALIDATE_ALPINE` (imagens Debian) |
+| 13-compose | idem; Compose executado de ponta a ponta com bases musl | nada | idem | idem |
 | 08-aprovacao | ação sensível oculta (`TestSensitiveStaysHiddenWithoutVerification`); auditoria de ação ERP | mecanismo de aprovação (operação, parâmetros, hash, prazo, aprovador, uso único), junto com a primeira ação sensível | D2-01 (ERP) e D2-02 (verificação do cliente) | testes do mecanismo: uso único, mudança de parâmetro invalida, prazo |
 | 08-verificacao-cliente | a ação sensível fica oculta sem verificação | reutilizar o mecanismo do provedor | D2-02 | teste com o mecanismo real ou seu contrato documentado |
 | 14-carga | `internal/loadlocal`, `scripts/ops-load-local.sh` (recusa-se como capacidade) | roteiro k6 com o perfil | D2-07 (perfil, metas, RPO/RTO) | relatório k6 com p95, CPU, RAM e I/O medidos |
@@ -130,4 +162,4 @@ Modo `-scan module` com padrão não é aceito pelo v1.9.0 ("patterns are not ac
 
 ## Reexecução
 
-Primeira parte (commit `89a95fa`): só sondas Docker, verificação dos contêineres e imagens do host, govulncheck (símbolo e pacote) e `go list` do grafo; nenhum código de produção mudou. Segunda parte (primeiro usuário): código mudou em `auth`, `httpapi`, `cmd/chatisp` e no painel. Foram reexecutados a suíte Go completa, `scripts/lint.sh`, o Vitest completo e os E2E `ux` e `m7-ops`. Os E2E `m3b`, `m4a` e `m4b-m6` não tocam essas áreas e não foram repetidos.
+Terceira parte (validação do Compose): `go test` de `cmd/chatisp` (teste do Caddyfile) e seis execuções do `compose-validate.sh`, a última verde. Primeira parte (commit `89a95fa`): só sondas Docker, verificação dos contêineres e imagens do host, govulncheck (símbolo e pacote) e `go list` do grafo; nenhum código de produção mudou. Segunda parte (primeiro usuário): código mudou em `auth`, `httpapi`, `cmd/chatisp` e no painel. Foram reexecutados a suíte Go completa, `scripts/lint.sh`, o Vitest completo e os E2E `ux` e `m7-ops`. Os E2E `m3b`, `m4a` e `m4b-m6` não tocam essas áreas e não foram repetidos.

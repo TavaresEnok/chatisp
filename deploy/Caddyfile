@@ -1,9 +1,13 @@
 {
 	admin off
 	local_certs
+	# Conexão sem SNI (por IP) recebe o certificado de localhost em vez de falhar no TLS.
+	default_sni localhost
 }
 
-:443 {
+# Com só ":443" o emissor interno não tem nome para emitir e o handshake falha
+# ("tlsv1 alert internal error"). Para um domínio próprio, acrescente-o a esta lista.
+localhost:443, 127.0.0.1:443 {
 	tls internal
 	encode zstd gzip
 

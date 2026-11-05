@@ -158,3 +158,31 @@ func TestEnvExampleDefinesEveryRequiredComposeVariable(t *testing.T) {
 		}
 	}
 }
+
+// A bare ":443" site with "tls internal" has no name to issue for: Caddy answers the handshake
+// with "tlsv1 alert internal error". Found by scripts/compose-validate.sh on 05/11/2026.
+func TestCaddyfileNamesTheInternalCertificate(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "deploy", "Caddyfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var site string
+	for _, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasSuffix(trimmed, "{") && trimmed != "{" && !strings.HasPrefix(trimmed, "handle") {
+			site = strings.TrimSpace(strings.TrimSuffix(trimmed, "{"))
+			break
+		}
+	}
+	if site == "" || strings.HasPrefix(site, ":") {
+		t.Fatalf("site do Caddy sem nome de host: %q", site)
+	}
+	for _, want := range []string{"localhost", "127.0.0.1"} {
+		if !strings.Contains(site, want) {
+			t.Fatalf("site do Caddy sem %s: %q", want, site)
+		}
+	}
+	if !strings.Contains(string(raw), "default_sni localhost") {
+		t.Fatal("Caddyfile sem default_sni: conexão por IP sem SNI falharia no TLS")
+	}
+}
