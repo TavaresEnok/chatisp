@@ -1,6 +1,6 @@
 # Matriz de requisitos V1 e V1 simples
 
-Contagem: Implementado e verificado: 195; Implementado, aguardando homologação externa: 42; Não implementado: 5; Parcial, com lacuna concreta: 15.
+Contagem: Implementado e verificado: 204; Implementado, aguardando homologação externa: 44; Não implementado: 3; Parcial, com lacuna concreta: 6.
 
 Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1 a M8 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
 
@@ -15,19 +15,19 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 12-mfa | M1 | V1 | Implementado e verificado | TestMFAAttemptLimit, TestAdminWithoutMFACannotUseProtectedRoutes, TestAdminMustEnrollBeforePanelAndRecoveryIsSingleUse, TestKeyRotationKeepsReadingOldTOTP |
 | 12-sessoes | M1 | V1 | Implementado e verificado | TestSessionCookieFlagsAndHashedSecret, TestPanelRejectsBadOriginCSRFAndRevokedSession; login HTTPS real em 04/11 |
 | 12-bloqueio-login | M1 | V1 | Implementado e verificado | TestProgressiveLockoutByAccountAndIP, TestMFAAttemptLimit |
-| 12-https | M1 | V1 | Parcial, com lacuna concreta | Caddyfile e cookie Secure existem; HTTPS local verificado; Caddy/Compose não executado neste host (sem Docker) |
+| 12-https | M1 | V1 | Parcial, com lacuna concreta | Caddyfile, cookie Secure e HTTPS local verificados; Compose/Caddy não executados: Docker 20.10.9 sem docker0 não builda as imagens (ver docs/operacao.md); scripts/compose-validate.sh pronto para um host com Docker atual |
 | 12-credenciais-cifradas | M1 | V1 | Implementado e verificado | TestSealRejectsTransplantedCiphertext, TestKeyRotationKeepsReadingOldTOTP, TestManualConfigurationIsolationVersionAndSecret |
 | 12-fuso | M1 | V1 | Implementado e verificado | businesshours TestBoundariesAndDST, reports (fuso do provedor), lifecycle/service_test.go usam o fuso do tenant |
 | 12-auditoria | M1 | V1 | Implementado e verificado | TestInviteAndResetTokensAreSingleUse confere invitation.create/accept, login, password_reset.request/confirm no audit_logs do provedor; a revogação (session.revoke) e a desativação de vínculo têm teste próprio; mfa.* grava auditoria por código sem teste dedicado |
 | 05-convite | M1 | V1 | Implementado e verificado | mesmos testes de 12-usuarios-convites |
 | 06-fuso | M1 | V1 | Implementado e verificado | businesshours TestBoundariesAndDST, reports (fuso do provedor), lifecycle/service_test.go usam o fuso do tenant |
-| 13-painel-web | M1 | V1 | Parcial, com lacuna concreta | jornadas reais no Chromium 140 (05/11/2026) exercitaram Painel, Conversas, Relatórios e Configurações com login e sessão; Contatos e Equipes só em Vitest; responsividade e acessibilidade não auditadas |
-| 13-responsiva | M1 | V1 | Parcial, com lacuna concreta | sem verificação em navegador nesta rodada |
+| 13-painel-web | M1 | V1 | Implementado e verificado | jornadas reais no Chromium 140: Painel, Conversas, Relatórios, Configurações, Contatos, Equipes, Canais e Entrar nos três tamanhos, com sessão real, axe e teclado |
+| 13-responsiva | M1 | V1 | Implementado e verificado | Chromium 140 em 1280×800, 768×1024 e 360×640 nas 8 páginas principais: 0 px de rolagem horizontal depois das correções (grade da conversa, filtros da fila, tabelas e campos de arquivo) |
 | 13-pt-br | M1 | V1 | Implementado e verificado | web/index.html lang="pt-BR"; varredura de literais em inglês nos .tsx não achou rótulos de interface em inglês; mensagens do backend em português (problemas HTTP, validações); jornadas E2E no Chromium em 05/11/2026 só com textos em português. Sem auditoria linguística humana |
-| 13-a11y | M1 | V1 | Parcial, com lacuna concreta | sem auditoria em navegador nesta rodada; Vitest com rótulos passou |
-| 13-self-host | M1 | V1 | Parcial, com lacuna concreta | deploy/ existe; não executado sem Docker |
+| 13-a11y | M1 | V1 | Implementado e verificado | axe-core 4.10.2 com WCAG 2.0/2.1/2.2 A e AA: 0 violações nas 24 visões; Tab sem armadilha, com foco visível (corrigido o anel invisível do Tailwind v4), nomes acessíveis e alvos ≥ 24 px. Sem leitor de tela real nem zoom 400 % (docs/medicoes/a11y-notificacoes.md) |
+| 13-self-host | M1 | V1 | Parcial, com lacuna concreta | deploy/ corrigido (um só compose.yaml, .env.example completo, ffmpeg na imagem) e scripts/compose-validate.sh; não executado: Docker 20.10.9 sem docker0 (docs/operacao.md) |
 | 13-saas | M1 | V1 | Implementado e verificado | testes com segundo tenant: platform/db/tenant_status_gate_test.go, ingress/authmeta/handler_test.go |
-| 13-compose | M1 | V1 | Parcial, com lacuna concreta | deploy/compose.yaml existe; não executado sem Docker |
+| 13-compose | M1 | V1 | Parcial, com lacuna concreta | docker compose config -q ok com segredos descartáveis; o build falha neste host (sem docker0; apt do Debian 13 e npm ci do Node 24 abortam em Docker 20.10.9); a validação isolada fica em scripts/compose-validate.sh |
 | 14-rls | M1 | V1 | Implementado e verificado | TestSchemaForcesTenantRLSAndCompositeFK |
 | 14-csrf | M1 | V1 | Implementado e verificado | TestPanelRejectsBadOriginCSRFAndRevokedSession; realtime_test.go (Origin do WebSocket) |
 | 14-cache | M1 | V1 | Implementado e verificado | TestIdentityCacheServesTheTenantAndDropsOnWrite, TestCacheIsolatesTenantAndRejectsMessages |
@@ -86,7 +86,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 03-retirar-responsavel | M3 | V1 | Implementado e verificado | TestAssumeClosePreservesCycle, TestAssignmentHTTPReplay, TestTransferSectorRevokesSourceAccess; features/assignment |
 | 03-notas | M3 | V1 | Implementado e verificado | TestAnnotationsPrivateAndPersonal, TestAnnotationReadIntentVersion (attendance); features/annotations |
 | 03-busca-nome | M3 | V1 | Implementado e verificado | TestQueueHTTP, TestDirectoryPGHTTP; features/queue/queue-integration.test.tsx, queue-controls.test.tsx |
-| 03-busca-conteudo | M3 | V1 | Parcial, com lacuna concreta | índice GIN m3_message_search medido em 50 mil mensagens sintéticas: Bitmap Index Scan, 0,06 ms, acha com e sem acento (internal/searchplan). A consulta composta da fila (EXISTS por conversa, filtros de setor) não foi medida e pode não usar o índice |
+| 03-busca-conteudo | M3 | V1 | Implementado e verificado | consulta composta real medida em docs/medicoes/busca-fila.md: 2 tenants × 20 000 conversas × 100 000 mensagens, filtros, ordem, paginação sem repetição, isolamento entre tenants; agente < 1 s, admin até 2,2 s no pior caso. O plano não usa o GIN na consulta composta (varredura por candidata, custo linear); limite e alternativa descritos. Escala maior que a medida não é prometida |
 | 03-busca-protocolo | M3 | V1 | Implementado e verificado | TestQueueHTTP, TestDirectoryPGHTTP; features/queue/queue-integration.test.tsx, queue-controls.test.tsx |
 | 03-filtro-estado | M3 | V1 | Implementado e verificado | TestQueueHTTP, TestDirectoryPGHTTP; features/queue/queue-integration.test.tsx, queue-controls.test.tsx |
 | 03-filtro-caixa | M3 | V1 | Implementado e verificado | TestQueueHTTP, TestDirectoryPGHTTP; features/queue/queue-integration.test.tsx, queue-controls.test.tsx |
@@ -101,7 +101,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 04-rascunho | M3 | V1 | Implementado e verificado | features/conversation/productivity.test.tsx, message-composer.test.tsx |
 | 04-notif-ui | M3 | V1 | Implementado e verificado | TestPreferencesHTTPAndIsolation; features/notifications/notifications.test.tsx |
 | 04-notif-som | M3 | V1 | Implementado e verificado | TestPreferencesHTTPAndIsolation; features/notifications/notifications.test.tsx |
-| 04-notif-navegador | M3 | V1 | Parcial, com lacuna concreta | lógica coberta em Vitest; Notification API e permissão reais do navegador não exercidas nesta rodada |
+| 04-notif-navegador | M3 | V1 | Implementado e verificado | Chromium 140 real (web/e2e/ux.spec.ts): permissão concedida cria "Nova conversa"/"Nova mensagem" sem conteúdo do cliente; sem concessão não cria; API ausente avisa e não quebra; pedido de permissão concedido/negado/rejeitado e construtor que lança tratados. Notificação local, não push; diálogo nativo não automatizável (docs/medicoes/a11y-notificacoes.md) |
 | 04-formatacao | M3 | V1 simples | Implementado e verificado | composer-tools.tsx (botões Negrito/Itálico na sintaxe do WhatsApp) + composer-tools.test.tsx; sem editor rico |
 | 04-atalhos | M3 | V1 simples | Implementado e verificado | Vitest: Ctrl+Enter envia (productivity.test.tsx), Ctrl+Alt+J próxima conversa, Ctrl+Alt+F buscar e Ctrl+Alt+N nota, sem disparar dentro de campo (conversation-workspace.test.tsx). Playwright de teclado não executado |
 | 04-prefs-notif | M3 | V1 simples | Implementado e verificado | TestPreferencesHTTPAndIsolation; features/notifications/notifications.test.tsx |
@@ -116,7 +116,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 07-bloquear | M3 | V1 | Implementado e verificado | TestBlockedContactQuarantinesInboundAndStopsPendingDispatch (pipeline/m3_contact_block_test.go) |
 | 07-mesmo-numero | M3 | V1 | Implementado e verificado | TestSameNumberInTwoProvidersStaysSeparate (contactdirectory/httpapi/same_number_test.go): mesmo telefone em dois provedores gera dois contatos, leitura cruzada recusada, lista de cada provedor só com o seu; contacts_phone_idx não é único |
 | 07-email | M3 | V1 simples | Implementado e verificado | TestSameNumberInTwoProvidersStaysSeparate grava, lê e edita o e-mail do contato; contacts-page.tsx |
-| 07-avatar | M3 | V1 simples | Não implementado | campo avatar_reference opaco existe e nada o preenche: a Cloud API não entrega foto de perfil e não há armazenamento/serviço de avatar. Renderizar uma URL arbitrária vazaria o IP do atendente; precisa de decisão de fonte e de proxy seguro antes de exibir |
+| 07-avatar | M3 | V1 simples | Implementado e verificado | a especificação diz "só se o WhatsApp fornecer" e a Cloud API não fornece foto: avatar de iniciais determinístico (nome → iniciais e cor, contraste ≥ 7:1) na fila, lista, cabeçalho e Contatos, decorativo e sem URL remota; web/src/components/ui/contact-avatar.test.tsx e axe sem violações |
 | 07-notas | M3 | V1 simples | Implementado e verificado | mesmo teste grava, lê e edita as notas do contato, separadas das notas da conversa |
 | 07-busca | M3 | V1 simples | Implementado e verificado | TestNormalizeAndMask, TestValidationErrorOmitsDocument, TestContactDocuments |
 | 07-cpf | M3 | V1 simples | Implementado e verificado | TestNormalizeAndMask, TestValidationErrorOmitsDocument, TestContactDocuments |
@@ -124,8 +124,8 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 12-mascara-cpf | M3 | V1 | Implementado e verificado | TestNormalizeAndMask, TestValidationErrorOmitsDocument, TestContactDocuments |
 | 13-lateral | M3 | V1 | Implementado e verificado | TestHistoryEvents / history-events.test.tsx, TestDirectoryPGHTTP; features/conversation/conversation-sidebar.test.tsx |
 | 13-atalhos | M3 | V1 simples | Implementado e verificado | mesmos atalhos de 04-atalhos na área Conversas (conversation-workspace.test.tsx) |
-| 13-notif-navegador | M3 | V1 | Parcial, com lacuna concreta | lógica coberta em Vitest; Notification API e permissão reais do navegador não exercidas nesta rodada |
-| 14-fulltext | M3 | V1 | Parcial, com lacuna concreta | mesma medição de 03-busca-conteudo; pg_trgm em nome/telefone/protocolo existe quando a extensão está instalada, sem medição |
+| 13-notif-navegador | M3 | V1 | Implementado e verificado | mesma evidência de 04-notif-navegador |
+| 14-fulltext | M3 | V1 | Implementado e verificado | mesma medição de 03-busca-conteudo; busca por nome, telefone e protocolo medida na mesma consulta (0,7–1,0 s com 6 666 candidatas); GIN com unaccent comprovado em internal/searchplan |
 | 02-receber-imagens | M4 | V1 | Implementado, aguardando homologação externa | Inbound* (TestInboundImageWebhookDownloadIdempotent, TestInboundDocumentTextDownload, TestInboundAudioMP4Download) com stand-in; sem Meta real (D2-03) |
 | 02-enviar-imagens | M4 | V1 | Implementado, aguardando homologação externa | TestOutboundMediaImageAndDocument, TestOutboundMediaOfficialLoopbackCarriesBytes; sem Meta real |
 | 02-receber-documentos | M4 | V1 | Implementado, aguardando homologação externa | Inbound* (TestInboundImageWebhookDownloadIdempotent, TestInboundDocumentTextDownload, TestInboundAudioMP4Download) com stand-in; sem Meta real (D2-03) |
@@ -146,8 +146,8 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 02-figurinhas | M4 | V1 simples | Implementado, aguardando homologação externa | decode_media.go decodifica sticker; media-message.tsx exibe; sem Meta real |
 | 02-reacoes | M4 | V1 simples | Implementado, aguardando homologação externa | TestInboundReactionLocationAndVCard com stand-in; sem Meta real |
 | 02-interativos | M4 | V1 simples | Implementado, aguardando homologação externa | decode de interactive e fallback numerado em triage (TestUnambiguousNumberedChoice); sem Meta real |
-| 02-saude-numero | M4 | V1 simples | Não implementado | não implementado: depende do contrato real da Meta (eventos de qualidade do número e campos da Graph API, D2-03); sem a versão fixada não há como decodificar sem inventar |
-| 02-limites-numero | M4 | V1 simples | Não implementado | não implementado: depende do campo de tier/limite devolvido pela Graph API (D2-03); o limite local de envio continua sendo o lease de 14-rate-limit |
+| 02-saude-numero | M4 | V1 simples | Não implementado | contrato verificado em 05/11/2026 (docs/integracoes/meta.md): o webhook phone_number_quality_update não tem nota de qualidade e não traz phone_number_id; a nota vem só de GET /<versão>/<phone_number_id>?fields=quality_rating, que exige token e versão (D2-03). Falta decidir o roteamento por WABA + número de exibição |
+| 02-limites-numero | M4 | V1 simples | Não implementado | contrato do webhook verificado (current_limit TIER_50…TIER_UNLIMITED, max_daily_conversations_per_business; hoje em quarentena campo_nao_suportado); falta ligar o evento ao número (só vem WABA e número de exibição, sem phone_number_id) e fixar a versão da Graph (D2-03). Credencial só é preciso para a leitura por Graph |
 | 04-compositor | M4 | V1 | Implementado e verificado | E2E no Chromium 140 em 05/11/2026: m4a (texto, assinatura, resposta pronta, anexo validado) e m4b-m6 (documento, localização citada, áudio gravado convertido no servidor); message-composer*.test.tsx; composer-tools.test.tsx |
 | 04-drag-colar | M4 | V1 | Implementado e verificado | message-composer.media.test.tsx ("anexa, arrasta e cola um arquivo"): fireEvent.paste e drop passam pela mesma validação de anexo |
 | 04-preview | M4 | V1 | Implementado e verificado | features/attachments/attachments.test.tsx, media-panel.test.tsx; attachment-preview.tsx |
@@ -162,7 +162,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 14-url-assinada | M4 | V1 | Implementado, aguardando homologação externa | TestS3SDKWithExplicitlySimulatedTransport; storage S3 real não usado |
 | 14-upload | M4 | V1 | Implementado e verificado | TestTypeAndNameValidation (attachments); HTML nomeado foto.jpg recusado com 422 no E2E M4A de 04/11 |
 | 14-ffmpeg | M4 | V1 | Implementado e verificado | convert.go: tempo, duração e tamanho + limites de processo por prlimit (CPU 30 s, espaço de endereço 2 GiB, arquivo 16 MiB, 64 descritores), provados em TestFFmpegChildInheritsResourceLimits; as conversões reais com ffmpeg 4.2.7 passam pelo caminho limitado. Não é cgroup; host sem prlimit roda só com tempo/duração/tamanho |
-| 14-uso-meta | M4 | V1 simples | Não implementado | não implementado: depende do indicador de categoria/cobrança que a Meta reporta nos status (D2-03); sem valor em dinheiro, como pede o plano |
+| 14-uso-meta | M4 | V1 simples | Implementado e verificado | agregado reconstruível de message_status_events (retention.Service.MetaUsage, GET /api/panel/meta-usage): categoria × indicador de cobrança × mensagens distintas, a última informação de cada mensagem, sem preço; mensagens sem preço contadas à parte; admin/supervisor; teste de dupla contagem, janela, tenant e papel; painel em Relatórios. Campos conferidos na documentação pública da Meta (docs/integracoes/meta.md) |
 | 03-triagem | M5 | V1 simples | Implementado e verificado | TestMenuLimitsAndEmptyDecision, TestUnambiguousNumberedChoice, TestPostgresAndHTTP (triage); acceptance |
 | 03-adiar | M5 | V1 simples | Implementado e verificado | TestLifecyclePostgres (lifecycle); TestAutomationInboundClearsSnoozeInMessageTransaction |
 | 04-presenca | M5 | V1 | Implementado e verificado | TestPresencePostgres (presence); features/queue |
@@ -251,14 +251,14 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 09-volume-caixa | M7 | V1 simples | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
 | 09-csv | M7 | V1 simples | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
 | 09-alerta-espera | M7 | V1 simples | Implementado e verificado | TestUrgentQueueDoesNotRaiseTheWaitAlert; queue-wait-alert.test.tsx |
-| 12-retencao | M7 | V1 simples | Parcial, com lacuna concreta | retenção registra e recusa: TestPurgeRefusesAndDeletesNothing; expurgo desligado até D2-06 |
+| 12-retencao | M7 | V1 simples | Implementado, aguardando homologação externa | perfil por provedor, classes e recusa registrada implementados; o plano diz "prazo por provedor depois de D2-06" e "expurgo automático permanece desligado até esse perfil": TestPurgeRefusesAndDeletesNothing. Falta a decisão D2-06 para habilitar a exclusão |
 | 12-exportacao-contato | M7 | V1 simples | Implementado e verificado | TestPrivacyExportAndDeleteKeepsProtocol, TestPrivacyDeleteRollsBackWhenObjectRemains, TestHTTPPrivacyExportAndDeletion |
 | 12-historico-demandas | M7 | V1 simples | Implementado e verificado | TestExportDemandsKeepsProtocolAndHidesOtherSectors |
 | 12-logo | M7 | V1 simples | Implementado e verificado | branding: TestNormalizeRejectsActiveContentMisleadingTypeAndLimits, TestHTTPRolesMFAOriginAndImageHeaders; E2E M7 de 04/11 |
 | 12-limites-plano | M7 | V1 simples | Implementado e verificado | TestPlanLimitsBlockNewRowsAndKeepHistory |
 | 12-superadmin | M7 | V1 | Implementado e verificado | TestAdminSeesOwnTenantAudit, TestUsageHidesMessageBodyAndRejectsProviderRoles; platform/httpapi/panel_test.go |
 | 12-criar-suspender | M7 | V1 | Implementado e verificado | platform/db/tenant_status_gate_test.go; panel_test.go |
-| 14-retencao | M7 | V1 simples | Parcial, com lacuna concreta | retenção registra e recusa: TestPurgeRefusesAndDeletesNothing; expurgo desligado até D2-06 |
+| 14-retencao | M7 | V1 simples | Implementado, aguardando homologação externa | mesma situação de 12-retencao: classes conteúdo, mídia, envelope, log e job registradas e expurgo recusado sem apagar nada; exclusão aguarda D2-06 |
 | 14-suspensao | M7 | V1 | Implementado e verificado | platform/db/tenant_status_gate_test.go; panel_test.go |
 | 14-backup | M8 | V1 | Implementado, aguardando homologação externa | restoredrill: TestDrillRestoresDumpAndReapplies, TestRecoveredRingDecryptsAfterSourceIsGone, TestRestoreObjectsAfterSourceIsGone passam em descartável; backup de produção, RPO e RTO não medidos (D2-07) |
 | 14-carga | M8 | V1 | Parcial, com lacuna concreta | ensaio local existe (loadlocal) e se recusa como capacidade; k6 depende do perfil D2-07 |

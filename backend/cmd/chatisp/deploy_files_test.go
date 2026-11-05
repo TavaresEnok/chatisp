@@ -13,7 +13,6 @@ func TestDeployAndCIYAMLParseWithoutSecrets(t *testing.T) {
 	root := repoRoot(t)
 	files := []string{
 		filepath.Join(root, "deploy", "compose.yaml"),
-		filepath.Join(root, "deploy", "compose.yml"),
 		filepath.Join(root, ".github", "workflows", "ci.yml"),
 	}
 	for _, path := range files {
@@ -121,5 +120,41 @@ func repoRoot(t *testing.T) string {
 			t.Fatal("raiz do repositório não encontrada")
 		}
 		dir = parent
+	}
+}
+
+// Every variable the Compose file demands with ":?" must be present in deploy/.env.example,
+// so a fresh copy of the example is enough for `docker compose config`.
+func TestEnvExampleDefinesEveryRequiredComposeVariable(t *testing.T) {
+	root := repoRoot(t)
+	compose, err := os.ReadFile(filepath.Join(root, "deploy", "compose.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	example, err := os.ReadFile(filepath.Join(root, "deploy", ".env.example"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defined := map[string]bool{}
+	for _, line := range strings.Split(string(example), "\n") {
+		if key, _, ok := strings.Cut(strings.TrimSpace(line), "="); ok && !strings.HasPrefix(key, "#") {
+			defined[key] = true
+		}
+	}
+	rest := string(compose)
+	for {
+		i := strings.Index(rest, "${")
+		if i < 0 {
+			break
+		}
+		rest = rest[i+2:]
+		end := strings.Index(rest, "}")
+		if end < 0 {
+			break
+		}
+		expr := rest[:end]
+		if name, _, ok := strings.Cut(expr, ":?"); ok && !defined[name] {
+			t.Errorf("deploy/.env.example não define %s, exigida pelo compose.yaml", name)
+		}
 	}
 }

@@ -36,7 +36,7 @@ export function Heatmap({ timezone, cells }: { timezone: string; cells: HeatCell
       <li>Zero: o cálculo devolveu 0 ciclos. Não é ausência de resposta.</li>
       <li>Sem registro: a resposta não trouxe esta hora. O painel não transforma isso em zero.</li>
     </ul>
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" role="region" aria-label="Horas por dia, rolagem horizontal" tabIndex={0}>
       <table className="border-collapse text-sm">
         <caption>Mapa de calor no fuso {zone}. Sete dias por vinte e quatro horas. Domingo é o dia 0 do cálculo.</caption>
         <thead>

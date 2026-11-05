@@ -268,4 +268,4 @@ O ponto de entrada de infraestrutura do Chat ISP no Marco M2 é `deploy/compose.
   ```sh
   docker compose -f deploy/compose.yml --env-file deploy/.env up --build
   ```
-  *(Nota: no repositório base, `README.md` referenciava `deploy/compose.yaml` da fase M1; o arquivo operacional M2 é `deploy/compose.yml`.)*
+  *(Nota: o arquivo operacional M2 era `deploy/compose.yml`; na continuação ele passou a ser `deploy/compose.yaml`, o nome que o Compose procura primeiro, e o `compose.yaml` antigo da fase M1 foi removido.)*

@@ -699,8 +699,7 @@ function ComposerSession({
           aria-invalid={state.phase === "failed" ? true : undefined}
           aria-describedby={describedBy}
           placeholder="Escreva a mensagem"
-          className="min-h-24 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-base text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive md:text-sm dark:bg-input/30"
-          aria-expanded={slashOpen}
+          className="min-h-24 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-base text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-foreground disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive md:text-sm dark:bg-input/30"
           aria-controls={slashOpen ? slashListId : undefined}
           aria-owns={slashOpen ? slashListId : undefined}
           aria-autocomplete={slashOpen ? "list" : undefined}

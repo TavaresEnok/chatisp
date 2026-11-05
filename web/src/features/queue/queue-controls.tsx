@@ -1,3 +1,4 @@
+import { ContactAvatar } from "@/components/ui/contact-avatar";
 import { useId, useRef } from "react";
 import type { KeyboardEvent } from "react";
 import { QueueSearch } from "./queue-search";
@@ -69,11 +70,11 @@ export function QueueControls(props: QueueControlsProps) {
       </div>
       <p className="text-sm text-muted-foreground">Todas mostra as conversas disponíveis no seu acesso.</p>
       <QueueSearch value={props.search} onChange={props.onSearchChange} />
-      <fieldset className="flex flex-wrap gap-3">
+      <fieldset className="flex min-w-0 flex-wrap gap-3">
         <legend className="font-medium">Filtros</legend>
         {fields.map(({ key, label }) => (
-          <label key={key} className="flex flex-col gap-1">{label}
-            <select className="min-h-11 rounded-lg border border-input px-2" value={props.filters[key]}
+          <label key={key} className="flex min-w-0 max-w-full flex-col gap-1">{label}
+            <select className="min-h-11 w-full max-w-full min-w-0 rounded-lg border border-input px-2" value={props.filters[key]}
               onChange={(event) => setFilter(key, event.target.value)}>
               <option value="">Todos</option>
               {props.filterOptions[key].map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -106,7 +107,7 @@ export function QueueControls(props: QueueControlsProps) {
                 <button type="button" aria-pressed={props.selectedId === item.id} onClick={() => props.onSelect(item.id)}
                   data-wait-alert={item.waitAlert ? "true" : undefined}
                   className={`flex min-h-11 w-full flex-wrap items-center gap-2 rounded-lg border p-2 text-left focus-visible:outline-2${item.waitAlert ? " border-destructive bg-destructive/10" : ""}`}>
-                  <span>{item.contactLabel}</span><span>Protocolo {item.protocol}</span>
+                  <ContactAvatar label={item.contactLabel} /><span>{item.contactLabel}</span><span>Protocolo {item.protocol}</span>
                   {item.priorityLabel && <span>Prioridade: {item.priorityLabel}</span>}
                   {item.unreadCount > 0 && <span>{item.unreadCount} não lida(s)</span>}
                   {item.waitAlert && <span>Passou do tempo de espera.</span>}

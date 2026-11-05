@@ -8,9 +8,15 @@ x-chatisp-image: &chatisp-image
   image: chatisp:local
   environment: &chatisp-env
     CHATISP_ENV: development
-    CHATISP_DATABASE_URL: postgres://chatisp_owner:${CHATISP_OWNER_PASSWORD:?defina CHATISP_OWNER_PASSWORD}@postgres:5432/chatisp?sslmode=disable
     CHATISP_APP_DATABASE_URL: postgres://chatisp_app:${CHATISP_APP_PASSWORD:?defina CHATISP_APP_PASSWORD}@postgres:5432/chatisp?sslmode=disable
     CHATISP_PLATFORM_DATABASE_URL: postgres://chatisp_platform:${CHATISP_PLATFORM_PASSWORD:?defina CHATISP_PLATFORM_PASSWORD}@postgres:5432/chatisp?sslmode=disable
+    CHATISP_INGRESS_DATABASE_URL: postgres://chatisp_ingress:${CHATISP_INGRESS_PASSWORD:?defina CHATISP_INGRESS_PASSWORD}@postgres:5432/chatisp?sslmode=disable
+    CHATISP_JOBS_DATABASE_URL: postgres://chatisp_jobs:${CHATISP_JOBS_PASSWORD:?defina CHATISP_JOBS_PASSWORD}@postgres:5432/chatisp?sslmode=disable
+    CHATISP_DATA_KEYS: ${CHATISP_DATA_KEYS:?defina CHATISP_DATA_KEYS}
+    CHATISP_DATA_KEY_VERSION: ${CHATISP_DATA_KEY_VERSION:-1}
+    CHATISP_META_SIMULATION: "true"
+    CHATISP_META_VERIFY_TOKEN: ${CHATISP_META_VERIFY_TOKEN:?defina CHATISP_META_VERIFY_TOKEN}
+    CHATISP_META_APP_ID: ${CHATISP_META_APP_ID:-}
     CHATISP_MIGRATIONS_DIR: /usr/share/chatisp/migrations
     CHATISP_PANEL_ORIGINS: https://localhost:8443
     CHATISP_HTTP_ADDR: 0.0.0.0:8080
@@ -31,6 +37,22 @@ services:
       CHATISP_APP_PASSWORD: ${CHATISP_APP_PASSWORD:?defina CHATISP_APP_PASSWORD}
       CHATISP_PLATFORM_PASSWORD: ${CHATISP_PLATFORM_PASSWORD:?defina CHATISP_PLATFORM_PASSWORD}
       CHATISP_INGRESS_PASSWORD: ${CHATISP_INGRESS_PASSWORD:?defina CHATISP_INGRESS_PASSWORD}
+      CHATISP_JOBS_PASSWORD: ${CHATISP_JOBS_PASSWORD:?defina CHATISP_JOBS_PASSWORD}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        cat <<'EOF' > /docker-entrypoint-initdb.d/002-river.sh
+        #!/bin/sh
+        set -eu
+        psql -v ON_ERROR_STOP=1 --username "$$POSTGRES_USER" --dbname "$$POSTGRES_DB" -v jobs_password="$$CHATISP_JOBS_PASSWORD" <<'SQL'
+        CREATE ROLE chatisp_jobs LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD :'jobs_password';
+        SELECT format('GRANT CONNECT, CREATE ON DATABASE %I TO chatisp_owner', current_database()) \gexec
+        SELECT format('GRANT CONNECT ON DATABASE %I TO chatisp_jobs', current_database()) \gexec
+        SQL
+        EOF
+        chmod +x /docker-entrypoint-initdb.d/002-river.sh
+        exec docker-entrypoint.sh postgres "$$@"
     volumes:
       - postgres-data:/var/lib/postgresql
       - ./postgres/init/001-roles.sh:/docker-entrypoint-initdb.d/001-roles.sh:ro
@@ -64,6 +86,9 @@ services:
 
   chatisp-migrate:
     <<: *chatisp-image
+    environment:
+      <<: *chatisp-env
+      CHATISP_DATABASE_URL: postgres://chatisp_owner:${CHATISP_OWNER_PASSWORD:?defina CHATISP_OWNER_PASSWORD}@postgres:5432/chatisp?sslmode=disable
     command: ["migrate"]
     depends_on:
       postgres:

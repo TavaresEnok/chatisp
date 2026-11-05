@@ -199,3 +199,18 @@ Quando houver decisão externa: D2-03 (Meta) destrava 02-saude-numero, 02-limite
 
 ### Como retomar
 `cd /home/enok/srv_projetos/workspace/chat-isp-cursor-integracao-2`; `git log --oneline -8`; ler `docs/matriz-requisitos.md`; a pasta `chat-isp` (branch `continuation/m5-runtime-panel`) está 52+ commits atrás e não deve ser base.
+
+## Rodada de pendências internas (05/11/2026, depois de `454e8c3`)
+
+Pedido: fechar o que ainda era executável localmente. Evidências em `docs/medicoes/busca-fila.md` e `docs/medicoes/a11y-notificacoes.md`.
+
+- **Busca composta da fila**: `CHATISP_PERF=1 go test -run TestQueueComposedSearchOnSyntheticVolume -v ./internal/attendance/store/` (2 tenants × 20 000 conversas × 100 000 mensagens). Agente < 1 s, admin até 2,2 s no pior caso; o plano real varre por candidata e não usa o GIN; a troca por subconsulta não correlacionada piorou e foi descartada.
+- **Navegador**: `npm --prefix web run test:e2e:ux` (Chromium 140, axe-core 4.10.2 fixado, 24 visões). Corrigidos: anel de foco invisível (`outline-none` + `focus-visible:outline-2` no Tailwind v4 exige `outline-solid`), `aria-expanded` indevido, alvos < 24 px, regiões roláveis sem teclado, estouros horizontais a 768 e 360 px. Notificações locais exercitadas (concedida, sem concessão, API ausente, pedido concedido/negado/rejeitado, construtor que lança).
+- **Avatar**: iniciais determinísticas (`web/src/components/ui/contact-avatar.tsx`), porque a especificação só pede foto se o WhatsApp fornecer.
+- **Uso reportado pela Meta (14-uso-meta)**: `retention.Service.MetaUsage` + `GET /api/panel/meta-usage` + painel em Relatórios; contrato do campo `pricing` conferido na documentação pública.
+- **Docker**: o host tem Docker 20.10.9 **sem a ponte `docker0`**; `docker compose config` passa, o build falha (rede do build, `apt` do Debian 13 e `npm ci` do Node 24). Não se desligou seccomp nem se mexeu na rede do Docker. Consolidado `deploy/compose.yaml` (o `compose.yml` M2 virou `compose.yaml`; o antigo da M1 saiu), `.env.example` completo com teste de guarda, `ffmpeg` na imagem, e `scripts/compose-validate.sh` para um host com Docker atual.
+- **Incidente de operação**: ao limpar imagens do meu build rodei `docker image prune -f --filter until=2m`, que apagou **imagens sem etiqueta** de outros projetos (cerca de 2,4 GB, versões antigas dangling; nenhuma imagem com etiqueta nem contêiner). Contêineres e imagens etiquetadas seguem intactos; as imagens sem etiqueta precisam ser reconstruídas se alguém dependia delas.
+- **Meta, número (02-saude-numero, 02-limites-numero)**: contrato do webhook `phone_number_quality_update` verificado (`docs/integracoes/meta.md`). Falta decidir o roteamento por WABA + número de exibição (o webhook não traz `phone_number_id`); a nota de qualidade só vem da leitura por Graph (token + versão, D2-03).
+- **Reclassificadas**: 12-retencao e 14-retencao passaram a "aguardando homologação externa" (o plano já define expurgo desligado até D2-06; recusa e classes implementadas e testadas).
+
+Matriz: 204 verificados, 44 aguardando homologação externa, 6 parciais (12-https, 13-self-host, 13-compose por causa do Docker do host; 08-aprovacao e 08-verificacao-cliente pelo ERP; 14-carga pelo perfil D2-07), 3 não implementados (02-saude-numero, 02-limites-numero, 08-abrir-cadastro).

@@ -262,7 +262,7 @@ function TimelineSession({ scope, protocol, status, entries, onReply, loadDownlo
                   aria-setsize={readyEntries.length}
                   id={`mensagem-${entry.id}`}
                   aria-label={entryLabel(entry, protocolLabel)}
-                  className="absolute top-0 left-0 flex w-full flex-col gap-1 px-4 py-3 text-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+                  className="absolute top-0 left-0 flex w-full flex-col gap-1 px-4 py-3 text-sm outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-foreground"
                   style={{ transform: `translateY(${virtualRow.start}px)` }}
                   onFocus={() => setFocusedIndex(virtualRow.index)}
                   onKeyDown={(event) => onItemKeyDown(event, virtualRow.index)}

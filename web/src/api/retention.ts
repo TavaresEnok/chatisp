@@ -92,3 +92,16 @@ export function deletePrivacy(contactId: string): Promise<PrivacyDeletion> {
     body: JSON.stringify({ confirm: "excluir titular" }),
   }).then((response) => response.json() as Promise<PrivacyDeletion>);
 }
+
+export type MetaUsage = {
+  from: string;
+  to: string;
+  rows: { category: string; billable: "true" | "false" | "unknown"; messages: number }[];
+  without_pricing: number;
+  note: string;
+};
+
+export function getMetaUsage(from: string, to: string, signal?: AbortSignal): Promise<MetaUsage> {
+  const query = new URLSearchParams({ from, to });
+  return panel(`/api/panel/meta-usage?${query}`, { signal }).then((response) => response.json() as Promise<MetaUsage>);
+}

@@ -1,3 +1,4 @@
+import { ContactAvatar } from "@/components/ui/contact-avatar";
 import { ContactDocument, DocumentSearch } from "@/features/contactdocs/contact-document";
 import { useEffect, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -24,7 +25,7 @@ function Directory({ principal }: { principal: PanelPrincipal }) {
   async function save(e: FormEvent) { e.preventDefault(); const body = { name, phone, email, notes }; if (await run(() => editing ? api.update(editing.id, body) : api.create(body))) edit(null); }
   return <article><h1>Contatos</h1><DocumentSearch onFound={id => { void api.get(id).then(edit).catch(() => setError("Não foi possível abrir o contato.")); }} /><label>Buscar contatos <input value={q} onChange={e => { setQ(e.target.value); setOffset(0); }} /></label>
     {query.isPending ? <p role="status">Carregando contatos…</p> : query.isError ? <p role="alert">Não foi possível carregar os contatos.</p> : <>
-      {!query.data.items?.length ? <p>Nenhum contato encontrado.</p> : <ul>{query.data.items.map(c => <li key={c.id}><button type="button" disabled={busy} onClick={() => edit(c)}>{c.name}</button> {c.blocked ? "— Bloqueado" : ""}</li>)}</ul>}
+      {!query.data.items?.length ? <p>Nenhum contato encontrado.</p> : <ul>{query.data.items.map(c => <li key={c.id}><button type="button" disabled={busy} onClick={() => edit(c)}><ContactAvatar label={c.name} size={24} /> {c.name}</button> {c.blocked ? "— Bloqueado" : ""}</li>)}</ul>}
       <button type="button" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 50))}>Anterior</button><button type="button" disabled={query.data.next_offset === null} onClick={() => setOffset(query.data.next_offset!)}>Próxima</button>
     </>}
     {!query.isError && <><h2>{editing ? "Editar contato" : "Novo contato"}</h2><form onSubmit={e => void save(e)}>

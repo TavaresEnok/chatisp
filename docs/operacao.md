@@ -80,3 +80,17 @@ O painel com Caddy fica em `https://localhost:8443`. `deploy/.env.example` só t
 - Não liga expurgo. A política automática continua desligada enquanto a D2-06 estiver aberta.
 - Não publica capacidade. O ensaio local é `./scripts/ops-load-local.sh`. A revisão operacional é `./scripts/ops-security-check.sh`.
 - O ensaio de restore continua `go run ./cmd/restoredrill` a partir de `backend/`, só com socket de cluster descartável, como em `docs/contracts/m8-restore-drill.md`. O sucesso grava `metrics.prom` no diretório temporário do dump.
+
+## Validar Compose e Caddy em ambiente isolado
+
+```
+./scripts/compose-validate.sh
+```
+
+O script usa projeto, volumes e rede próprios (`chatisp-validate-<pid>`), segredos descartáveis gerados na hora, porta de loopback livre para o Caddy, e se desfaz no fim (`down -v`). Não toca em outros projetos. Requer Docker com a ponte `docker0` e versão que rode imagens Debian 13/Node 24 (20.10.10 ou mais nova) e Compose 2.24.4 ou mais novo (por causa de `!override`).
+
+Estado verificado em 05/11/2026 na máquina de desenvolvimento (Docker 20.10.9, sem a ponte `docker0`):
+
+- `docker compose config -q` com variáveis descartáveis: ok.
+- O build falha antes de subir: sem `docker0` o `RUN` do build não obtém rede (`could not find bridge docker0`); com `build.network: host`, o `apt-get` do Debian 13 falha (`APT::Update::Post-Invoke ... returned an error code`) e o `npm ci` do Node 24 aborta (`Aborted (core dumped)`). É a incompatibilidade conhecida entre Docker 20.10.9 e imagens recentes. Não se contornou desligando o seccomp nem recriando a ponte, porque isso mexeria no Docker e nos serviços que já rodam nele.
+- Portanto Compose/Caddy **não foram executados**. Corrigido o que a leitura mostrou: `deploy/compose.yml` (o arquivo M2 completo) agora é `deploy/compose.yaml`, o nome que o Compose procura primeiro, e o `compose.yaml` antigo da M1 (sem as funções de ingresso e jobs) foi removido; `deploy/.env.example` passou a listar todas as variáveis exigidas (`CHATISP_JOBS_PASSWORD`, `CHATISP_DATA_KEYS`, `CHATISP_DATA_KEY_VERSION`, `CHATISP_META_VERIFY_TOKEN`); a imagem de execução instala `ffmpeg`, que a conversão de áudio gravado exige.

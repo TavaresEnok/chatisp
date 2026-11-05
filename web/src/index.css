@@ -142,3 +142,17 @@
     @apply bg-background font-sans text-foreground antialiased;
   }
 }
+
+/* WCAG 2.2 AA (2.5.8): native checkboxes and radios are at least 24x24 CSS px. */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-inline-end: 0.375rem;
+  vertical-align: middle;
+}
+
+/* Native file inputs have an intrinsic width; keep them inside narrow screens. */
+input[type="file"] {
+  max-width: 100%;
+}

@@ -1,3 +1,4 @@
+import { ContactAvatar } from "@/components/ui/contact-avatar";
 import { Button } from "@/components/ui/button";
 import {
   ATTENDANCE_PHASE_LABEL,
@@ -34,7 +35,10 @@ export function ConversationHeader({
   return (
     <header className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-foreground">{contact}</h2>
+        <div className="flex items-center gap-2">
+          <ContactAvatar label={contact} size={40} />
+          <h2 className="text-base font-medium text-foreground">{contact}</h2>
+        </div>
         <p className="text-sm text-foreground">{`Protocolo ${protocolLabel}`}</p>
         <p className="text-sm text-muted-foreground">{`Estado: ${ATTENDANCE_PHASE_LABEL[phase]}`}</p>
         <p className="text-sm text-muted-foreground">{`Responsável: ${assignee}`}</p>

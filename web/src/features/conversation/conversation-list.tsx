@@ -1,3 +1,4 @@
+import { ContactAvatar } from "@/components/ui/contact-avatar";
 import { useId } from "react";
 import type { KeyboardEvent } from "react";
 import {
@@ -101,12 +102,15 @@ export function ConversationList({
                 aria-selected={selected}
                 aria-label={optionLabel(card)}
                 tabIndex={selected || (selectedId === null && index === 0) ? 0 : -1}
-                className="flex min-h-11 w-full flex-col items-start gap-0.5 px-4 py-2 text-left text-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground aria-selected:bg-muted"
+                className="flex min-h-11 w-full flex-col items-start gap-0.5 px-4 py-2 text-left text-sm outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-foreground aria-selected:bg-muted"
                 onClick={() => onSelect(card.id)}
                 onKeyDown={(event) => onOptionKeyDown(event, index)}
               >
-                <span className="font-medium text-foreground">
-                  {presentationText(card.contactLabel, "Contato indisponível")}
+                <span className="flex items-center gap-2">
+                  <ContactAvatar label={presentationText(card.contactLabel, "Contato indisponível")} />
+                  <span className="font-medium text-foreground">
+                    {presentationText(card.contactLabel, "Contato indisponível")}
+                  </span>
                 </span>
                 <span className="text-muted-foreground">
                   {`Protocolo ${presentationText(card.protocol, "indisponível")} · ${ATTENDANCE_PHASE_LABEL[card.phase]}`}

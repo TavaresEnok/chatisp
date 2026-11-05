@@ -304,7 +304,7 @@ function WorkspaceSession({
   }
 
   return (
-    <div ref={workspace} className="grid gap-4 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)] lg:has-[.painel-externo]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)_minmax(18rem,24rem)] lg:has-[.painel-lateral]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)_minmax(18rem,24rem)]" onKeyDown={handleShortcut}>
+    <div ref={workspace} className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)] lg:has-[.painel-externo]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)_minmax(18rem,24rem)] lg:has-[.painel-lateral]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)_minmax(18rem,24rem)]" onKeyDown={handleShortcut}>
       {renderQueue ? renderQueue(card?.id ?? null, selectConversation) : <ConversationList
         status={listStatus}
         conversations={conversations}

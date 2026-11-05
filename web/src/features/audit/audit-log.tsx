@@ -91,6 +91,7 @@ export function AuditLog({ principal }: { principal: PanelPrincipal }) {
       {query.isError && <p role="alert">Não foi possível carregar a auditoria.</p>}
       {query.data && events.length === 0 && <p>Nenhum evento neste período.</p>}
       {events.length > 0 && (
+        <div className="overflow-x-auto" role="region" aria-label="Ações registradas, rolagem horizontal" tabIndex={0}>
         <table>
           <caption className="sr-only">Eventos de auditoria</caption>
           <thead>
@@ -112,6 +113,7 @@ export function AuditLog({ principal }: { principal: PanelPrincipal }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
       {next && (
         <button type="button" disabled={loadingMore} onClick={() => void showMore()}>

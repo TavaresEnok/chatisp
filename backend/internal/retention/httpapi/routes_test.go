@@ -117,3 +117,39 @@ type stubAuth struct{ p auth.Principal }
 func (s stubAuth) Authenticate(context.Context, string, string, bool) (auth.Principal, error) {
 	return s.p, nil
 }
+
+func TestHTTPMetaUsageIsAdminOrSupervisorOnlyAndHasNoMoney(t *testing.T) {
+	s := seedTenant(t)
+	for _, tc := range []struct {
+		role string
+		want int
+	}{{"admin", http.StatusOK}, {"agent", http.StatusForbidden}} {
+		router := chi.NewRouter()
+		Register(router, Dependencies{
+			Auth:  stubAuth{p: auth.Principal{UserID: s.admin.UserID, TenantID: s.tenant, MembershipID: s.admin.MembershipID, Role: tc.role}},
+			Store: testStore, TrustedOrigins: []string{"https://painel.test"},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/api/panel/meta-usage?from=2026-11-01&to=2026-11-05", nil)
+		req.AddCookie(&http.Cookie{Name: "__Host-session", Value: "sessao"})
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != tc.want {
+			t.Fatalf("%s: http %d %s", tc.role, rec.Code, rec.Body.String())
+		}
+		if tc.want == http.StatusOK {
+			body := rec.Body.String()
+			if !strings.Contains(body, `"rows":[]`) || !strings.Contains(body, "Não há valor em dinheiro") || strings.Contains(body, "price") || strings.Contains(body, "amount") {
+				t.Fatalf("corpo: %s", body)
+			}
+		}
+	}
+	router := chi.NewRouter()
+	Register(router, Dependencies{Auth: stubAuth{p: auth.Principal{UserID: s.admin.UserID, TenantID: s.tenant, MembershipID: s.admin.MembershipID, Role: "admin"}}, Store: testStore})
+	bad := httptest.NewRequest(http.MethodGet, "/api/panel/meta-usage?from=2026-11-05&to=2026-11-01", nil)
+	bad.AddCookie(&http.Cookie{Name: "__Host-session", Value: "sessao"})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, bad)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("período inválido: %d", rec.Code)
+	}
+}

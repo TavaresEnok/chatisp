@@ -15,7 +15,7 @@ RUN go build -mod=vendor -trimpath -o /out/chatisp ./cmd/chatisp
 
 FROM debian:13-slim AS runtime
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends ca-certificates curl \
+	&& apt-get install -y --no-install-recommends ca-certificates curl ffmpeg \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& useradd --uid 1000 --create-home --shell /usr/sbin/nologin chatisp
 COPY --from=api /out/chatisp /usr/local/bin/chatisp

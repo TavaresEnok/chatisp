@@ -44,6 +44,7 @@ func Register(r chi.Router, d Dependencies) {
 	r.Put("/api/panel/retention", h.putPolicy)
 	r.Post("/api/panel/retention/purge", h.purge)
 	r.Get("/api/panel/plan-limits", h.limits)
+	r.Get("/api/panel/meta-usage", h.metaUsage)
 	r.Get("/api/panel/contacts/{contact_id}/demands", h.export)
 	r.Get("/api/panel/contacts/{contact_id}/privacy-export", h.privacyExport)
 	r.Post("/api/panel/contacts/{contact_id}/privacy-deletion", h.privacyDelete)
@@ -278,4 +279,24 @@ func writeProblem(w http.ResponseWriter, status int, detail string) {
 		"status": status,
 		"detail": detail,
 	})
+}
+
+func (h handler) metaUsage(w http.ResponseWriter, r *http.Request) {
+	p, err := h.principal(r, false)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if p.Role == "agent" {
+		writeProblem(w, http.StatusForbidden, "acesso negado")
+		return
+	}
+	q := r.URL.Query()
+	body, err := h.s.MetaUsage(r.Context(), p, q.Get("from"), q.Get("to"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, body)
 }

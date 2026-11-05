@@ -1,5 +1,6 @@
 import { AreaPage } from "@/components/layout/area-page";
 import { AttendanceReportView } from "@/features/reports/attendance-report";
+import { MetaUsageView } from "@/features/reports/meta-usage";
 import { useSessionStore } from "@/stores/session-store";
 
 export function ReportsPage() {
@@ -8,5 +9,6 @@ export function ReportsPage() {
   return <article className="flex max-w-3xl flex-col gap-6">
     <h1 className="text-2xl font-semibold tracking-tight">Relatórios</h1>
     <AttendanceReportView principal={principal} mode="full" />
+    {principal.role !== "agent" && <MetaUsageView scope={[principal.tenantId, principal.sessionId, principal.membershipId].join(":")} />}
   </article>;
 }
