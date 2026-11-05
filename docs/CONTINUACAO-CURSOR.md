@@ -229,3 +229,15 @@ Releitura de especificação, plano, matriz e documentos de entrega. Feito nesta
 Validação no tree final: `go vet` e `go test -count=1 ./...` (65 pacotes ok); `scripts/lint.sh` (golangci-lint 0, govulncheck 0 alcançável, ESLint, tsc, OpenAPI e sqlc em dia); Vitest 60 arquivos e 288 testes; E2E `m3b`, `m4a`, `m4b-m6`, `m7-ops` e `ux` (52 visões, 0 achados); `scripts/dev.test.sh`; `scripts/ops-security-check.sh`.
 
 Matriz: 204 verificados, 47 implementados aguardando homologação externa, 6 parciais, 0 não implementados. Os 6 parciais dependem de fora: 12-https, 13-self-host e 13-compose do Docker do host (20.10.9 sem `docker0`; `scripts/compose-validate.sh` pronto), 08-aprovacao e 08-verificacao-cliente do ERP (D2-01/D2-02) e 14-carga do perfil do piloto (D2-07).
+
+## Verificação de entrega (05/11/2026, depois de `b2b6910`)
+
+Relatório: `docs/medicoes/verificacao-entrega-20261105.md`. Nenhum código de produção mudou; testes da rodada anterior reutilizados.
+
+- **Docker/Compose não validado.** Duas causas reproduzidas com sonda (`docs/medicoes/docker-20261105/`): (1) o daemon roda com `--iptables=false` e a rede `bridge` aponta para `docker0`, que não existe, então todo `RUN` na rede padrão falha; (2) o seccomp do 20.10.9 nega `clone3` com EPERM, e por isso `apt` do Debian 13 e Node 24 abortam mesmo com `--network host`. O perfil upstream com ENOSYS não resolve neste daemon. O builder descartável (BuildKit rootless) exigia desligar seccomp/apparmor no contêiner e foi negado. Procedimento para host compatível no relatório.
+- **Lacuna escondida:** não há caminho de produção para criar o superadmin nem o primeiro admin de um provedor. 12-superadmin e 14-provisionamento voltaram a parcial; afeta 13-self-host.
+- **Incidente do `image prune`:** comando, horário e o que se pode inferir estão no relatório; os IDs removidos não foram registrados (`| tail -1`). Os 80 contêineres têm a imagem e as etiquetas que usam. Ficou presente a sobra do build anterior (contêiner `172052ca40ee`, imagem `933e4b0aa2d1`): a remoção foi negada pela política de permissões; os comandos estão no relatório.
+- **Matriz:** 202 verificados, 33 aguardando homologação, 22 parciais. 13 linhas de ERP e 01-evolution saíram de "homologação" porque `erp/real.go` é stub e o Evolution é só contrato.
+- **Segurança:** `docs/medicoes/govulncheck-20261105/`. GO-2026-5932 (`x/crypto/openpgp`) não está no grafo de build (`go list -deps -test`, `vendor/modules.txt`, `-scan package` = 0).
+
+Próxima tarefa: implementar a inicialização do superadmin e o convite do primeiro admin (plano pelo `paseo-flow`), depois rodar `scripts/compose-validate.sh` num host com Docker ≥ 20.10.10.

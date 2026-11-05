@@ -73,6 +73,10 @@ docker compose -f deploy/compose.yaml --env-file deploy/.env up --build
 
 O painel com Caddy fica em `https://localhost:8443`. `deploy/.env.example` só tem placeholders. Não grave segredo real no Git.
 
+Requisitos do host: Docker Engine 20.10.10 ou mais novo (o 20.10.9 nega `clone3` com EPERM e quebra o `apt` do Debian 13 e o Node 24), ponte padrão funcional com saída para a internet durante o build, Compose 2.24.4 ou mais novo. Prova rápida antes de subir: `docker run --rm debian:13-slim sh -c 'apt-get update >/dev/null && echo ok'`.
+
+**Lacuna conhecida (05/11/2026):** a instalação por Compose não cria o primeiro usuário. Não existe comando de produção para criar o superadmin nem o primeiro administrador de um provedor; `chatisp dev-prepare` é só do ambiente de desenvolvimento e não deve ser apontado para o banco do Compose. Até a implementação, login no Compose exige inserção manual por SQL. Detalhes em `docs/medicoes/verificacao-entrega-20261105.md`.
+
 ## O que a operação local não faz
 
 - Não usa credencial de Meta, ERP ou Evolution.
@@ -89,7 +93,7 @@ O painel com Caddy fica em `https://localhost:8443`. `deploy/.env.example` só t
 
 O script usa projeto, volumes e rede próprios (`chatisp-validate-<pid>`), segredos descartáveis gerados na hora, porta de loopback livre para o Caddy, e se desfaz no fim (`down -v`). Não toca em outros projetos. Requer Docker com a ponte `docker0` e versão que rode imagens Debian 13/Node 24 (20.10.10 ou mais nova) e Compose 2.24.4 ou mais novo (por causa de `!override`).
 
-Estado verificado em 05/11/2026 na máquina de desenvolvimento (Docker 20.10.9, sem a ponte `docker0`):
+Estado verificado em 05/11/2026 na máquina de desenvolvimento (Docker 20.10.9, sem a ponte `docker0`; diagnóstico completo, logs e procedimento em `docs/medicoes/verificacao-entrega-20261105.md` e `docs/medicoes/docker-20261105/`):
 
 - `docker compose config -q` com variáveis descartáveis: ok.
 - O build falha antes de subir: sem `docker0` o `RUN` do build não obtém rede (`could not find bridge docker0`); com `build.network: host`, o `apt-get` do Debian 13 falha (`APT::Update::Post-Invoke ... returned an error code`) e o `npm ci` do Node 24 aborta (`Aborted (core dumped)`). É a incompatibilidade conhecida entre Docker 20.10.9 e imagens recentes. Não se contornou desligando o seccomp nem recriando a ponte, porque isso mexeria no Docker e nos serviços que já rodam nele.

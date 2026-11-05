@@ -1,0 +1,15 @@
+# go list -deps -test ./... (todas as plataformas do build atual: linux/amd64)
+701
+# pacotes golang.org/x/crypto no grafo:
+golang.org/x/crypto/blake2b
+golang.org/x/crypto/argon2
+# ocorrências de openpgp no grafo (vazio = nenhuma):
+# openpgp em vendor/modules.txt (vazio = não vendorizado):
+# diretório vendor/golang.org/x/crypto/openpgp:
+ls: cannot access 'vendor/golang.org/x/crypto/openpgp': No such file or directory
+# GOOS=linux openpgp:
+0
+# GOOS=darwin openpgp:
+0
+# GOOS=windows openpgp:
+0

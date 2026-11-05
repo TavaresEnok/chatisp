@@ -1,0 +1,9 @@
+go version go1.27.3 linux/amd64
+../.tools/govulncheck: go1.27.3
+	path	golang.org/x/vuln/cmd/govulncheck
+	mod	golang.org/x/vuln	v1.9.0	h1:12VaqnI9kJfqwRoPptxoqsUhQtdfrSbdksT7X/KY/sc=
+Go: go1.27.3
+Scanner: govulncheck@v1.9.0
+DB: https://vuln.go.dev
+DB updated: 2026-11-02 22:01:43 +0000 UTC
+
