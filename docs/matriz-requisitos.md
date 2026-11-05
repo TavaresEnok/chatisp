@@ -1,6 +1,6 @@
 # Matriz de requisitos V1 e V1 simples
 
-Contagem: A conferir: 3; Implementado e verificado: 184; Implementado, aguardando homologação externa: 42; Não implementado: 5; Parcial, com lacuna concreta: 23.
+Contagem: A conferir: 2; Implementado e verificado: 185; Implementado, aguardando homologação externa: 42; Não implementado: 5; Parcial, com lacuna concreta: 23.
 
 Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1 a M8 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
 
@@ -21,7 +21,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 12-auditoria | M1 | V1 | Parcial, com lacuna concreta | auth grava audit para login, invitation.create/accept, password_reset.request/confirm, session.revoke, mfa.*, membership.deactivate (código); só a desativação tem teste dedicado (TestDisabledUserLosesSessions) |
 | 05-convite | M1 | V1 | Implementado e verificado | mesmos testes de 12-usuarios-convites |
 | 06-fuso | M1 | V1 | Implementado e verificado | businesshours TestBoundariesAndDST, reports (fuso do provedor), lifecycle/service_test.go usam o fuso do tenant |
-| 13-painel-web | M1 | V1 | Parcial, com lacuna concreta | páginas existem e Vitest passou; jornada no navegador não repetida |
+| 13-painel-web | M1 | V1 | Parcial, com lacuna concreta | jornadas reais no Chromium 140 (05/11/2026) exercitaram Painel, Conversas, Relatórios e Configurações com login e sessão; Contatos e Equipes só em Vitest; responsividade e acessibilidade não auditadas |
 | 13-responsiva | M1 | V1 | Parcial, com lacuna concreta | sem verificação em navegador nesta rodada |
 | 13-pt-br | M1 | V1 | A conferir | — |
 | 13-a11y | M1 | V1 | Parcial, com lacuna concreta | sem auditoria em navegador nesta rodada; Vitest com rótulos passou |
@@ -148,7 +148,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 02-interativos | M4 | V1 simples | Implementado, aguardando homologação externa | decode de interactive e fallback numerado em triage (TestUnambiguousNumberedChoice); sem Meta real |
 | 02-saude-numero | M4 | V1 simples | Não implementado | nenhum código de qualidade/saúde do número encontrado |
 | 02-limites-numero | M4 | V1 simples | Não implementado | nenhum código de tier/limite de mensagens do número encontrado |
-| 04-compositor | M4 | V1 | A conferir | — |
+| 04-compositor | M4 | V1 | Implementado e verificado | E2E no Chromium 140 em 05/11/2026: m4a (texto, assinatura, resposta pronta, anexo validado) e m4b-m6 (documento, localização citada, áudio gravado convertido no servidor); message-composer*.test.tsx; composer-tools.test.tsx |
 | 04-drag-colar | M4 | V1 | Parcial, com lacuna concreta | onPaste/onDrop existem em message-composer.tsx e attachment-desk.tsx; sem teste dedicado e sem Playwright |
 | 04-preview | M4 | V1 | Implementado e verificado | features/attachments/attachments.test.tsx, media-panel.test.tsx; attachment-preview.tsx |
 | 04-download-seguro | M4 | V1 | Implementado e verificado | TestPersistentAuthorizedAttachmentLifecycle; features/attachments/attachments.test.tsx |

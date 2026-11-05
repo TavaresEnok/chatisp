@@ -36,7 +36,9 @@ async function openPanel(browser: Browser, actor: Actor) {
       for (const socket of open) if (socket.readyState < WebSocket.CLOSING) socket.close();
     };
     // Simulated capture. The panel still uses MediaRecorder and sends the original blob.
-    const mpeg = new Uint8Array([0x49, 0x44, 0x33, 0, 0, 0, 0, 0, 0, 0]);
+    // 0.6 s synthetic tone, 8 kHz mono MP3 (~1 KB). The server now runs MPEG through the
+    // limited ffmpeg, so a bare ID3 header is refused as undecodable audio.
+    const mpeg = Uint8Array.from(atob("SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA/+M4wAAAAAAAAAAAAEluZm8AAAAPAAAACwAAA/AASUlJSUlJSUlJW1tbW1tbW1tbbW1tbW1tbW1tgICAgICAgICAkpKSkpKSkpKSpKSkpKSkpKSktra2tra2tra2ycnJycnJycnJ29vb29vb29vb7e3t7e3t7e3t////////////AAAAAExhdmM1OC41NAAAAAAAAAAAAAAAACQDwAAAAAAAAAPwiozOGwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/+MYxAANIJaceUwAAAgLdwL3ve973vSlKUpSnXve97/O007EMCYEwJiOf8OBAEMTh///nOn3f0ghy/uxAAwf4Y6VJoiwyxM//+MYxAYOcPKUAZRQAOOaK1HKELf4WeEcgd4wBjwknAO+SEaSHgdCKJzCSAyBRFYRQiv/yEej044iEv+EgaEp0Gn//////////+MYxAcN6KZAAd4AAP/////5UlsAgAk1hCAIYEIKBg1gtGDmI8Yc8ixjCCGGF6CYYGYGgOAjL7g4A1IV1Or///fVgRe0wIIy/+MYxAoM2KY0AAa8RCSNAlOPYMMAUs23aCzPQD/MJ0EIwMgCygApRNE5UrDrH////////q/9Vf//+AF5p6NHTwMuHOQ4MNMQ/+MYxBENMKY0AAa8RBN4R/00MQyzC0A6MEcBswHgEjAEAILPpeMDx////////3//rf//+Tt6l0DgEwITApsDIcEj0GEB0UYH/+MYxBcMeKY0AAb8RCMASA6hYC4AgHhgAZEAImyx2///////////1P//+IsySNLhGLDGaInDXGF0GObXrKpngBLmE2A4GA0h/+MYxCAMOKY4AAa8RMAuluocwFpWH//////////X///5Q4bDH7YAYZpzeGEKIOah0FplnhnmDkB0YFIC5gHAFFkEH2IOXir//+MYxCoKGKY8AAZ8RP/06jMPbDYxOgbOAYDoDC8FYDDgQoDJp9oDMWMwDEsEYDB4DoBQGgFACAFAQDVg4XrIMQQRiMWI3KYy/+MYxDwMYKZEAVYAAOzKv//jduMQ4/zWn1az//+NAcVSHHEEqmSSphAv//gjjrPsOUAsAEAMPIeQ8//9/9ZUO4dyJqauNvTc/+MYxEUYORqUMZpYAJhUFREFQV+5NyYiCoKiIKgr+CBc+GC85//l5xNMQU1FMy4xMDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/+MYxB8AAANIAcAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"), (char) => char.charCodeAt(0));
     class SimulatedRecorder {
       mimeType: string;
       state = "inactive";
@@ -200,9 +202,14 @@ export async function runM4BM6(browser: Browser, testInfo: { attach(name: string
     await composer.getByRole("button", { name: "Gravar áudio" }).click();
     await composer.getByRole("button", { name: "Parar gravação" }).click();
     await composer.getByRole("button", { name: "Enviar áudio original" }).click();
-    await expect(composer.getByText("Áudio original enviado. O navegador não converteu o arquivo.")).toBeVisible();
+    try {
+      await expect(composer.getByText("Áudio original enviado. O navegador não converteu o arquivo.")).toBeVisible();
+    } catch (error) {
+      const shown = await composer.innerText({ timeout: 2_000 }).catch(() => "");
+      throw new Error(`áudio não confirmado; compositor: ${shown.slice(0, 600)} | HTTP: ${httpErrors.slice(-5).join(" ; ")}`, { cause: error });
+    }
     await expect(history.getByText("Áudio", { exact: true }).first()).toBeVisible();
-    evidence.audio = "gravação simulada em audio/mpeg enviada pelo compositor, sem ffmpeg";
+    evidence.audio = "gravação simulada em audio/mpeg (tom sintético de 0,6 s) enviada pelo compositor; o servidor a converteu com o ffmpeg limitado";
 
     const consent = agent.page.getByRole("form", { name: "Consentimento do contato" });
     await consent.getByLabel("Finalidade do consentimento").fill("cobranca");

@@ -317,6 +317,12 @@ func runDemoMode(ctx context.Context, apiListener, metricsListener, fakeListener
 		return err
 	}
 	attendance := service.New(store, inserts)
+	// Same private store and limits as cmd/chatisp: recorded audio is converted by the
+	// limited ffmpeg and published before send, so the service needs both.
+	if attachmentSvc != nil && attachmentSvc.Storage != nil {
+		attendance.Files = attachmentSvc.Storage
+		attendance.AttachmentLimits = attachmentSvc.Limits
+	}
 	server := channels.Server()
 	factory, err := pipeline.NewDriverFactory(pipeline.DriverFactoryConfig{Simulation: true, StandInURL: "http://" + fakeListener.Addr().String()})
 	if err != nil {
