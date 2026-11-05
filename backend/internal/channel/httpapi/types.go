@@ -102,3 +102,68 @@ type inspectionOutput struct {
 		Discarded  []job        `json:"discarded"`
 	}
 }
+
+type limitReport struct {
+	Event        string `json:"event"`
+	CurrentLimit string `json:"current_limit"`
+	OldLimit     string `json:"old_limit"`
+	MaxDaily     *int64 `json:"max_daily_conversations"`
+	ReceivedAt   string `json:"received_at"`
+}
+type qualityReport struct {
+	Rating     string `json:"rating"`
+	Simulation bool   `json:"simulation"`
+	ReadAt     string `json:"read_at"`
+}
+type codeCount struct {
+	Code  string `json:"code"`
+	Count int    `json:"count"`
+}
+type numberHealth struct {
+	ConnectorID         uuid.UUID      `json:"connector_id"`
+	Name                string         `json:"name"`
+	DisplayNumber       string         `json:"display_number"`
+	Status              string         `json:"status"`
+	Enabled             bool           `json:"enabled"`
+	Limit               *limitReport   `json:"limit"`
+	Quality             *qualityReport `json:"quality"`
+	WindowDays          int            `json:"window_days"`
+	FailedSends         int            `json:"failed_sends"`
+	FailuresByCode      []codeCount    `json:"failures_by_code"`
+	UncertainSends      int            `json:"uncertain_sends"`
+	QuarantinedItems    int            `json:"quarantined_items"`
+	LastInboundAt       string         `json:"last_inbound_at"`
+	OpenCredentialAlert bool           `json:"open_credential_alert"`
+}
+
+func healthFrom(n configuration.NumberHealth) numberHealth {
+	out := numberHealth{
+		ConnectorID: n.ConnectorID, Name: n.Name, DisplayNumber: n.DisplayNumber,
+		Status: n.Status, Enabled: n.Enabled, WindowDays: n.WindowDays,
+		FailedSends: n.FailedSends, UncertainSends: n.UncertainSends,
+		QuarantinedItems: n.QuarantinedItems, LastInboundAt: n.LastInboundAt,
+		OpenCredentialAlert: n.OpenCredentialAlert,
+		FailuresByCode:      make([]codeCount, 0, len(n.FailuresByCode)),
+	}
+	if n.Limit != nil {
+		out.Limit = &limitReport{n.Limit.Event, n.Limit.CurrentLimit, n.Limit.OldLimit, n.Limit.MaxDaily, n.Limit.ReceivedAt}
+	}
+	if n.Quality != nil {
+		out.Quality = &qualityReport{n.Quality.Rating, n.Quality.Simulation, n.Quality.ReadAt}
+	}
+	for _, c := range n.FailuresByCode {
+		out.FailuresByCode = append(out.FailuresByCode, codeCount{c.Code, c.Count})
+	}
+	return out
+}
+
+type healthOutput struct {
+	Body struct {
+		Numbers []numberHealth `json:"numbers"`
+	}
+}
+type qualityInput struct {
+	Credentials
+	ConnectorID string `path:"connector_id"`
+}
+type qualityOutput struct{ Body qualityReport }

@@ -2236,8 +2236,19 @@ func TestFactory_SimulationMode(t *testing.T) {
 		t.Fatal("driver retornado difere do fake injetado")
 	}
 
-	// 3. In official mode without fake, DriverFor builds an official metacloud driver
-	officialFactory, err := NewDriverFactory(DriverFactoryConfig{Simulation: false})
+	// 3. Official mode has no default Graph version (D2-03): without an
+	// explicit version and documentation URL, DriverFor refuses.
+	unversioned, err := NewDriverFactory(DriverFactoryConfig{Simulation: false})
+	if err != nil {
+		t.Fatalf("falha ao criar factory oficial: %v", err)
+	}
+	if _, err := unversioned.DriverFor(context.Background(), uuid.New(), uuid.New(), mat); err == nil {
+		t.Fatal("driver oficial ativado sem versão da Graph")
+	}
+
+	// 4. With both explicit, DriverFor builds an official metacloud driver
+	// without dialing out.
+	officialFactory, err := NewDriverFactory(DriverFactoryConfig{Simulation: false, GraphVersion: "v99.0", PrimaryDocURL: "https://developers.facebook.com/docs/whatsapp/cloud-api/messages"})
 	if err != nil {
 		t.Fatalf("falha ao criar factory oficial: %v", err)
 	}

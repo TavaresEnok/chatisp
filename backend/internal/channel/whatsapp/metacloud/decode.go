@@ -72,6 +72,8 @@ type Item struct {
 	PricingModel    string
 	Billable        *bool
 
+	Limit NumberLimit
+
 	Preserved []byte
 	Reason    string
 }
@@ -122,6 +124,9 @@ func expandChange(appID, waba string, raw json.RawMessage, ingestedAt time.Time)
 	var change wireChange
 	if err := json.Unmarshal(raw, &change); err != nil {
 		return []Item{quarantine(appID, waba, "", ReasonInvalidJSON, clip(raw), ingestedAt, hashKey(ReasonInvalidJSON, raw, len(raw)))}
+	}
+	if change.Field == fieldNumberLimit {
+		return []Item{numberLimitItem(appID, waba, raw, ingestedAt)}
 	}
 	if change.Field != fieldMessages {
 		phone := strings.TrimSpace(change.Value.Metadata.PhoneNumberID)

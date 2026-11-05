@@ -171,6 +171,9 @@ type Link struct {
 	ExternalContractID string
 	ExternalProtocol   string
 	Selected           bool
+	// CustomerURL opens the customer in the provider's ERP screen. It is
+	// empty without a configured template or when the id looks like a CPF/CNPJ.
+	CustomerURL string
 }
 
 // DefaultCapabilities are the reads the fake enables before a test opts in.

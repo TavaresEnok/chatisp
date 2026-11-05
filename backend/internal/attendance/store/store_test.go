@@ -1088,6 +1088,9 @@ func TestAttemptStatusAndProtocolAdvanceCursor(t *testing.T) {
 	var version int64
 	if err := testStore.WithTenantTx(ctx, w.tenant, func(ctx context.Context, tx pgx.Tx) error {
 		row, err := lock(ctx, queries(tx), w.tenant, conversationID)
+		if err != nil {
+			return err
+		}
 		version = row.Version
 		page, err := (Repo{}).ReadEvents(ctx, tx, w.tenant, 0)
 		cursor = page.NextCursor

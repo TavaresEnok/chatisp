@@ -32,19 +32,19 @@ export function SettingsPage() {
   return (
     <AreaPage areaId="settings">
       <SettingsSections />
- {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <DistributionSettings key={principal.sessionId} principal={principal} />}
-      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <AutomationSettings key={principal.sessionId} principal={principal} />}
-      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <Preferences key={JSON.stringify(queryKeys.notificationPreferences(principal))} principal={principal} />}
+ {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <DistributionSettings key={`distribution:${principal.sessionId}`} principal={principal} />}
+      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <AutomationSettings key={`automation:${principal.sessionId}`} principal={principal} />}
+      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <Preferences key={`preferences:${JSON.stringify(queryKeys.notificationPreferences(principal))}`} principal={principal} />}
       {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <Link to="/configuracoes/canais">Caixas Meta</Link> : null}
-      {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <AuditLog key={principal.sessionId} principal={principal} /> : null}
-      {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <OpsAlerts key={principal.sessionId} sessionId={principal.sessionId} /> : null}
-      {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <IdentityEditor key={`${principal.tenantId}:${principal.sessionId}`} /> : null}
-      {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <RetentionPanel key={principal.membershipId} /> : null}
-      {canManageIntegrations(principal) ? <IntegrationsPanel key={principal.sessionId} principal={principal} /> : null}
-      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <Capacity key={principal.sessionId} principal={principal} />}
-      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <CannedSettings key={principal.membershipId} principal={principal} />}
-      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <HoursSettings key={principal.membershipId} principal={principal} />}
-      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <EmbedSettings key={principal.membershipId} principal={principal} />}
+      {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <AuditLog key={`audit:${principal.sessionId}`} principal={principal} /> : null}
+      {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <OpsAlerts key={`ops:${principal.sessionId}`} sessionId={principal.sessionId} /> : null}
+      {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <IdentityEditor key={`identity:${principal.tenantId}:${principal.sessionId}`} /> : null}
+      {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <RetentionPanel key={`retention:${principal.membershipId}`} /> : null}
+      {canManageIntegrations(principal) ? <IntegrationsPanel key={`integrations:${principal.sessionId}`} principal={principal} /> : null}
+      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <Capacity key={`capacity:${principal.sessionId}`} principal={principal} />}
+      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <CannedSettings key={`canned:${principal.membershipId}`} principal={principal} />}
+      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <HoursSettings key={`hours:${principal.membershipId}`} principal={principal} />}
+      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <EmbedSettings key={`embed:${principal.membershipId}`} principal={principal} />}
       {principal && !principal.mfaEnrollmentRequired ? (
         <p className="text-sm">
           <Link to="/mfa" className="font-medium underline-offset-4 hover:underline">

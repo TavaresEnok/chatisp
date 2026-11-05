@@ -34,6 +34,8 @@ func Register(api huma.API, deps Dependencies) {
 	huma.Register(api, configure, h.configure)
 	delete(api.OpenAPI().Paths[configure.Path].Post.RequestBody.Content, "application/octet-stream")
 	huma.Register(api, op("meta-channel-inspection", http.MethodGet, "/api/panel/channels/meta/inspection", "Inspecionar referências Meta", 200), h.inspect)
+	huma.Register(api, op("meta-channel-health", http.MethodGet, "/api/panel/channels/meta/health", "Saúde e limites dos números Meta", 200), h.health)
+	huma.Register(api, op("meta-channel-quality-read", http.MethodPost, "/api/panel/channels/meta/{connector_id}/quality", "Ler a nota de qualidade do número", 200), h.quality)
 	huma.Register(api, op("meta-channel-alert-ack", http.MethodPost, "/api/panel/channels/meta/alerts/{alert_id}/ack", "Reconhecer alerta Meta", 204), h.ack)
 }
 func (h *handler) authenticate(ctx context.Context, c Credentials, write bool) ([]byte, error) {
@@ -71,6 +73,12 @@ func problem(err error) error {
 		return huma.Error404NotFound("registro não encontrado")
 	case errors.Is(err, configuration.ErrConflict), errors.Is(err, configuration.ErrStaleVersion), errors.Is(err, configuration.ErrDegraded):
 		return huma.Error409Conflict("conflito de configuração")
+	case errors.Is(err, configuration.ErrQualityToken):
+		return huma.Error409Conflict("token do canal inválido; canal degradado")
+	case errors.Is(err, configuration.ErrQualityRefused):
+		return huma.Error409Conflict("leitura recusada pela Meta")
+	case errors.Is(err, configuration.ErrQualityUnavailable):
+		return huma.Error503ServiceUnavailable("leitura de qualidade indisponível neste ambiente")
 	case errors.Is(err, configuration.ErrInvalid):
 		return huma.Error422UnprocessableEntity("configuração inválida")
 	default:
@@ -149,4 +157,36 @@ func (h *handler) ack(ctx context.Context, in *ackInput) (*struct{}, error) {
 		return nil, problem(err)
 	}
 	return &struct{}{}, nil
+}
+
+func (h *handler) health(ctx context.Context, in *Credentials) (*healthOutput, error) {
+	hash, err := h.authenticate(ctx, *in, false)
+	if err != nil {
+		return nil, err
+	}
+	v, err := h.deps.Channels.Health(ctx, hash)
+	if err != nil {
+		return nil, problem(err)
+	}
+	out := &healthOutput{}
+	out.Body.Numbers = make([]numberHealth, 0, len(v))
+	for _, n := range v {
+		out.Body.Numbers = append(out.Body.Numbers, healthFrom(n))
+	}
+	return out, nil
+}
+func (h *handler) quality(ctx context.Context, in *qualityInput) (*qualityOutput, error) {
+	hash, err := h.authenticate(ctx, in.Credentials, true)
+	if err != nil {
+		return nil, err
+	}
+	id, err := uuid.Parse(in.ConnectorID)
+	if err != nil {
+		return nil, huma.Error422UnprocessableEntity("identificador inválido")
+	}
+	v, err := h.deps.Channels.CheckQuality(ctx, hash, id)
+	if err != nil {
+		return nil, problem(err)
+	}
+	return &qualityOutput{Body: qualityReport{v.Rating, v.Simulation, v.ReadAt}}, nil
 }

@@ -126,7 +126,6 @@ func Pick(ctx context.Context, tx pgx.Tx, tenant, sector, inbox uuid.UUID, now t
 		if err != nil {
 			return out, err
 		}
-		sawAssignable = true
 		if _, err = (store.Repo{}).ApplyAssignment(ctx, tx, tenant, head.ConversationID, snap.UserID, cand.Member, uuid.Nil, head.Version, "distributed", now); err != nil {
 			return out, err
 		}

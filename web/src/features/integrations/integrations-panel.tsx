@@ -27,6 +27,7 @@ import {
   webhookSubmitMessage,
 } from "@/features/integrations/rules";
 import type { PanelPrincipal } from "@/stores/session-store";
+import { CustomerLinkSettings } from "@/features/erp/customer-link-settings";
 
 export function IntegrationsPanel({ principal }: { principal: PanelPrincipal }) {
   if (!canManageIntegrations(principal)) {
@@ -52,7 +53,7 @@ function IntegrationsAdmin({ sessionId }: { sessionId: string }) {
       </header>
       <TokenSection sessionId={sessionId} />
       <WebhookSection sessionId={sessionId} />
-      <ErpConnector />
+      <ErpConnector sessionId={sessionId} />
       <EvolutionConnector />
     </section>
   );
@@ -334,7 +335,7 @@ function EvolutionConnector() {
   );
 }
 
-function ErpConnector() {
+function ErpConnector({ sessionId }: { sessionId: string }) {
   return (
     <section aria-label="Conector ERP" className="rounded-xl bg-card p-4 text-sm ring-1 ring-foreground/10">
       <h3 className="text-sm font-medium">Conector ERP</h3>
@@ -349,6 +350,7 @@ function ErpConnector() {
           <dd>desligado</dd>
         </div>
       </dl>
+      <CustomerLinkSettings scope={sessionId} />
     </section>
   );
 }

@@ -67,6 +67,7 @@ it("mostra o segredo do token uma vez e permite copiar", async () => {
     }
     if (path === "/api/panel/api-tokens") return json({ tokens });
     if (path === "/api/panel/outbound-webhooks") return json({ subscriptions: [] });
+    if (path === "/api/panel/erp/customer-link") return json({ url_template: "", version: 0, placeholder: "{cliente}" });
     return problem(404, "não encontrado");
   }));
   renderPanel();
@@ -119,6 +120,7 @@ it("revoga um token listado", async () => {
     }
     if (path === "/api/panel/api-tokens") return json({ tokens });
     if (path === "/api/panel/outbound-webhooks") return json({ subscriptions: [] });
+    if (path === "/api/panel/erp/customer-link") return json({ url_template: "", version: 0, placeholder: "{cliente}" });
     return problem(404, "não encontrado");
   }));
   const user = userEvent.setup();
@@ -172,6 +174,7 @@ it("cadastra, testa e desativa uma assinatura de webhook", async () => {
     if (path === "/api/panel/outbound-webhooks/hook-1/deliveries") return json({ deliveries });
     if (path === "/api/panel/outbound-webhooks") return json({ subscriptions });
     if (path === "/api/panel/api-tokens") return json({ tokens: [] });
+    if (path === "/api/panel/erp/customer-link") return json({ url_template: "", version: 0, placeholder: "{cliente}" });
     return problem(404, "não encontrado");
   }));
   const user = userEvent.setup();
@@ -202,6 +205,7 @@ it("mostra erro de URL recusada sem gravar a assinatura", async () => {
     }
     if (path === "/api/panel/outbound-webhooks") return json({ subscriptions: [] });
     if (path === "/api/panel/api-tokens") return json({ tokens: [] });
+    if (path === "/api/panel/erp/customer-link") return json({ url_template: "", version: 0, placeholder: "{cliente}" });
     return problem(404, "não encontrado");
   }));
   const user = userEvent.setup();

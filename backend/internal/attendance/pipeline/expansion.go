@@ -98,6 +98,22 @@ func (h *ingressHandler) ExpandIngress(ctx context.Context, deliveryID uuid.UUID
 		quarantineCount := 0
 
 		for _, item := range items {
+			if item.Kind == metacloud.ItemNumberLimit {
+				reason, err := routeNumberLimit(ctx, tx, deliveryID, item)
+				if err != nil {
+					return err
+				}
+				if reason != "" {
+					quarantineCount++
+					if h.logger != nil {
+						h.logger.Warn("alerta operacional: limite de número sem número único",
+							"delivery_id", deliveryID, "reason", reason)
+					}
+					continue
+				}
+				routedCount++
+				continue
+			}
 			if item.Kind == metacloud.ItemQuarantine {
 				if item.PhoneNumberID != "" {
 					route, qReason, err := h.resolveRoute(ctx, tx, item.AppID, item.WABAID, item.PhoneNumberID)

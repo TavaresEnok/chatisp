@@ -35,6 +35,75 @@ func Mount(r interface {
 	r.Method(http.MethodGet, base+"/invoices", http.HandlerFunc(h.invoices))
 	r.Method(http.MethodPost, base+"/second-copy", http.HandlerFunc(h.secondCopy))
 	r.Method(http.MethodPost, base+"/protocol", http.HandlerFunc(h.protocol))
+	r.Method(http.MethodGet, "/api/panel/erp/customer-link", http.HandlerFunc(h.getCustomerLink))
+	r.Method(http.MethodPut, "/api/panel/erp/customer-link", http.HandlerFunc(h.putCustomerLink))
+}
+
+type customerLinkJSON struct {
+	Template    string `json:"url_template"`
+	Version     int64  `json:"version"`
+	Placeholder string `json:"placeholder"`
+}
+
+type customerLinkBody struct {
+	Template string `json:"url_template"`
+	Version  int64  `json:"version"`
+}
+
+func (h handler) settingsActor(w http.ResponseWriter, r *http.Request, write bool) (Principal, bool) {
+	if h.deps.Auth == nil || h.deps.Panel == nil || h.deps.Panel.db == nil {
+		writeProblem(w, http.StatusServiceUnavailable, "serviço indisponível")
+		return Principal{}, false
+	}
+	if write && !originAllowed(h.deps.TrustedOrigins, r.Header.Get("Origin")) {
+		writeProblem(w, http.StatusForbidden, "origem não permitida")
+		return Principal{}, false
+	}
+	cookie, err := r.Cookie(auth.SessionCookieName)
+	raw := ""
+	if err == nil {
+		raw = cookie.Value
+	}
+	session, err := h.deps.Auth.Authenticate(r.Context(), raw, r.Header.Get(auth.CSRFHeader), write)
+	if err != nil {
+		writeAuth(w, err)
+		return Principal{}, false
+	}
+	if session.IsSuperadmin || session.EnrollmentOnly || session.TenantID == uuid.Nil || session.MembershipID == uuid.Nil || session.Role != "admin" {
+		writeProblem(w, http.StatusForbidden, "acesso negado")
+		return Principal{}, false
+	}
+	return Principal{TenantID: session.TenantID, UserID: session.UserID, Membership: session.MembershipID, Role: session.Role}, true
+}
+
+func (h handler) getCustomerLink(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.settingsActor(w, r, false)
+	if !ok {
+		return
+	}
+	out, err := h.deps.Panel.CustomerLink(r.Context(), actor)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, customerLinkJSON{Template: out.Template, Version: out.Version, Placeholder: CustomerPlaceholder})
+}
+
+func (h handler) putCustomerLink(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.settingsActor(w, r, true)
+	if !ok {
+		return
+	}
+	var body customerLinkBody
+	if !decode(w, r, &body) {
+		return
+	}
+	out, err := h.deps.Panel.SetCustomerLink(r.Context(), actor, body.Template, body.Version)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, customerLinkJSON{Template: out.Template, Version: out.Version, Placeholder: CustomerPlaceholder})
 }
 
 type handler struct{ deps Dependencies }
@@ -236,6 +305,10 @@ func writeErr(w http.ResponseWriter, err error) {
 		status, detail = http.StatusConflict, "janela ou consentimento recusou o envio"
 	case errors.Is(err, ErrPhoneNotSelector):
 		status, detail = http.StatusUnprocessableEntity, "telefone não escolhe o vínculo"
+	case errors.Is(err, ErrLinkCredential):
+		status, detail = http.StatusUnprocessableEntity, "o link não pode carregar credencial nem documento"
+	case errors.Is(err, ErrLinkTemplate):
+		status, detail = http.StatusUnprocessableEntity, "modelo de link inválido: use https e um único {cliente}"
 	case errors.Is(err, ErrReferenceRequired), errors.Is(err, ErrKeyRequired), errors.Is(err, ErrInvalid):
 		status, detail = http.StatusUnprocessableEntity, "comando inválido"
 	case errors.Is(err, ErrTimeout):
@@ -292,6 +365,7 @@ type linkJSON struct {
 	ExternalContractID string `json:"external_contract_id,omitempty"`
 	ExternalProtocol   string `json:"external_protocol,omitempty"`
 	Selected           bool   `json:"selected"`
+	CustomerURL        string `json:"customer_url,omitempty"`
 }
 
 type resultJSON struct {
@@ -339,6 +413,7 @@ func viewJSON(out Result) resultJSON {
 			ID: link.ID.String(), ContactID: link.ContactID.String(),
 			ConversationID: uuidText(link.ConversationID), ExternalCustomerID: link.ExternalCustomerID,
 			ExternalContractID: link.ExternalContractID, ExternalProtocol: link.ExternalProtocol, Selected: link.Selected,
+			CustomerURL: link.CustomerURL,
 		})
 	}
 	body.MessageID = uuidText(out.MessageID)

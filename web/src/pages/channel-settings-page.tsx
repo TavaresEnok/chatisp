@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router";
 import { configureChannel, getChannels, type ManualChannel } from "@/api/channels";
+import { NumberHealthPanel } from "@/features/channelhealth/number-health";
 import { useSessionStore } from "@/stores/session-store";
 
 const empty: ManualChannel = { inbox_name: "", display_number: "", app_id: "", app_secret: "", waba_id: "", phone_number_id: "", access_token: "" };
@@ -31,6 +32,7 @@ function ChannelSettings({ scope }: { scope: string[] }) {
       {query.data.boxes?.length ? <ul>{query.data.boxes.map((box) => <li key={box.inbox_id}>{box.name} — {box.display_number} — {box.status} {box.enabled ? "" : "(desativada)"}</li>)}</ul> : <p>Nenhuma caixa configurada.</p>}
       {query.data.alerts?.map((alert) => <p role="alert" key={alert.id}>Canal degradado: {alert.action} — {alert.result}</p>)}
     </>}
+    <NumberHealthPanel scope={scope} />
     <h2>Configuração manual</h2><form onSubmit={submit} className="grid max-w-lg gap-3">
       {fields.map(({ key: field, label, secret }) => <label key={field}>{label}<input className="block w-full rounded border p-2" required type={secret ? "password" : "text"} autoComplete="off" value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} /></label>)}
       {mutation.isError && <p role="alert">Não foi possível configurar a caixa.</p>}

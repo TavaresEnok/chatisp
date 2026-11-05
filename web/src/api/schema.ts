@@ -135,6 +135,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panel/channels/meta/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Saúde e limites dos números Meta */
+        get: operations["meta-channel-health"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panel/channels/meta/inspection": {
         parameters: {
             query?: never;
@@ -146,6 +163,23 @@ export interface paths {
         get: operations["meta-channel-inspection"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/channels/meta/{connector_id}/quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ler a nota de qualidade do número */
+        post: operations["meta-channel-quality-read"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1803,6 +1837,11 @@ export interface components {
             result: string;
             summary: string;
         };
+        CodeCount: {
+            code: string;
+            /** Format: int64 */
+            count: number;
+        };
         ConfirmMFAInputBody: {
             /** @description Código TOTP de seis dígitos. */
             code: string;
@@ -2014,6 +2053,9 @@ export interface components {
              */
             status: "ok";
         };
+        HealthOutputBody: {
+            numbers: components["schemas"]["NumberHealth"][] | null;
+        };
         HeartbeatInputBody: {
             tab_id: string;
         };
@@ -2134,6 +2176,14 @@ export interface components {
             request_id: string;
             /** Format: date-time */
             until: string;
+        };
+        LimitReport: {
+            current_limit: string;
+            event: string;
+            /** Format: int64 */
+            max_daily_conversations: number | null;
+            old_limit: string;
+            received_at: string;
         };
         LimitsBody: {
             /**
@@ -2287,6 +2337,26 @@ export interface components {
             tab_id: string;
             typing: boolean;
         };
+        NumberHealth: {
+            connector_id: string;
+            display_number: string;
+            enabled: boolean;
+            /** Format: int64 */
+            failed_sends: number;
+            failures_by_code: components["schemas"]["CodeCount"][] | null;
+            last_inbound_at: string;
+            limit: components["schemas"]["LimitReport"];
+            name: string;
+            open_credential_alert: boolean;
+            quality: components["schemas"]["QualityReport"];
+            /** Format: int64 */
+            quarantined_items: number;
+            status: string;
+            /** Format: int64 */
+            uncertain_sends: number;
+            /** Format: int64 */
+            window_days: number;
+        };
         OccupancyMember: {
             /** Format: int64 */
             capacity: number;
@@ -2418,6 +2488,11 @@ export interface components {
              * @example urn:chatisp:problem:not-found
              */
             type: string;
+        };
+        QualityReport: {
+            rating: string;
+            read_at: string;
+            simulation: boolean;
         };
         Quarantine: {
             created_at: string;
@@ -4163,6 +4238,94 @@ export interface operations {
             };
         };
     };
+    "meta-channel-health": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path?: never;
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthOutputBody"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     "meta-channel-inspection": {
         parameters: {
             query?: never;
@@ -4184,6 +4347,96 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InspectionOutputBody"];
+                };
+            };
+            /** @description Não autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Acesso negado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Recurso não encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflito */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dados inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erro interno */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Serviço indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    "meta-channel-quality-read": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string;
+                Origin?: string;
+            };
+            path: {
+                connector_id: string;
+            };
+            cookie?: {
+                "__Host-session"?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityReport"];
                 };
             };
             /** @description Não autenticado */

@@ -299,12 +299,6 @@ func principal(w world) attendanceService.Principal {
 	}
 }
 
-func randomString() string {
-	b := make([]byte, 8)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
-}
-
 func ensureJobsRole(ctx context.Context, adminURL, password string) error {
 	conn, err := pgx.Connect(ctx, adminURL)
 	if err != nil {

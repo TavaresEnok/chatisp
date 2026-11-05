@@ -75,9 +75,6 @@ func (s *Service) Convert(ctx context.Context, p auth.Principal, inbox, conv, id
 		return nil
 	})
 	if missing || errors.Is(e, ErrFFmpegMissing) {
-		if e == nil {
-			e = ErrFFmpegMissing
-		}
 		if out.ID != uuid.Nil {
 			out.ConversionState = "refused"
 			out.ConversionError = FFmpegMissingDetail

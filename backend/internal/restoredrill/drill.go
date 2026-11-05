@@ -253,7 +253,6 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	if err := expectRestored(ctx, destConn, restoredObjects, ring, version, metas, secrets); err != nil {
 		return Report{}, err
 	}
-	ring = nil
 
 	present, err := reapply(ctx, destConn, ledger, restoredObjects)
 	if err != nil {

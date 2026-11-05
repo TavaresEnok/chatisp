@@ -137,9 +137,14 @@ func (p *Panel) ListLinks(ctx context.Context, actor Principal, conversation uui
 		if err != nil {
 			return Result{}, err
 		}
+		settings, err := loadCustomerTemplate(ctx, tx, actor.TenantID)
+		if err != nil {
+			return Result{}, err
+		}
 		out := make([]Link, 0, len(links))
 		for _, link := range links {
 			if link.ConversationID == row.ID || link.ConversationID == uuid.Nil {
+				link.CustomerURL = CustomerURL(settings.Template, link.ExternalCustomerID)
 				out = append(out, link)
 			}
 		}

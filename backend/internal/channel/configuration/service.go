@@ -23,6 +23,7 @@ type Service struct {
 	ring    *crypto.Ring
 	now     func() time.Time
 	log     *slog.Logger
+	quality QualityReader
 }
 
 // Server resolves registry data for ingress and dispatch.
@@ -46,6 +47,14 @@ func New(store *db.Store, ingress *pgxpool.Pool, ring *crypto.Ring) (*Service, e
 func (s *Service) SetLogger(log *slog.Logger) {
 	if s != nil {
 		s.log = log
+	}
+}
+
+// SetQualityReader attaches the quality_rating reader. Nil keeps the admin
+// read at 503: no process reads Graph unless it was configured to.
+func (s *Service) SetQualityReader(r QualityReader) {
+	if s != nil {
+		s.quality = r
 	}
 }
 
@@ -113,7 +122,7 @@ func mapWriteErr(err error) error {
 	if errors.Is(err, store.ErrTenantContextRequired) || errors.Is(err, store.ErrIngressContextRequired) {
 		return ErrUnauthenticated
 	}
-	if errors.Is(err, ErrConflict) || errors.Is(err, ErrForbidden) || errors.Is(err, ErrSecret) || errors.Is(err, ErrStaleVersion) || errors.Is(err, ErrDegraded) {
+	if errors.Is(err, ErrConflict) || errors.Is(err, ErrForbidden) || errors.Is(err, ErrSecret) || errors.Is(err, ErrStaleVersion) || errors.Is(err, ErrDegraded) || errors.Is(err, ErrQualityUnavailable) {
 		return err
 	}
 	var pgErr *pgconn.PgError

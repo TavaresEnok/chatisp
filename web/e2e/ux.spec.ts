@@ -32,6 +32,9 @@ function fakeNotification(initial: string, answer: string, mode: "ok" | "reject"
   window.Notification = N;`;
 }
 
+// React key warnings are real defects: siblings may be dropped or duplicated.
+const reactKeyDefects: string[] = [];
+
 async function openPanel(browser: Browser, actor: Actor, opts: { init?: string; permissions?: string[]; viewport?: { width: number; height: number }; path?: string } = {}): Promise<Panel> {
   const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: opts.viewport ?? { width: 1280, height: 800 } });
   await context.addCookies([{ name: "__Host-session", value: actor.Token, url: ORIGIN, secure: true, httpOnly: true, sameSite: "Strict" }]);
@@ -42,9 +45,50 @@ async function openPanel(browser: Browser, actor: Actor, opts: { init?: string; 
   page.setDefaultNavigationTimeout(60_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error" && /same key|unique "key"/.test(message.text())) {
+      const where = new URL(page.url()).pathname;
+      void Promise.all(message.args().map((arg) => arg.jsonValue().catch(() => ""))).then((args) => {
+        const stack = args.map(String).filter((value) => /\n\s+at /.test(value)).join(" ").split("\n").map((line) => line.trim().split(" ")[1]).filter(Boolean).slice(0, 4).join(" < ");
+        const id = String(args[1] ?? "");
+        return page.waitForTimeout(300).then(() => page.evaluate((key) => [...document.querySelectorAll("*")]
+          .filter((el) => el.getAttribute("value") === key || (el.children.length === 0 && (el.textContent ?? "").includes(key)))
+          .map((el) => `${el.tagName.toLowerCase()} em ${el.closest("section")?.getAttribute("aria-label") ?? el.closest("section")?.querySelector("h2")?.textContent ?? "?"}`)
+          .slice(0, 3).join(", "), id).catch(() => "")).then((dom) => {
+          reactKeyDefects.push(`${where}: chave ${id} em ${stack || dom || "componente desconhecido"}`);
+        });
+      });
+    }
+  });
   await page.goto(`${ORIGIN}/entrar`, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await go(page, actor.CSRF, opts.path ?? "/conversas", true);
   return { page, context, errors };
+}
+
+
+// Walks the React fiber tree and names the parent of siblings sharing a key.
+async function duplicateKeys(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const root = document.getElementById("root");
+    const containerKey = root ? Object.keys(root).find((key) => key.startsWith("__reactContainer$")) : undefined;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const start: any = containerKey && root ? (root as any)[containerKey] : null;
+    const out: string[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const name = (fiber: any): string => { let f = fiber; while (f) { const t = f.type; if (typeof t === "function" && (t.displayName || t.name)) return t.displayName || t.name; f = f.return; } return "?"; };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const walk = (fiber: any, depth: number) => {
+      if (!fiber || depth > 400) return;
+      const seen = new Map<string, number>();
+      let child = fiber.child;
+      while (child) { if (child.key != null) seen.set(child.key, (seen.get(child.key) ?? 0) + 1); child = child.sibling; }
+      for (const [key, count] of seen) if (count > 1) out.push(`${name(fiber)} (${typeof fiber.type === "string" ? fiber.type : "componente"}) repete ${key} ${count}x`);
+      child = fiber.child;
+      while (child) { walk(child, depth + 1); child = child.sibling; }
+    };
+    walk(start, 0);
+    return out;
+  });
 }
 
 async function go(page: Page, csrf: string, path: string, remember = false) {
@@ -262,7 +306,8 @@ export async function runUx(browser: Browser, testInfo: { attach(name: string, o
   } finally { await throwing.context.close(); }
 
   // ---------- 2. Acessibilidade e responsividade ----------
-  const viewports = [{ name: "desktop 1280x800", width: 1280, height: 800 }, { name: "tablet 768x1024", width: 768, height: 1024 }, { name: "celular 360x640", width: 360, height: 640 }];
+  // 320x256 CSS px is the WCAG 1.4.10 reflow target (1280 px at 400% zoom).
+  const viewports = [{ name: "desktop 1280x800", width: 1280, height: 800 }, { name: "tablet 768x1024", width: 768, height: 1024 }, { name: "celular 360x640", width: 360, height: 640 }, { name: "reflow 320x256 (zoom 400%)", width: 320, height: 256 }];
   const audit: Record<string, unknown>[] = [];
   for (const vp of viewports) {
     const agentPanel = await openPanel(browser, agentActor, { viewport: vp });
@@ -280,9 +325,11 @@ export async function runUx(browser: Browser, testInfo: { attach(name: string, o
         { label: "relatórios", page: adminPanel.page, csrf: admin.CSRF, path: "/relatorios" },
         { label: "painel", page: adminPanel.page, csrf: admin.CSRF, path: "/painel" },
         { label: "canais", page: adminPanel.page, csrf: admin.CSRF, path: "/configuracoes/canais" },
+        { label: "usuários do provedor", page: adminPanel.page, csrf: admin.CSRF, path: "/configuracoes/usuarios" },
       ];
       for (const stop of stops) {
         if (stop.path) { await go(stop.page, stop.csrf, stop.path); await stop.page.waitForTimeout(900); }
+        for (const dup of await duplicateKeys(stop.page)) failures.push(`${vp.name} / ${stop.label}: ${dup}`);
         const violations = await runAxe(stop.page, WCAG);
         const over = await overflow(stop.page);
         const keys = await keyboardWalk(stop.page);
@@ -295,23 +342,38 @@ export async function runUx(browser: Browser, testInfo: { attach(name: string, o
       }
     } finally { await agentPanel.context.close(); await adminPanel.context.close(); }
   }
-  // Tela de entrada sem sessão.
+  // Telas sem sessão: entrada, recuperação de senha, convite e MFA.
+  const publicPages = [
+    { label: "entrar", path: "/entrar", heading: "Entrar" },
+    { label: "recuperar senha", path: "/recuperar-senha", heading: "Recuperar senha" },
+    { label: "confirmar nova senha", path: "/recuperar-senha/confirmar?token=sintetico-invalido", heading: "Confirmar nova senha" },
+    { label: "aceitar convite", path: "/convite?token=sintetico-invalido", heading: "Aceitar convite" },
+    { label: "mfa", path: "/mfa", heading: "" },
+  ];
   for (const vp of viewports) {
     const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: vp.width, height: vp.height } });
     const page = await context.newPage();
     try {
-      await page.goto(`${ORIGIN}/entrar`, { waitUntil: "domcontentloaded", timeout: 60_000 });
-      await expect(page.getByRole("heading", { name: "Entrar", level: 1 })).toBeVisible();
-      const violations = await runAxe(page, WCAG);
-      const over = await overflow(page);
-      const keys = await keyboardWalk(page, 12);
-      audit.push({ viewport: vp.name, page: "entrar", violations, overflowPx: over.page, wide: over.wide, tabStops: keys.reached, focusProblems: keys.problems });
-      if (violations.length) failures.push(`${vp.name} / entrar: axe ${violations.map((v) => `${v.id}(${v.nodes}) ${v.targets[0] ?? ""}`).join("; ")}`);
-      if (over.page > 0 || over.wide.length) failures.push(`${vp.name} / entrar: overflow ${over.page}px`);
-      if (keys.problems.length) failures.push(`${vp.name} / entrar: teclado ${keys.problems.join("; ")}`);
+      for (const pub of publicPages) {
+        await page.goto(`${ORIGIN}${pub.path}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+        const h1 = page.getByRole("heading", { level: 1 });
+        if (pub.heading) await expect(page.getByRole("heading", { name: pub.heading, level: 1 })).toBeVisible();
+        else await expect(h1.first()).toBeVisible();
+        await page.waitForTimeout(400);
+        const shown = (await h1.first().textContent())?.trim() ?? "";
+        const violations = await runAxe(page, WCAG);
+        const over = await overflow(page);
+        const keys = await keyboardWalk(page, 12);
+        audit.push({ viewport: vp.name, page: pub.label, heading: shown, url: new URL(page.url()).pathname, violations, overflowPx: over.page, wide: over.wide, tabStops: keys.reached, focusProblems: keys.problems });
+        if (violations.length) failures.push(`${vp.name} / ${pub.label}: axe ${violations.map((v) => `${v.id}(${v.nodes}) ${v.targets[0] ?? ""}`).join("; ")}`);
+        if (over.page > 0 || over.wide.length) failures.push(`${vp.name} / ${pub.label}: overflow ${over.page}px ${over.wide.join(", ")}`);
+        if (keys.problems.length) failures.push(`${vp.name} / ${pub.label}: teclado ${keys.problems.join("; ")}`);
+        if (keys.reached < 1) failures.push(`${vp.name} / ${pub.label}: nenhuma parada de Tab`);
+      }
     } finally { await context.close(); }
   }
   evidence.audit = audit;
+  for (const defect of [...new Set(reactKeyDefects)]) failures.push(`chave React duplicada em ${defect}`);
   await testInfo.attach("ux-audit", { body: JSON.stringify(evidence, null, 2), contentType: "application/json" });
   console.log(JSON.stringify({ auditedViews: audit.length, failures: failures.length }));
   if (failures.length) {

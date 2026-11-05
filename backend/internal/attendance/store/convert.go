@@ -76,10 +76,6 @@ func uuidPtr(id uuid.UUID) *uuid.UUID {
 	return &id
 }
 
-func strPtr(value string) *string {
-	return &value
-}
-
 func uuidVal(id *uuid.UUID) uuid.UUID {
 	if id == nil {
 		return uuid.Nil

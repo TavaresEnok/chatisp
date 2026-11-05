@@ -34,7 +34,7 @@ O cliente HTTP não segue redirecionamento (`ErrUseLastResponse`) e não usa pro
 
 O contexto do envio deve ter prazo. Se não tiver, o cliente aplica um teto de 30 segundos (`maxRequestTimeout`) e não fica bloqueado na leitura. Esse teto, depois que o pedido foi escrito, continua sendo resultado `uncertain`. Um prazo mais curto no contexto vence o teto.
 
-`v23.0` aparece nos testes somente como valor explícito do caminho local. Não é a versão ativada do produto.
+`v23.0` aparece nos testes e no servidor simulado (`simulationGraphVersion` em `pipeline/factory.go`) somente como valor explícito do caminho local. Não é a versão ativada do produto: o modo oficial do `DriverFactory` recebe `GraphVersion` e `PrimaryDocURL` da configuração, sem padrão, e falha sem eles (até 05/11/2026 fixava `v23.0`).
 
 ## Envio de texto
 

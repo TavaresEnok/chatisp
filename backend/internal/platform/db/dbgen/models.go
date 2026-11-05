@@ -24,6 +24,30 @@ type AnnotationTag struct {
 	Name     string
 }
 
+type ApiTemplateRequest struct {
+	TenantID        uuid.UUID
+	TokenID         uuid.UUID
+	ClientRequestID string
+	ConversationID  uuid.UUID
+	PayloadHash     []byte
+	MembershipID    uuid.UUID
+	MessageID       *uuid.UUID
+	AttemptID       *uuid.UUID
+	JobID           *int64
+	CreatedAt       pgtype.Timestamptz
+	CompletedAt     pgtype.Timestamptz
+}
+
+type ApiToken struct {
+	ID           uuid.UUID
+	TenantID     uuid.UUID
+	SecretHash   []byte
+	Scopes       []string
+	RequestLimit int32
+	RevokedAt    pgtype.Timestamptz
+	CreatedAt    pgtype.Timestamptz
+}
+
 type AssignmentCapacity struct {
 	TenantID     uuid.UUID
 	MembershipID uuid.UUID
@@ -244,6 +268,8 @@ type Contact struct {
 	CreatedByMembershipID *uuid.UUID
 	BlockReason           string
 	AvatarReference       *string
+	ExternalRef           *string
+	PrivacyErasedAt       pgtype.Timestamptz
 }
 
 type ContactChannelIdentity struct {
@@ -468,17 +494,31 @@ type DistributionSetting struct {
 }
 
 type ErpAction struct {
-	TenantID       uuid.UUID
-	ID             uuid.UUID
-	ConnectionID   uuid.UUID
-	ConversationID *uuid.UUID
-	Capability     string
-	LocalKey       string
-	RequestHash    []byte
-	Effect         string
-	Outcome        string
-	ExternalRef    *string
-	CreatedAt      pgtype.Timestamptz
+	TenantID        uuid.UUID
+	ID              uuid.UUID
+	ConnectionID    uuid.UUID
+	ConversationID  *uuid.UUID
+	Capability      string
+	LocalKey        string
+	RequestHash     []byte
+	Effect          string
+	Outcome         string
+	ExternalRef     *string
+	CreatedAt       pgtype.Timestamptz
+	Reason          *string
+	Result          []byte
+	ClientRequestID *string
+	OutboxOperation *string
+	PrincipalID     *uuid.UUID
+	MessageID       *uuid.UUID
+	AttemptID       *uuid.UUID
+}
+
+type ErpCapabilityGrant struct {
+	TenantID     uuid.UUID
+	MembershipID uuid.UUID
+	Capability   string
+	CreatedAt    pgtype.Timestamptz
 }
 
 type ErpConnection struct {
@@ -491,6 +531,13 @@ type ErpConnection struct {
 	SectorID     *uuid.UUID
 	Capabilities []string
 	CreatedAt    pgtype.Timestamptz
+}
+
+type ErpCustomerLinkSetting struct {
+	TenantID    uuid.UUID
+	UrlTemplate string
+	Version     int64
+	UpdatedAt   pgtype.Timestamptz
 }
 
 type ErpLink struct {
@@ -662,6 +709,21 @@ type Message struct {
 	ReplyToMessageID   *uuid.UUID
 }
 
+type MessageReaction struct {
+	TenantID           uuid.UUID
+	ID                 uuid.UUID
+	ConnectorID        uuid.UUID
+	ConversationID     *uuid.UUID
+	TargetMessageID    *uuid.UUID
+	ExternalReactionID string
+	TargetExternalID   string
+	Emoji              string
+	ActorExternalID    string
+	OriginAt           pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
 type MessageStatusEvent struct {
 	TenantID          uuid.UUID
 	ID                uuid.UUID
@@ -713,6 +775,21 @@ type MetaAppSecret struct {
 	KeyVersion string
 	Ciphertext []byte
 	Aad        string
+}
+
+type MetaNumberHealth struct {
+	TenantID      uuid.UUID
+	ID            uuid.UUID
+	PhoneID       uuid.UUID
+	Kind          string
+	DedupKey      string
+	Event         *string
+	CurrentLimit  *string
+	OldLimit      *string
+	MaxDaily      *int64
+	QualityRating *string
+	Simulation    bool
+	ReceivedAt    pgtype.Timestamptz
 }
 
 type MetaPhoneNumber struct {
@@ -787,6 +864,13 @@ type OutboundAttempt struct {
 	PreviousAttemptID *uuid.UUID
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
+}
+
+type OutboundJobLink struct {
+	TenantID  uuid.UUID
+	AttemptID uuid.UUID
+	JobID     int64
+	CreatedAt pgtype.Timestamptz
 }
 
 type PlatformAuditLog struct {
@@ -963,6 +1047,16 @@ type TenantJobSlot struct {
 	MaxSlots  int32
 }
 
+type TenantProviderLogo struct {
+	TenantID    uuid.UUID
+	ContentType string
+	Image       []byte
+	Width       int32
+	Height      int32
+	ByteSize    int32
+	UpdatedAt   pgtype.Timestamptz
+}
+
 type TenantRetentionProfile struct {
 	TenantID       uuid.UUID
 	DisplayName    *string
@@ -1063,6 +1157,18 @@ type WebhookDelivery struct {
 	LastStatus     *int32
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+	ClaimToken     *uuid.UUID
+	ClaimedAt      pgtype.Timestamptz
+}
+
+type WebhookEventSource struct {
+	TenantID       uuid.UUID
+	EventType      string
+	SourceID       uuid.UUID
+	ConversationID uuid.UUID
+	OccurredAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	EnqueuedAt     pgtype.Timestamptz
 }
 
 type WebhookItem struct {

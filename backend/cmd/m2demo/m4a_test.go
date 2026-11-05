@@ -26,7 +26,9 @@ func TestM4AFixtureWiring(t *testing.T) {
 		defer l.Close()
 	}
 	ready, done := make(chan demoInfo, 1), make(chan error, 1)
-	go func() { done <- runDemoMode(ctx, listeners[0], listeners[1], listeners[2], ready, true, true, false, false) }()
+	go func() {
+		done <- runDemoMode(ctx, listeners[0], listeners[1], listeners[2], ready, true, true, false, false)
+	}()
 	defer func() {
 		cancel()
 		if err := <-done; err != nil {

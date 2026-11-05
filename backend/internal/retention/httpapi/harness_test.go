@@ -145,20 +145,3 @@ func seedTenant(t *testing.T) seeded {
 	}
 	return s
 }
-
-func setLimits(t *testing.T, tenant uuid.UUID, limits string) {
-	t.Helper()
-	ctx := context.Background()
-	conn, err := pgx.Connect(ctx, testEnv.AdminURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close(ctx)
-	tag, err := conn.Exec(ctx, `UPDATE tenants SET limits = $2::jsonb WHERE id = $1`, tenant, limits)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tag.RowsAffected() != 1 {
-		t.Fatalf("limites: %d", tag.RowsAffected())
-	}
-}

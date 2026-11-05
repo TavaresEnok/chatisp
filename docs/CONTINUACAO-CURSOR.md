@@ -214,3 +214,18 @@ Pedido: fechar o que ainda era executável localmente. Evidências em `docs/medi
 - **Reclassificadas**: 12-retencao e 14-retencao passaram a "aguardando homologação externa" (o plano já define expurgo desligado até D2-06; recusa e classes implementadas e testadas).
 
 Matriz: 204 verificados, 44 aguardando homologação externa, 6 parciais (12-https, 13-self-host, 13-compose por causa do Docker do host; 08-aprovacao e 08-verificacao-cliente pelo ERP; 14-carga pelo perfil D2-07), 3 não implementados (02-saude-numero, 02-limites-numero, 08-abrir-cadastro).
+
+## Revisão geral e fechamento do código local (05/11/2026, depois de `e0ba6cd`)
+
+Releitura de especificação, plano, matriz e documentos de entrega. Feito nesta rodada:
+
+- **02-saude-numero e 02-limites-numero**: webhook `phone_number_quality_update` decodificado e ligado ao número por App + WABA + dígitos do número exibido, só com correspondência única (sem palpite; o resto vai para quarentena); leitura sob demanda de `quality_rating`; painel "Saúde e limites dos números" em Caixas Meta com erros essenciais de 7 dias. Migração `00049`. Detalhes em `docs/integracoes/meta.md`.
+- **08-abrir-cadastro**: modelo de link HTTPS com `{cliente}` configurado pelo admin, sem credencial nem CPF/CNPJ, mostrado em cada vínculo do ERP. Migração `00050`. Detalhes em `docs/integracoes/erp-existente.md`.
+- **Defeito corrigido**: o modo oficial do `DriverFactory` fixava a versão `v23.0` da Graph, contrariando a D2-03 em aberto. Agora a versão e a URL de documentação são obrigatórias e sem padrão.
+- **Defeito corrigido**: dez seções de Configurações tinham a mesma chave React; agora cada uma tem a sua. A auditoria de UX passou a falhar com chave repetida.
+- **Acessibilidade**: auditoria ampliada para 52 visões (MFA, convite, recuperação de senha, usuários do provedor, reflow 320×256); o seletor "Caixa" estourava 5 px a 320 px e foi corrigido.
+- **Gate de qualidade da especificação** (`scripts/lint.sh`), que nunca tinha passado: 13 achados do golangci-lint corrigidos (atribuições sem efeito, funções sem uso e um erro ignorado em teste); `gofmt` em dois testes; `govulncheck` achou GO-2026-5764 (pânico no EventStream do AWS SDK, alcançável pelo armazenamento S3), corrigido subindo `service/s3` para v1.97.3 e `eventstream` para v1.7.8 (vendor refeito); modelos do sqlc desatualizados regenerados. Resta GO-2026-5932 (`x/crypto/openpgp`), não alcançável pelo código, com correção só em pseudo-versão.
+
+Validação no tree final: `go vet` e `go test -count=1 ./...` (65 pacotes ok); `scripts/lint.sh` (golangci-lint 0, govulncheck 0 alcançável, ESLint, tsc, OpenAPI e sqlc em dia); Vitest 60 arquivos e 288 testes; E2E `m3b`, `m4a`, `m4b-m6`, `m7-ops` e `ux` (52 visões, 0 achados); `scripts/dev.test.sh`; `scripts/ops-security-check.sh`.
+
+Matriz: 204 verificados, 47 implementados aguardando homologação externa, 6 parciais, 0 não implementados. Os 6 parciais dependem de fora: 12-https, 13-self-host e 13-compose do Docker do host (20.10.9 sem `docker0`; `scripts/compose-validate.sh` pronto), 08-aprovacao e 08-verificacao-cliente do ERP (D2-01/D2-02) e 14-carga do perfil do piloto (D2-07).

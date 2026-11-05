@@ -20,6 +20,7 @@ export type ErpLink = {
   external_contract_id?: string;
   external_protocol?: string;
   selected: boolean;
+  customer_url?: string;
 };
 
 export type ErpResult = {
@@ -61,7 +62,7 @@ export type ErpSecondCopyInput = {
 };
 
 async function panelJSON<T>(
-  method: "GET" | "POST" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
   body?: unknown,
   signal?: AbortSignal,
@@ -129,4 +130,18 @@ export function erpSecondCopy(conversationId: string, input: ErpSecondCopyInput)
 
 export function erpProtocol(conversationId: string, externalProtocol: string): Promise<ErpResult> {
   return panelJSON("POST", conversationPath(conversationId, "protocol"), { external_protocol: externalProtocol });
+}
+
+export type ErpCustomerLink = {
+  url_template: string;
+  version: number;
+  placeholder: string;
+};
+
+export function getErpCustomerLink(signal?: AbortSignal): Promise<ErpCustomerLink> {
+  return panelJSON("GET", "/api/panel/erp/customer-link", undefined, signal);
+}
+
+export function saveErpCustomerLink(urlTemplate: string, version: number): Promise<ErpCustomerLink> {
+  return panelJSON("PUT", "/api/panel/erp/customer-link", { url_template: urlTemplate, version });
 }

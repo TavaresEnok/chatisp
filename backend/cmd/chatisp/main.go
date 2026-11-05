@@ -342,6 +342,17 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 			return runtimeServices{}, errors.New("falha ao preparar configuração de canais")
 		}
 		channelSvc.SetLogger(log)
+		// The quality_rating read exists only where Graph may be read. Official
+		// dispatch is still refused at startup (D2-03), so only the local
+		// stand-in gets a reader; elsewhere the admin read answers 503.
+		if cfg.MetaSimulation && cfg.MetaStandInURL != "" {
+			reader, err := pipeline.NewQualityReader(pipeline.DriverFactoryConfig{Simulation: true, StandInURL: cfg.MetaStandInURL})
+			if err != nil {
+				cleanupAll()
+				return runtimeServices{}, errors.New("falha ao preparar leitura de qualidade")
+			}
+			channelSvc.SetQualityReader(reader)
+		}
 	}
 
 	var realtimeHandler http.Handler

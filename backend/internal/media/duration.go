@@ -241,7 +241,6 @@ func walkEBML(b []byte, inInfo bool) (scale uint64, duration float64, ok bool) {
 					n = n<<8 | uint64(by)
 				}
 				scale = n
-				ok = true
 			}
 		case ebmlDuration:
 			if inInfo && (len(body) == 4 || len(body) == 8) {
@@ -250,7 +249,6 @@ func walkEBML(b []byte, inInfo bool) (scale uint64, duration float64, ok bool) {
 				} else {
 					duration = math.Float64frombits(binary.BigEndian.Uint64(body))
 				}
-				ok = duration > 0
 			}
 		}
 		if duration > 0 && scale > 0 {

@@ -334,6 +334,11 @@ export function ErpPanel({ principal, conversationId, localProtocol }: Props) {
             {(links.data?.links ?? []).map((item) => (
               <li key={item.id} className="flex flex-col gap-1 text-sm">
                 <span>{item.external_customer_id}{item.external_contract_id ? ` · ${item.external_contract_id}` : ""}</span>
+                {item.customer_url ? (
+                  <a href={item.customer_url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" className="underline underline-offset-4">
+                    Abrir cadastro no ERP ({item.external_customer_id})
+                  </a>
+                ) : null}
                 {item.selected ? <span>Selecionado</span> : (
                   <button type="button" disabled={busy} onClick={() => { clearInvoiceView(); selectLink.mutate(item); }}>Selecionar vínculo {item.external_customer_id}</button>
                 )}

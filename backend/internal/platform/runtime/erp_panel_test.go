@@ -208,6 +208,33 @@ func TestPanelERPRoutes(t *testing.T) {
 	if len(rawLinks) != 2 {
 		t.Fatalf("vínculos: %+v", links)
 	}
+	for _, raw := range rawLinks {
+		if row, _ := raw.(map[string]any); row["customer_url"] != nil {
+			t.Fatalf("link do cadastro sem modelo: %+v", row)
+		}
+	}
+	// 08-abrir-cadastro: only an admin configures the template; agents read the link.
+	call(http.MethodGet, "/api/panel/erp/customer-link", "", allowedSession, http.StatusForbidden)
+	call(http.MethodPut, "/api/panel/erp/customer-link", `{"url_template":"https://erp.provedor.example/clientes/{cliente}","version":0}`, allowedSession, http.StatusForbidden)
+	if err := store.WithTenantTx(ctx, tenant, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO erp_customer_link_settings(tenant_id,url_template) VALUES($1,'https://erp.provedor.example/clientes/{cliente}')`, tenant)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	withURL := call(http.MethodGet, base+"/links", "", allowedSession, http.StatusOK)
+	urlRows, _ := withURL["links"].([]any)
+	seenURL := map[string]any{}
+	for _, raw := range urlRows {
+		row, _ := raw.(map[string]any)
+		seenURL[row["external_customer_id"].(string)] = row["customer_url"]
+	}
+	if seenURL["fake-customer-casa"] != "https://erp.provedor.example/clientes/fake-customer-casa" || seenURL["fake-customer-comercio"] != "https://erp.provedor.example/clientes/fake-customer-comercio" {
+		t.Fatalf("link do cadastro: %+v", seenURL)
+	}
+	if otherRows := call(http.MethodGet, base+"/links", "", foreignSession, http.StatusNotFound); otherRows["links"] != nil {
+		t.Fatalf("outro tenant: %+v", otherRows)
+	}
 	summary := call(http.MethodGet, base+"/summary", "", allowedSession, http.StatusOK)
 	summaryCustomer, _ := summary["customer"].(map[string]any)
 	if summaryCustomer["external_id"] != "fake-customer-casa" || summaryCustomer["display_name"] == "" || summary["consulted_at"] == nil {

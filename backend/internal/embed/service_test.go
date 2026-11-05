@@ -9,8 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-func strPtr(s string) *string { return &s }
-
 func admin() Principal {
 	return Principal{TenantID: uuid.New(), UserID: uuid.New(), MembershipID: uuid.New(), Role: "admin"}
 }

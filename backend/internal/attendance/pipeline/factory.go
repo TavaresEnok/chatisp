@@ -21,7 +21,16 @@ type DriverFactoryConfig struct {
 	Simulation bool
 	StandInURL string
 	FakeDriver whatsapp.TextDriver
+	// GraphVersion and PrimaryDocURL are required in official mode and are
+	// never defaulted: the version is the open decision D2-03. The local
+	// stand-in keeps its own fixed path value (simulationGraphVersion).
+	GraphVersion  string
+	PrimaryDocURL string
 }
+
+// simulationGraphVersion is only the path segment the local stand-in serves.
+// It is not the product's Graph version.
+const simulationGraphVersion = "v23.0"
 
 type driverFactory struct {
 	cfg DriverFactoryConfig
@@ -45,7 +54,7 @@ func (f *driverFactory) DriverFor(_ context.Context, _, _ uuid.UUID, material co
 		if f.cfg.StandInURL != "" {
 			return metacloud.Activate(metacloud.Config{
 				Mode:          metacloud.ModeSimulation,
-				GraphVersion:  "v23.0",
+				GraphVersion:  simulationGraphVersion,
 				BaseURL:       f.cfg.StandInURL,
 				PhoneNumberID: material.PhoneNumberID,
 				AccessToken:   material.AccessToken,
@@ -56,10 +65,10 @@ func (f *driverFactory) DriverFor(_ context.Context, _, _ uuid.UUID, material co
 
 	return metacloud.Activate(metacloud.Config{
 		Mode:          metacloud.ModeOfficial,
-		GraphVersion:  "v23.0",
+		GraphVersion:  f.cfg.GraphVersion,
 		PhoneNumberID: material.PhoneNumberID,
 		AccessToken:   material.AccessToken,
-		PrimaryDocURL: "https://developers.facebook.com/docs/whatsapp/cloud-api/messages",
+		PrimaryDocURL: f.cfg.PrimaryDocURL,
 	})
 }
 
@@ -79,6 +88,8 @@ type WorkersConfig struct {
 	MediaFetcher       whatsapp.MediaFetcher
 	OfficialMedia      bool
 	Simulation         bool
+	// GraphVersion is required for OfficialMedia and is never defaulted.
+	GraphVersion string
 }
 
 // NewWorkers builds the jobs.Handlers containing Ingress, Inbound, Outbound and Lease handlers.
@@ -130,7 +141,7 @@ func selectMediaFetcher(cfg WorkersConfig) (whatsapp.MediaFetcher, error) {
 		return cfg.MediaFetcher, nil
 	}
 	if cfg.OfficialMedia {
-		return metacloud.OfficialMediaFetcher(false, "v23.0")
+		return metacloud.OfficialMediaFetcher(false, cfg.GraphVersion)
 	}
 	return whatsapp.DisabledFetcher{}, nil
 }

@@ -217,35 +217,6 @@ func (s *Service) create(ctx context.Context, tx pgx.Tx, actor actor, in Manual,
 	}, nil
 }
 
-// writeAppSecret verifies the configured secret without allowing a tenant
-// administrator to rotate the app's authentication authority. A failed
-// decryption must never be treated as permission to replace the ciphertext.
-func (s *Service) writeAppSecret(ctx context.Context, tx pgx.Tx, tenantID, appID uuid.UUID, plaintext string) (bool, string, error) {
-	var current store.Secret
-	err := tx.QueryRow(ctx, `
-		SELECT key_version, ciphertext, aad
-		FROM meta_app_secrets
-		WHERE tenant_id = $1
-		  AND tenant_id = `+tenantSetting+`
-		  AND meta_app_id = $2
-		FOR UPDATE
-	`, tenantID, appID).Scan(&current.KeyVersion, &current.Ciphertext, &current.AAD)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, "", ErrNotFound
-	}
-	if err != nil {
-		return false, "", err
-	}
-	opened, err := s.open(tenantID, appID, entityApp, fieldAppSecret, current)
-	if err != nil {
-		return false, "", err
-	}
-	if !sameSecret(opened, plaintext) {
-		return false, "", ErrConflict
-	}
-	return false, current.KeyVersion, nil
-}
-
 func (s *Service) writeToken(ctx context.Context, tx pgx.Tx, tenantID, connectorID uuid.UUID, plaintext string) error {
 	sealed, err := s.seal(tenantID, connectorID, entityConnector, fieldToken, plaintext)
 	if err != nil {
@@ -485,27 +456,6 @@ func bumpConnector(ctx context.Context, tx pgx.Tx, tenantID, connectorID uuid.UU
 		return 0, ErrInvalid
 	}
 	return parsed, nil
-}
-
-func bumpAppConnectors(ctx context.Context, tx pgx.Tx, tenantID, appID, except uuid.UUID) error {
-	_, err := tx.Exec(ctx, `
-		UPDATE channel_connectors AS c
-		SET version = (c.version::bigint + 1)::text,
-		    updated_at = now()
-		WHERE c.tenant_id = $1
-		  AND c.tenant_id = `+tenantSetting+`
-		  AND c.connector_type = 'meta_cloud'
-		  AND c.id <> $3
-		  AND c.id IN (
-			SELECT p.connector_id
-			FROM meta_phone_numbers AS p
-			JOIN meta_wabas AS w
-			  ON w.tenant_id = p.tenant_id AND w.id = p.meta_waba_id
-			WHERE p.tenant_id = $1
-			  AND w.meta_app_id = $2
-		  )
-	`, tenantID, appID, except)
-	return err
 }
 
 func readVersion(ctx context.Context, tx pgx.Tx, tenantID, connectorID uuid.UUID) (int64, error) {

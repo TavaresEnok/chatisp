@@ -21,10 +21,10 @@ Limite: o diálogo nativo de permissão e navegadores que não sejam Chromium n�
 
 ## Acessibilidade e responsividade
 
-Páginas: Conversas (conversa aberta), Configurações, Contatos, Equipes, Relatórios, Painel, Canais e Entrar.
-Viewports: 1280×800, 768×1024 e 360×640 (24 visões). Para cada uma: axe com as tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`; rolagem horizontal da página e de elementos largos fora de contêiner rolável; percurso por Tab (foco visível, elemento visível, nome acessível, sem armadilha).
+Páginas com sessão: Conversas (conversa aberta), Configurações, Contatos, Equipes, Relatórios, Painel, Canais (com a saúde dos números) e Usuários do provedor. Sem sessão: Entrar, Recuperar senha, Confirmar nova senha, Aceitar convite e MFA.
+Viewports: 1280×800, 768×1024, 360×640 e 320×256 (alvo de reflow do WCAG 1.4.10, equivalente a 1280 px com zoom de 400 %). Total: 52 visões (rodada de 05/11/2026, 2; a primeira rodada tinha 24). Para cada uma: axe com as tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`; rolagem horizontal da página e de elementos largos fora de contêiner rolável; percurso por Tab (foco visível, elemento visível, nome acessível, sem armadilha).
 
-Resultado final: 0 violações axe, 0 px de rolagem horizontal, 0 problemas de foco, de 6 a 47 paradas de Tab por visão.
+Resultado final: 0 violações axe, 0 px de rolagem horizontal, 0 problemas de foco e nenhuma chave React repetida, nas 52 visões. A execução também percorre a árvore do React em cada página com sessão e falha se dois irmãos tiverem a mesma chave.
 
 Problemas reais encontrados e corrigidos:
 
@@ -35,8 +35,10 @@ Problemas reais encontrados e corrigidos:
 - Tabela de auditoria estourava 60 px a 768 e 196 px a 360: dentro de contêiner rolável.
 - Conversas a 360 px estouravam 133 px: grade de uma coluna `minmax(0,1fr)` e filtros da fila podem encolher (`min-w-0`).
 - Campos de arquivo estouravam 17 px a 360 px: `max-width: 100%`.
+- Segunda rodada: a 320 px o seletor "Caixa" de Conversas estourava 5 px; agora encolhe (`min-w-0 max-w-full`).
+- Segunda rodada: em Configurações, dez seções irmãs usavam a mesma chave React (`sessionId` ou `membershipId`) para reiniciar o estado por sessão. Irmãos com chave repetida podem ser descartados ou duplicados pelo React. Cada seção tem agora chave própria (`distribution:…`, `audit:…` etc.).
 
-Fora do alcance desta auditoria: leitor de tela real, modo de alto contraste do sistema, zoom de 400 %, e a tela inicial de MFA/convite/recuperação de senha (não percorridas no navegador).
+Fora do alcance desta auditoria: leitor de tela real, modo de alto contraste do sistema e navegadores que não sejam Chromium (o cache do Playwright deste host só tem o Chromium). O zoom de 400 % foi aproximado pelo viewport de 320×256 CSS px, que é a medida do critério 1.4.10; não se mediu o zoom do navegador em si.
 
 ## Avatar do contato
 

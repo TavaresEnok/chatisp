@@ -510,7 +510,7 @@ func (s Service) queueFarewell(ctx context.Context, tx pgx.Tx, p Principal, conv
 	if err != nil {
 		return fail(err)
 	}
-	body := in.FarewellBody
+	var body string
 	if replay {
 		body, err = s.storedHumanBody(ctx, tx, p, OpSendText, in.FarewellRequestID, in.FarewellBody)
 	} else {

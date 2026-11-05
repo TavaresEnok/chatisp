@@ -192,7 +192,7 @@ it("mostra circuito aberto e capacidade indisponível sem apagar o vínculo", as
     if (path.endsWith("/summary")) return json({ outcome: "unavailable", reason: "capacidade indisponível", simulated: true });
     if (path.endsWith("/links")) {
       return json({
-        links: [{ id: "link-1", contact_id: "contact-1", conversation_id: "c1", external_customer_id: "fake-customer-casa", selected: true }],
+        links: [{ id: "link-1", contact_id: "contact-1", conversation_id: "c1", external_customer_id: "fake-customer-casa", selected: true, customer_url: "https://erp.provedor.example/clientes/fake-customer-casa" }],
       });
     }
     return problem(500, "rota inesperada");
@@ -200,6 +200,10 @@ it("mostra circuito aberto e capacidade indisponível sem apagar o vínculo", as
   renderPanel();
   expect(await screen.findByRole("alert")).toHaveTextContent("capacidade indisponível");
   expect(screen.getByText("fake-customer-casa")).toBeInTheDocument();
+  const open = screen.getByRole("link", { name: "Abrir cadastro no ERP (fake-customer-casa)" });
+  expect(open).toHaveAttribute("href", "https://erp.provedor.example/clientes/fake-customer-casa");
+  expect(open).toHaveAttribute("rel", "noopener noreferrer");
+  expect(open).toHaveAttribute("target", "_blank");
   expect(screen.getByRole("button", { name: "Vincular" })).toBeEnabled();
 });
 
