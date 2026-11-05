@@ -1,8 +1,8 @@
 # Matriz de requisitos V1 e V1 simples
 
-Contagem: A conferir: 140; Implementado e verificado: 80; Implementado, aguardando homologação externa: 22; Parcial, com lacuna concreta: 15.
+Contagem: A conferir: 48; Implementado e verificado: 149; Implementado, aguardando homologação externa: 35; Parcial, com lacuna concreta: 25.
 
-Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1 a M4 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
+Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1 a M8 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
 
 | Requisito | Marco | Tipo | Estado | Evidência / documentos que citam |
 | --- | --- | --- | --- | --- |
@@ -163,103 +163,103 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 14-upload | M4 | V1 | Implementado e verificado | TestTypeAndNameValidation (attachments); HTML nomeado foto.jpg recusado com 422 no E2E M4A de 04/11 |
 | 14-ffmpeg | M4 | V1 | Parcial, com lacuna concreta | ffmpeg local com tempo, duração e tamanho; sem limite de CPU/memória por cgroup no worker (docs/CONTINUACAO-PRODUTO.md) |
 | 14-uso-meta | M4 | V1 simples | A conferir | — |
-| 03-triagem | M5 | V1 simples | A conferir | — |
-| 03-adiar | M5 | V1 simples | A conferir | — |
-| 04-presenca | M5 | V1 | A conferir | — |
-| 05-ativar-desativar | M5 | V1 | A conferir | — |
-| 05-responsavel-unico | M5 | V1 | A conferir | — |
-| 05-atribuicao-manual | M5 | V1 | A conferir | — |
-| 05-atribuicao-auto | M5 | V1 | A conferir | — |
-| 05-round-robin | M5 | V1 | A conferir | — |
-| 05-disponibilidade | M5 | V1 | A conferir | — |
-| 05-prioridade-espera | M5 | V1 | A conferir | — |
-| 05-reatribuir-desativado | M5 | V1 | A conferir | — |
-| 05-supervisor-filas | M5 | V1 | A conferir | — |
-| 05-supervisor-altera | M5 | V1 | A conferir | — |
-| 05-limite-vagas | M5 | V1 simples | A conferir | — |
-| 05-apos-transferencia | M5 | V1 simples | A conferir | — |
-| 05-desatribuir-offline | M5 | V1 simples | A conferir | — |
-| 05-ocupacao | M5 | V1 simples | A conferir | — |
-| 06-horario | M5 | V1 | A conferir | — |
-| 06-fora-expediente | M5 | V1 | A conferir | — |
-| 06-setor-padrao | M5 | V1 | A conferir | — |
-| 06-atribuicao-chegar | M5 | V1 | A conferir | — |
-| 06-menu | M5 | V1 | A conferir | — |
-| 06-inatividade | M5 | V1 | A conferir | — |
-| 06-retorno-adiada | M5 | V1 | A conferir | — |
-| 06-plantao | M5 | V1 simples | A conferir | — |
-| 06-boas-vindas | M5 | V1 simples | A conferir | — |
-| 06-ninguem-disponivel | M5 | V1 simples | A conferir | — |
-| 06-gancho | M5 | V1 simples | A conferir | — |
-| 06-etiqueta-menu | M5 | V1 simples | A conferir | — |
-| 06-gatilhos | M5 | V1 simples | A conferir | — |
-| 08-historico-bot | M5 | V1 | A conferir | — |
-| 08-resposta-bot | M5 | V1 | A conferir | — |
-| 08-handoff | M5 | V1 | A conferir | — |
-| 08-interruptor | M5 | V1 | A conferir | — |
-| 08-aviso-assistente | M5 | V1 | A conferir | — |
-| 08-humano-assume | M5 | V1 | A conferir | — |
-| 08-timeout-bot | M5 | V1 | A conferir | — |
-| 08-autorizacao-acao | M5 | V1 | A conferir | — |
-| 08-entregar-ia | M5 | V1 simples | A conferir | — |
-| 08-aprovacao | M5 | V1 simples | A conferir | — |
-| 11-gancho | M5 | V1 simples | A conferir | — |
-| 01-evolution | M6 | V1 simples | Implementado, aguardando homologação externa | contracts/m6-evolution.md (D2-04) |
-| 07-id-erp | M6 | V1 | A conferir | — |
-| 07-vinculo-erp | M6 | V1 | A conferir | — |
-| 08-referencia-erp | M6 | V1 | A conferir | — |
-| 08-contexto-painel | M6 | V1 | A conferir | — |
-| 08-registro-acao | M6 | V1 | A conferir | — |
-| 08-permissao-erp | M6 | V1 | A conferir | — |
-| 08-contrato-minimo | M6 | V1 simples | A conferir | — |
-| 08-conector-erp | M6 | V1 simples | Implementado, aguardando homologação externa | integracoes/erp-existente.md (D2-01); fake local apenas |
-| 08-identificar | M6 | V1 simples | A conferir | — |
-| 08-verificacao-cliente | M6 | V1 simples | A conferir | — |
-| 08-resumo | M6 | V1 simples | A conferir | — |
-| 08-faturas | M6 | V1 simples | A conferir | — |
-| 08-segunda-via | M6 | V1 simples | A conferir | — |
+| 03-triagem | M5 | V1 simples | Implementado e verificado | TestMenuLimitsAndEmptyDecision, TestUnambiguousNumberedChoice, TestPostgresAndHTTP (triage); acceptance |
+| 03-adiar | M5 | V1 simples | Implementado e verificado | TestLifecyclePostgres (lifecycle); TestAutomationInboundClearsSnoozeInMessageTransaction |
+| 04-presenca | M5 | V1 | Implementado e verificado | TestPresencePostgres (presence); features/queue |
+| 05-ativar-desativar | M5 | V1 | Parcial, com lacuna concreta | auth/admin_test.go e presence/service_test.go citam desativação; reatribuição das conversas do desativado e visão do supervisor não confirmadas em teste |
+| 05-responsavel-unico | M5 | V1 | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
+| 05-atribuicao-manual | M5 | V1 | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
+| 05-atribuicao-auto | M5 | V1 | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
+| 05-round-robin | M5 | V1 | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
+| 05-disponibilidade | M5 | V1 | Implementado e verificado | TestPresencePostgres (presence); features/queue |
+| 05-prioridade-espera | M5 | V1 | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
+| 05-reatribuir-desativado | M5 | V1 | Parcial, com lacuna concreta | auth/admin_test.go e presence/service_test.go citam desativação; reatribuição das conversas do desativado e visão do supervisor não confirmadas em teste |
+| 05-supervisor-filas | M5 | V1 | Parcial, com lacuna concreta | auth/admin_test.go e presence/service_test.go citam desativação; reatribuição das conversas do desativado e visão do supervisor não confirmadas em teste |
+| 05-supervisor-altera | M5 | V1 | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
+| 05-limite-vagas | M5 | V1 simples | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
+| 05-apos-transferencia | M5 | V1 simples | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
+| 05-desatribuir-offline | M5 | V1 simples | Implementado e verificado | TestPresencePostgres (presence); features/queue |
+| 05-ocupacao | M5 | V1 simples | Implementado e verificado | TestDistributionPostgres (distribution); TestAssignmentHTTPReplay |
+| 06-horario | M5 | V1 | Implementado e verificado | TestValidation, TestBoundariesAndDST, TestPostgresAndHTTP (businesshours); business-hours.test.tsx |
+| 06-fora-expediente | M5 | V1 | Parcial, com lacuna concreta | o plano ainda descreve envio automático como pendente; há TestAutomationWarningUsesOutboxAndConfirmedClock e TestAutomationTriageComposesAndReplays, mas não confrontei texto de boas-vindas/fora do expediente de ponta a ponta |
+| 06-setor-padrao | M5 | V1 | Implementado e verificado | TestMenuLimitsAndEmptyDecision, TestUnambiguousNumberedChoice, TestPostgresAndHTTP (triage); acceptance |
+| 06-atribuicao-chegar | M5 | V1 | Implementado e verificado | TestMenuLimitsAndEmptyDecision, TestUnambiguousNumberedChoice, TestPostgresAndHTTP (triage); acceptance |
+| 06-menu | M5 | V1 | Implementado e verificado | TestMenuLimitsAndEmptyDecision, TestUnambiguousNumberedChoice, TestPostgresAndHTTP (triage); acceptance |
+| 06-inatividade | M5 | V1 | Implementado e verificado | TestLifecyclePostgres (lifecycle); TestAutomationInboundClearsSnoozeInMessageTransaction |
+| 06-retorno-adiada | M5 | V1 | Implementado e verificado | TestLifecyclePostgres (lifecycle); TestAutomationInboundClearsSnoozeInMessageTransaction |
+| 06-plantao | M5 | V1 simples | Implementado e verificado | TestValidation, TestBoundariesAndDST, TestPostgresAndHTTP (businesshours); business-hours.test.tsx |
+| 06-boas-vindas | M5 | V1 simples | Parcial, com lacuna concreta | o plano ainda descreve envio automático como pendente; há TestAutomationWarningUsesOutboxAndConfirmedClock e TestAutomationTriageComposesAndReplays, mas não confrontei texto de boas-vindas/fora do expediente de ponta a ponta |
+| 06-ninguem-disponivel | M5 | V1 simples | Parcial, com lacuna concreta | o plano ainda descreve envio automático como pendente; há TestAutomationWarningUsesOutboxAndConfirmedClock e TestAutomationTriageComposesAndReplays, mas não confrontei texto de boas-vindas/fora do expediente de ponta a ponta |
+| 06-gancho | M5 | V1 simples | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
+| 06-etiqueta-menu | M5 | V1 simples | Implementado e verificado | TestMenuLimitsAndEmptyDecision, TestUnambiguousNumberedChoice, TestPostgresAndHTTP (triage); acceptance |
+| 06-gatilhos | M5 | V1 simples | Parcial, com lacuna concreta | sem teste que cubra gatilhos fixos encontrado |
+| 08-historico-bot | M5 | V1 | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
+| 08-resposta-bot | M5 | V1 | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
+| 08-handoff | M5 | V1 | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
+| 08-interruptor | M5 | V1 | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
+| 08-aviso-assistente | M5 | V1 | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
+| 08-humano-assume | M5 | V1 | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
+| 08-timeout-bot | M5 | V1 | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
+| 08-autorizacao-acao | M5 | V1 | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
+| 08-entregar-ia | M5 | V1 simples | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
+| 08-aprovacao | M5 | V1 simples | Parcial, com lacuna concreta | aprovação humana de ação sensível: sem código encontrado em erp/; D2-02 ausente, ação sensível oculta (TestSensitiveStaysHiddenWithoutVerification) |
+| 11-gancho | M5 | V1 simples | Implementado e verificado | TestBotHookPostgres, TestParseToken (bothook); bot-hook-notice.test.tsx |
+| 01-evolution | M6 | V1 simples | Implementado, aguardando homologação externa | Flag desligada; TestSupplierStaysUnwired; docs/contracts/m6-evolution.md (D2-04) |
+| 07-id-erp | M6 | V1 | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
+| 07-vinculo-erp | M6 | V1 | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
+| 08-referencia-erp | M6 | V1 | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
+| 08-contexto-painel | M6 | V1 | Implementado e verificado | embed tests (origem, URL interna recusada, payload sem corpo); E2E M4B-M6 de 04/11 |
+| 08-registro-acao | M6 | V1 | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
+| 08-permissao-erp | M6 | V1 | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
+| 08-contrato-minimo | M6 | V1 simples | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
+| 08-conector-erp | M6 | V1 simples | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
+| 08-identificar | M6 | V1 simples | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
+| 08-verificacao-cliente | M6 | V1 simples | Parcial, com lacuna concreta | aprovação humana de ação sensível: sem código encontrado em erp/; D2-02 ausente, ação sensível oculta (TestSensitiveStaysHiddenWithoutVerification) |
+| 08-resumo | M6 | V1 simples | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
+| 08-faturas | M6 | V1 simples | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
+| 08-segunda-via | M6 | V1 simples | Implementado, aguardando homologação externa | TestFakeSummaryAndInvoicesHonorContract; segunda via enfileirada no E2E de 04/11 com fake; Pix, artefato real e timeout ambíguo real não exercitados |
 | 08-abrir-cadastro | M6 | V1 simples | A conferir | — |
-| 08-iframe | M6 | V1 simples | A conferir | — |
-| 08-protocolo-erp | M6 | V1 simples | A conferir | — |
-| 11-api-conversas | M6 | V1 | A conferir | contracts/m6-public-api.md |
-| 11-api-contatos | M6 | V1 | A conferir | contracts/m6-public-api.md |
-| 11-api-template | M6 | V1 | A conferir | contracts/m6-public-api.md |
-| 11-tokens | M6 | V1 | A conferir | contracts/m6-public-api.md |
-| 11-rate-limit | M6 | V1 | A conferir | contracts/m6-public-api.md |
-| 11-openapi | M6 | V1 | A conferir | contracts/m6-public-api.md |
-| 11-webhook-conversa | M6 | V1 | A conferir | contracts/m6-public-api.md |
-| 11-webhook-mensagem | M6 | V1 | A conferir | contracts/m6-public-api.md |
-| 11-api-cadastros | M6 | V1 simples | A conferir | contracts/m6-public-api.md |
-| 11-dashboard-app | M6 | V1 simples | A conferir | — |
-| 11-conector-erp | M6 | V1 simples | A conferir | — |
-| 14-circuit-breaker | M6 | V1 | Implementado e verificado | backend/internal/erp/breaker.go, breaker_test.go; integracoes/erp-existente.md |
-| 14-observabilidade | M6 | V1 | A conferir | — |
-| 09-painel-rt | M7 | V1 | A conferir | — |
-| 09-sem-responsavel | M7 | V1 | A conferir | — |
-| 09-total-periodo | M7 | V1 | A conferir | — |
-| 09-estados | M7 | V1 | A conferir | — |
-| 09-primeira-resposta | M7 | V1 | A conferir | — |
-| 09-tempo-encerramento | M7 | V1 | A conferir | — |
-| 09-espera-fila | M7 | V1 | A conferir | — |
-| 09-volume-setor | M7 | V1 | A conferir | — |
-| 09-volume-atendente | M7 | V1 | A conferir | — |
-| 09-volume-etiqueta | M7 | V1 | A conferir | — |
-| 09-mapa-calor | M7 | V1 | A conferir | — |
-| 09-agrupamento | M7 | V1 | A conferir | — |
-| 09-painel-saas | M7 | V1 | A conferir | contracts/m7-platform-usage.md |
-| 09-volume-mensagens | M7 | V1 simples | A conferir | — |
-| 09-volume-caixa | M7 | V1 simples | A conferir | — |
-| 09-csv | M7 | V1 simples | A conferir | — |
-| 09-alerta-espera | M7 | V1 simples | A conferir | — |
-| 12-retencao | M7 | V1 simples | Parcial, com lacuna concreta | expurgo desligado (D2-06); recusa 409 verificada |
-| 12-exportacao-contato | M7 | V1 simples | A conferir | — |
-| 12-historico-demandas | M7 | V1 simples | A conferir | — |
-| 12-logo | M7 | V1 simples | A conferir | — |
-| 12-limites-plano | M7 | V1 simples | A conferir | — |
-| 12-superadmin | M7 | V1 | A conferir | contracts/m7-platform-usage.md |
-| 12-criar-suspender | M7 | V1 | A conferir | — |
-| 14-retencao | M7 | V1 simples | Parcial, com lacuna concreta | expurgo desligado (D2-06) |
-| 14-suspensao | M7 | V1 | A conferir | — |
-| 14-backup | M8 | V1 | A conferir | contracts/m8-restore-drill.md |
-| 14-carga | M8 | V1 | Parcial, com lacuna concreta | ensaio local não é capacidade (D2-07) |
-| 14-metricas-alertas | M8 | V1 | Implementado e verificado | CONTINUACAO-CURSOR.md; opsignals/metrics |
+| 08-iframe | M6 | V1 simples | Implementado e verificado | embed tests (origem, URL interna recusada, payload sem corpo); E2E M4B-M6 de 04/11 |
+| 08-protocolo-erp | M6 | V1 simples | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
+| 11-api-conversas | M6 | V1 | Implementado e verificado | TestPublicConversationTextAssignAndState, TestPublicTemplate* |
+| 11-api-contatos | M6 | V1 | Implementado e verificado | TestUpdateContactKeepsDocumentOut; PATCH /v1/contacts |
+| 11-api-template | M6 | V1 | Implementado e verificado | TestPublicConversationTextAssignAndState, TestPublicTemplate* |
+| 11-tokens | M6 | V1 | Implementado e verificado | TestTokenScopeTenantAndRateLimit, TestTokenRevogado, TestLimite429, TestCookieNaoSubstituiBearer |
+| 11-rate-limit | M6 | V1 | Implementado e verificado | TestTokenScopeTenantAndRateLimit, TestTokenRevogado, TestLimite429, TestCookieNaoSubstituiBearer |
+| 11-openapi | M6 | V1 | Implementado e verificado | TestOpenAPIMatchesCommittedDocument, TestOpenAPIDocumentsPublicWrites |
+| 11-webhook-conversa | M6 | V1 | Implementado e verificado | outwebhook: TestStableIDAndSignature, TestRetryKeepsIDAndDoesNotDropTheMessage, TestDeadAfterTheAttemptBudget, TestConcurrentDeliveryPostsOnce |
+| 11-webhook-mensagem | M6 | V1 | Implementado e verificado | outwebhook: TestStableIDAndSignature, TestRetryKeepsIDAndDoesNotDropTheMessage, TestDeadAfterTheAttemptBudget, TestConcurrentDeliveryPostsOnce |
+| 11-api-cadastros | M6 | V1 simples | Implementado e verificado | TestOpenAPIMatchesRegisteredRoutes (leitura pública) |
+| 11-dashboard-app | M6 | V1 simples | Implementado e verificado | embed tests (origem, URL interna recusada, payload sem corpo); E2E M4B-M6 de 04/11 |
+| 11-conector-erp | M6 | V1 simples | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
+| 14-circuit-breaker | M6 | V1 | Implementado e verificado | TestBreakerOpensAfterThreeFailuresAndReopensOnFailedProbe, TestCircuitOpensPerConnection, TestGuardTimeoutDoesNotWaitForTheDelay; decisão em integracoes/erp-existente.md |
+| 14-observabilidade | M6 | V1 | Implementado e verificado | opsignals/metrics, opsalert; /metrics privado verificado no E2E M7 de 04/11 |
+| 09-painel-rt | M7 | V1 | Parcial, com lacuna concreta | painel em tempo real: sem teste específico dos totais ao vivo encontrado |
+| 09-sem-responsavel | M7 | V1 | Implementado e verificado | TestUrgentQueueDoesNotRaiseTheWaitAlert; queue-wait-alert.test.tsx |
+| 09-total-periodo | M7 | V1 | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
+| 09-estados | M7 | V1 | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
+| 09-primeira-resposta | M7 | V1 | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
+| 09-tempo-encerramento | M7 | V1 | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
+| 09-espera-fila | M7 | V1 | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
+| 09-volume-setor | M7 | V1 | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
+| 09-volume-atendente | M7 | V1 | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
+| 09-volume-etiqueta | M7 | V1 | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
+| 09-mapa-calor | M7 | V1 | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
+| 09-agrupamento | M7 | V1 | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
+| 09-painel-saas | M7 | V1 | Implementado e verificado | TestUsageHidesMessageBodyAndRejectsProviderRoles (platformusage) |
+| 09-volume-mensagens | M7 | V1 simples | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
+| 09-volume-caixa | M7 | V1 simples | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
+| 09-csv | M7 | V1 simples | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
+| 09-alerta-espera | M7 | V1 simples | Implementado e verificado | TestUrgentQueueDoesNotRaiseTheWaitAlert; queue-wait-alert.test.tsx |
+| 12-retencao | M7 | V1 simples | Parcial, com lacuna concreta | retenção registra e recusa: TestPurgeRefusesAndDeletesNothing; expurgo desligado até D2-06 |
+| 12-exportacao-contato | M7 | V1 simples | Implementado e verificado | TestPrivacyExportAndDeleteKeepsProtocol, TestPrivacyDeleteRollsBackWhenObjectRemains, TestHTTPPrivacyExportAndDeletion |
+| 12-historico-demandas | M7 | V1 simples | Implementado e verificado | TestExportDemandsKeepsProtocolAndHidesOtherSectors |
+| 12-logo | M7 | V1 simples | Implementado e verificado | branding: TestNormalizeRejectsActiveContentMisleadingTypeAndLimits, TestHTTPRolesMFAOriginAndImageHeaders; E2E M7 de 04/11 |
+| 12-limites-plano | M7 | V1 simples | Implementado e verificado | TestPlanLimitsBlockNewRowsAndKeepHistory |
+| 12-superadmin | M7 | V1 | Implementado e verificado | TestAdminSeesOwnTenantAudit, TestUsageHidesMessageBodyAndRejectsProviderRoles; platform/httpapi/panel_test.go |
+| 12-criar-suspender | M7 | V1 | Implementado e verificado | platform/db/tenant_status_gate_test.go; panel_test.go |
+| 14-retencao | M7 | V1 simples | Parcial, com lacuna concreta | retenção registra e recusa: TestPurgeRefusesAndDeletesNothing; expurgo desligado até D2-06 |
+| 14-suspensao | M7 | V1 | Implementado e verificado | platform/db/tenant_status_gate_test.go; panel_test.go |
+| 14-backup | M8 | V1 | Implementado, aguardando homologação externa | restoredrill: TestDrillRestoresDumpAndReapplies, TestRecoveredRingDecryptsAfterSourceIsGone, TestRestoreObjectsAfterSourceIsGone passam em descartável; backup de produção, RPO e RTO não medidos (D2-07) |
+| 14-carga | M8 | V1 | Parcial, com lacuna concreta | ensaio local existe (loadlocal) e se recusa como capacidade; k6 depende do perfil D2-07 |
+| 14-metricas-alertas | M8 | V1 | Implementado e verificado | opsignals/metrics, opsalert; /metrics privado verificado no E2E M7 de 04/11 |
