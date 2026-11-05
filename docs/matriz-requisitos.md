@@ -146,8 +146,8 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 02-figurinhas | M4 | V1 simples | Implementado, aguardando homologação externa | decode_media.go decodifica sticker; media-message.tsx exibe; sem Meta real |
 | 02-reacoes | M4 | V1 simples | Implementado, aguardando homologação externa | TestInboundReactionLocationAndVCard com stand-in; sem Meta real |
 | 02-interativos | M4 | V1 simples | Implementado, aguardando homologação externa | decode de interactive e fallback numerado em triage (TestUnambiguousNumberedChoice); sem Meta real |
-| 02-saude-numero | M4 | V1 simples | Não implementado | nenhum código de qualidade/saúde do número encontrado |
-| 02-limites-numero | M4 | V1 simples | Não implementado | nenhum código de tier/limite de mensagens do número encontrado |
+| 02-saude-numero | M4 | V1 simples | Não implementado | não implementado: depende do contrato real da Meta (eventos de qualidade do número e campos da Graph API, D2-03); sem a versão fixada não há como decodificar sem inventar |
+| 02-limites-numero | M4 | V1 simples | Não implementado | não implementado: depende do campo de tier/limite devolvido pela Graph API (D2-03); o limite local de envio continua sendo o lease de 14-rate-limit |
 | 04-compositor | M4 | V1 | Implementado e verificado | E2E no Chromium 140 em 05/11/2026: m4a (texto, assinatura, resposta pronta, anexo validado) e m4b-m6 (documento, localização citada, áudio gravado convertido no servidor); message-composer*.test.tsx; composer-tools.test.tsx |
 | 04-drag-colar | M4 | V1 | Implementado e verificado | message-composer.media.test.tsx ("anexa, arrasta e cola um arquivo"): fireEvent.paste e drop passam pela mesma validação de anexo |
 | 04-preview | M4 | V1 | Implementado e verificado | features/attachments/attachments.test.tsx, media-panel.test.tsx; attachment-preview.tsx |
@@ -162,7 +162,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 14-url-assinada | M4 | V1 | Implementado, aguardando homologação externa | TestS3SDKWithExplicitlySimulatedTransport; storage S3 real não usado |
 | 14-upload | M4 | V1 | Implementado e verificado | TestTypeAndNameValidation (attachments); HTML nomeado foto.jpg recusado com 422 no E2E M4A de 04/11 |
 | 14-ffmpeg | M4 | V1 | Implementado e verificado | convert.go: tempo, duração e tamanho + limites de processo por prlimit (CPU 30 s, espaço de endereço 2 GiB, arquivo 16 MiB, 64 descritores), provados em TestFFmpegChildInheritsResourceLimits; as conversões reais com ffmpeg 4.2.7 passam pelo caminho limitado. Não é cgroup; host sem prlimit roda só com tempo/duração/tamanho |
-| 14-uso-meta | M4 | V1 simples | Não implementado | nenhuma contabilização de categoria/cobrança reportada pela Meta encontrada |
+| 14-uso-meta | M4 | V1 simples | Não implementado | não implementado: depende do indicador de categoria/cobrança que a Meta reporta nos status (D2-03); sem valor em dinheiro, como pede o plano |
 | 03-triagem | M5 | V1 simples | Implementado e verificado | TestMenuLimitsAndEmptyDecision, TestUnambiguousNumberedChoice, TestPostgresAndHTTP (triage); acceptance |
 | 03-adiar | M5 | V1 simples | Implementado e verificado | TestLifecyclePostgres (lifecycle); TestAutomationInboundClearsSnoozeInMessageTransaction |
 | 04-presenca | M5 | V1 | Implementado e verificado | TestPresencePostgres (presence); features/queue |
@@ -218,7 +218,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 08-resumo | M6 | V1 simples | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
 | 08-faturas | M6 | V1 simples | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
 | 08-segunda-via | M6 | V1 simples | Implementado, aguardando homologação externa | TestFakeSummaryAndInvoicesHonorContract; segunda via enfileirada no E2E de 04/11 com fake; Pix, artefato real e timeout ambíguo real não exercitados |
-| 08-abrir-cadastro | M6 | V1 simples | Não implementado | sem link para o cadastro no ERP; depende da URL do ambiente do fornecedor (D2-01) |
+| 08-abrir-cadastro | M6 | V1 simples | Não implementado | não implementado: precisa da URL do ambiente do ERP do provedor (D2-01) para montar o link sem credencial e sem CPF |
 | 08-iframe | M6 | V1 simples | Implementado e verificado | embed tests (origem, URL interna recusada, payload sem corpo); E2E M4B-M6 de 04/11 |
 | 08-protocolo-erp | M6 | V1 simples | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
 | 11-api-conversas | M6 | V1 | Implementado e verificado | TestPublicConversationTextAssignAndState, TestPublicTemplate* |

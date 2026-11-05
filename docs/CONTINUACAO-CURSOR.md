@@ -175,3 +175,27 @@ Atualização (05/11/2026, 8) — E2E no navegador. O Chromium do Playwright já
 Causa da falha do m4b-m6: (1) o fixture `cmd/m2demo` montava `service.New` sem `Files` e `AttachmentLimits`, então o envio de áudio, que desde `1a13ae5` passa pelo ffmpeg no servidor, devolvia 503; agora o fixture liga os dois (`cmd/m2demo/demo.go`), como o `cmd/chatisp/main.go` já fazia. (2) o stub do MediaRecorder enviava só um cabeçalho ID3 de 10 bytes; foi trocado por um MP3 real de 0,6 s (~1 KB, base64) em `web/e2e/m4b-m6.spec.ts`, e o passo do áudio passou a falhar com o texto do compositor e os erros HTTP. Depois disso `test:e2e:m4b-m6` passou ("simulação local, sem skip"). Isto não é homologação com a Meta: ERP fake, stand-in Meta e receptor loopback.
 
 Não repetido: m4b-m6 e demais jornadas não foram reexecutados em sequência depois do fixture novo (só o m4b-m6); Vitest completo; teste de upgrade de migração; `scripts/dev.test.sh` segue falhando.
+
+## Fechamento da continuação (05/11/2026)
+
+Branch `continuation/cursor-integracao-2`. Matriz completa em `docs/matriz-requisitos.md` (257 linhas). Nenhum item está declarado em 100%: restam parciais, não implementados e itens que dependem de decisão externa. Não houve push, deploy, banco real, Meta, ERP, Evolution nem expurgo (`automatic_purge` continua falso). Paseo não foi tocado.
+
+### Validação integrada (HEAD `ca8af9b`, 05/11/2026)
+Go 1.27.3; Node 20.20.2 para `tsc`; Node 24.11.0 (`/tmp/chatisp-node24/bin`) para Vitest, ESLint e E2E; Chromium 140.0.7339.186 do Playwright (`~/.cache/ms-playwright/chromium-1193`). Todos com saída 0:
+- `go vet ./...`; `go test -count=1 ./...` (65 pacotes ok).
+- `tsc -b`; `eslint .`; Vitest completo (56 arquivos, 278 testes).
+- `bash scripts/dev.test.sh` ("ok", agora com o cenário HTTPS); `scripts/ops-security-check.sh`.
+- E2E no navegador: `test:e2e:m3b`, `m4a`, `m4b-m6`, `m7-ops` (cada um com `CHATISP_E2E_API_PORT=<porta livre>`, porque a 8080 do host é de outro serviço). Stand-in da Meta, ERP fake e receptor loopback: não é homologação.
+- Migrações: aplicadas em banco novo por todos os testes com PostgreSQL embutido; atualização da base `00045` (commit `54febe9`) até a versão atual com dados sintéticos em `internal/upgradetest`.
+
+### Entregas desta continuação
+Login local em HTTPS (`CHATISP_DEV_TLS=1 ./scripts/dev.sh`); disjuntor do ERP reabre em sondagem falha (decisão sobre sony/gobreaker em `docs/integracoes/erp-existente.md`); conversas de atendente desativado voltam à fila (`pipeline/disabled.go`); `tenant_id` nos logs com escopo de tenant; citação sem UUID zero; limites de CPU/memória/arquivo para o ffmpeg via prlimit; plano da busca medido (`internal/searchplan`); fixture do E2E ligado a armazenamento e limites; vários testes novos (fila do supervisor, mesmo número em dois provedores, auditoria, atalhos, ferramentas do compositor, ordem da linha do tempo).
+
+### Como iniciar, acessar e encerrar
+`CHATISP_DEV_TLS=1 ./scripts/dev.sh` (portas por variável, ver `README.md`); abrir `https://127.0.0.1:5173/entrar`, aceitar o certificado descartável; usuário `dev.local@example.com` e a senha impressa na primeira subida. Ctrl+C encerra só PostgreSQL, API e Vite do script e apaga o certificado.
+
+### Próxima tarefa concreta
+Quando houver decisão externa: D2-03 (Meta) destrava 02-saude-numero, 02-limites-numero, 14-uso-meta e a homologação de mídia/templates; D2-01/D2-02 (ERP) destravam 08-abrir-cadastro, 08-verificacao-cliente e 08-aprovacao. Localmente, o que sobra é medir a consulta composta da busca da fila (03-busca-conteudo, 14-fulltext), auditar responsividade e acessibilidade no navegador (13-responsiva, 13-a11y), exercer a Notification API real (04-notif-navegador) e decidir a fonte do avatar (07-avatar).
+
+### Como retomar
+`cd /home/enok/srv_projetos/workspace/chat-isp-cursor-integracao-2`; `git log --oneline -8`; ler `docs/matriz-requisitos.md`; a pasta `chat-isp` (branch `continuation/m5-runtime-panel`) está 52+ commits atrás e não deve ser base.
