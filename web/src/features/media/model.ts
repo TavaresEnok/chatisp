@@ -226,6 +226,8 @@ export function entryPreview(entry: {
   );
 }
 
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+
 export function quoteTarget(
   replyToMessageId: string | undefined,
   content: { [key: string]: unknown } | undefined,
@@ -233,7 +235,8 @@ export function quoteTarget(
 ): { id: string; preview: string } | undefined {
   const fromContent = content?.reply_to_message_id;
   const id = replyToMessageId || (typeof fromContent === "string" ? fromContent : "");
-  if (!id) return undefined;
+  // The API serializes "no quote" as the zero UUID; it is not a message.
+  if (!id || id === NIL_UUID) return undefined;
   const target = messages.find((item) => item.id === id);
   return { id, preview: target ? messagePreview(target) : "Mensagem citada indisponível" };
 }

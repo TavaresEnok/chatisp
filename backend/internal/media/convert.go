@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -436,8 +437,35 @@ func localFFmpegArgs(in, out string) ([]string, error) {
 	}, nil
 }
 
+// Resource ceilings applied to the ffmpeg child through prlimit (util-linux):
+// CPU seconds, address space, largest file written and open descriptors. They are
+// a process-level cap, not a cgroup; a host without prlimit runs ffmpeg with the
+// existing timeout, duration and size checks only.
+const (
+	ffmpegCPUSeconds = 30
+	ffmpegAddress    = 2 << 30
+	ffmpegFileBytes  = 16 << 20
+	ffmpegOpenFiles  = 64
+)
+
+func limitedCommand(bin string, args []string) (string, []string) {
+	prlimit, err := exec.LookPath("prlimit")
+	if err != nil {
+		return bin, args
+	}
+	wrapped := []string{
+		fmt.Sprintf("--cpu=%d", ffmpegCPUSeconds),
+		fmt.Sprintf("--as=%d", ffmpegAddress),
+		fmt.Sprintf("--fsize=%d", ffmpegFileBytes),
+		fmt.Sprintf("--nofile=%d", ffmpegOpenFiles),
+		"--", bin,
+	}
+	return prlimit, append(wrapped, args...)
+}
+
 func defaultRun(ctx context.Context, bin string, args []string) error {
-	cmd := exec.CommandContext(ctx, bin, args...)
+	name, argv := limitedCommand(bin, args)
+	cmd := exec.CommandContext(ctx, name, argv...)
 	cmd.Stdin = nil
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard

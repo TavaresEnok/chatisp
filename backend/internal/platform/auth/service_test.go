@@ -109,6 +109,21 @@ func TestSessionIdleAbsoluteAndRevocation(t *testing.T) {
 	if _, err := svc.Authenticate(context.Background(), again.Token, again.CSRFToken, true); !errors.Is(err, ErrUnauthenticated) {
 		t.Fatalf("sessão revogada: %v", err)
 	}
+	if err := testStore.WithTenant(context.Background(), actor.TenantID, func(ctx context.Context) error {
+		logs, err := testStore.ListAuditLogs(ctx)
+		if err != nil {
+			return err
+		}
+		for _, row := range logs {
+			if row.Action == "session.revoke" && row.Result == "success" && row.TargetID != nil && *row.TargetID == again.Principal.SessionID {
+				return nil
+			}
+		}
+		t.Fatal("revogação de sessão sem auditoria")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestInviteAndResetTokensAreSingleUse(t *testing.T) {
@@ -187,6 +202,29 @@ func TestInviteAndResetTokensAreSingleUse(t *testing.T) {
 	clk.Advance(-2 * time.Minute)
 	if err := svc.ConfirmPasswordReset(context.Background(), stale, "senha-ainda-mais-nova", "203.0.113.40"); err != nil {
 		t.Fatalf("expiração do reset consumiu o token: %v", err)
+	}
+
+	// Critical events of this flow are in the provider audit log, with no secret in it.
+	if err := testStore.WithTenant(context.Background(), admin.tenant, func(ctx context.Context) error {
+		logs, err := testStore.ListAuditLogs(ctx)
+		if err != nil {
+			return err
+		}
+		seen := map[string]bool{}
+		for _, row := range logs {
+			seen[row.Action+"/"+row.Result] = true
+			if strings.Contains(row.Action+row.TargetType, "senha") {
+				t.Fatalf("auditoria com texto de senha: %+v", row)
+			}
+		}
+		for _, want := range []string{"invitation.create/success", "invitation.accept/success", "login/success", "password_reset.request/success", "password_reset.confirm/success"} {
+			if !seen[want] {
+				t.Fatalf("auditoria sem %s; vistos: %v", want, seen)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 

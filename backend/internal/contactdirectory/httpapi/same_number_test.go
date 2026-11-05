@@ -65,7 +65,7 @@ func TestSameNumberInTwoProvidersStaysSeparate(t *testing.T) {
 	a, b := seed(), seed()
 	svc := contactdirectory.Service{DB: store, Visibility: testVisibility{uuid.New()}}
 	const phone = "+5511988887777"
-	ca, err := svc.Create(ctx, a, contactdirectory.Input{Name: "Cliente A", Phone: phone})
+	ca, err := svc.Create(ctx, a, contactdirectory.Input{Name: "Cliente A", Phone: phone, Email: "a@example.com", Notes: "observação do contato"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,6 +81,18 @@ func TestSameNumberInTwoProvidersStaysSeparate(t *testing.T) {
 	}
 	if _, err := svc.Get(ctx, b, ca.ID); err == nil {
 		t.Fatal("o provedor B leu o contato do provedor A")
+	}
+	// Optional e-mail and the contact notes are stored and returned; an update keeps them.
+	got, err := svc.Get(ctx, a, ca.ID)
+	if err != nil || got.Email == nil || *got.Email != "a@example.com" || got.Notes != "observação do contato" {
+		t.Fatalf("e-mail e notas do contato: %+v %v", got, err)
+	}
+	if _, err := svc.Update(ctx, a, ca.ID, contactdirectory.Input{Name: "Cliente A", Phone: phone, Email: "novo@example.com", Notes: "nota revisada"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = svc.Get(ctx, a, ca.ID)
+	if err != nil || got.Email == nil || *got.Email != "novo@example.com" || got.Notes != "nota revisada" {
+		t.Fatalf("depois de editar: %+v %v", got, err)
 	}
 	for _, who := range []struct {
 		p    auth.Principal

@@ -84,6 +84,24 @@ describe("workspace de atendimento", () => {
     expect(onSelect).toHaveBeenLastCalledWith("conversa-a");
   });
 
+  it("atalhos de buscar e de nota chamam as ações do painel e não disparam dentro de um campo", async () => {
+    const user = userEvent.setup();
+    const conversations = [card(), card({ id: "b", protocol: "b" })];
+    const onSearch = vi.fn();
+    const onNote = vi.fn();
+    render(<ConversationWorkspace scope={scope} listStatus="ready" conversations={conversations} detailConversationId={null} detailStatus="ready" entries={[]} onSelect={vi.fn()} onSearch={onSearch} onNote={onNote} onAssume={vi.fn()} onSend={vi.fn()} onClose={vi.fn()} onFarewell={vi.fn()} />);
+    const options = screen.getAllByRole("option");
+    await user.click(options[0]!);
+    await user.keyboard("{Control>}{Alt>}f{/Alt}{/Control}");
+    expect(onSearch).toHaveBeenCalledTimes(1);
+    await user.keyboard("{Control>}{Alt>}n{/Alt}{/Control}");
+    expect(onNote).toHaveBeenCalledTimes(1);
+    expect(onNote).toHaveBeenCalledWith(conversations[0]!.id);
+    screen.getByRole("textbox", { name: "Mensagem" }).focus();
+    await user.keyboard("{Control>}{Alt>}f{/Alt}{/Control}");
+    expect(onSearch).toHaveBeenCalledTimes(1);
+  });
+
   it("seleciona, assume, envia com status local e encerra com os campos obrigatórios", async () => {
     restore = mockViewport();
     const user = userEvent.setup();
