@@ -1,15 +1,15 @@
 # Matriz de requisitos V1 e V1 simples
 
-Contagem: A conferir: 48; Implementado e verificado: 157; Implementado, aguardando homologação externa: 35; Parcial, com lacuna concreta: 17.
+Contagem: A conferir: 3; Implementado e verificado: 182; Implementado, aguardando homologação externa: 42; Não implementado: 5; Parcial, com lacuna concreta: 25.
 
 Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1 a M8 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
 
 | Requisito | Marco | Tipo | Estado | Evidência / documentos que citam |
 | --- | --- | --- | --- | --- |
-| 12-tenants | M1 | V1 | A conferir | — |
+| 12-tenants | M1 | V1 | Implementado e verificado | platform/db/tenant_status_gate_test.go; TestSchemaForcesTenantRLSAndCompositeFK |
 | 12-isolamento | M1 | V1 | Implementado e verificado | TestSchemaForcesTenantRLSAndCompositeFK; testes tenantB em contactdocs/httpapi, ingress/authmeta, platform/db |
 | 12-usuarios-convites | M1 | V1 | Implementado e verificado | TestInviteAndResetTokensAreSingleUse, TestAgentLimitBlocksExtraInvites, TestFailedMailInvalidatesInvite |
-| 12-papeis | M1 | V1 | A conferir | — |
+| 12-papeis | M1 | V1 | Implementado e verificado | platform/httpapi/roles_test.go (papéis admin/supervisor/agent); RoleAllows |
 | 12-login | M1 | V1 | Implementado e verificado | TestArgon2idHashIsVersionedAndNotReversible (platform/auth) |
 | 12-reset-senha | M1 | V1 | Implementado e verificado | TestInviteAndResetTokensAreSingleUse |
 | 12-mfa | M1 | V1 | Implementado e verificado | TestMFAAttemptLimit, TestAdminWithoutMFACannotUseProtectedRoutes, TestAdminMustEnrollBeforePanelAndRecoveryIsSingleUse, TestKeyRotationKeepsReadingOldTOTP |
@@ -17,10 +17,10 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 12-bloqueio-login | M1 | V1 | Implementado e verificado | TestProgressiveLockoutByAccountAndIP, TestMFAAttemptLimit |
 | 12-https | M1 | V1 | Parcial, com lacuna concreta | Caddyfile e cookie Secure existem; HTTPS local verificado; Caddy/Compose não executado neste host (sem Docker) |
 | 12-credenciais-cifradas | M1 | V1 | Implementado e verificado | TestSealRejectsTransplantedCiphertext, TestKeyRotationKeepsReadingOldTOTP, TestManualConfigurationIsolationVersionAndSecret |
-| 12-fuso | M1 | V1 | A conferir | — |
-| 12-auditoria | M1 | V1 | A conferir | — |
+| 12-fuso | M1 | V1 | Implementado e verificado | businesshours TestBoundariesAndDST, reports (fuso do provedor), lifecycle/service_test.go usam o fuso do tenant |
+| 12-auditoria | M1 | V1 | Parcial, com lacuna concreta | auth grava audit para login, invitation.create/accept, password_reset.request/confirm, session.revoke, mfa.*, membership.deactivate (código); só a desativação tem teste dedicado (TestDisabledUserLosesSessions) |
 | 05-convite | M1 | V1 | Implementado e verificado | mesmos testes de 12-usuarios-convites |
-| 06-fuso | M1 | V1 | A conferir | — |
+| 06-fuso | M1 | V1 | Implementado e verificado | businesshours TestBoundariesAndDST, reports (fuso do provedor), lifecycle/service_test.go usam o fuso do tenant |
 | 13-painel-web | M1 | V1 | Parcial, com lacuna concreta | páginas existem e Vitest passou; jornada no navegador não repetida |
 | 13-responsiva | M1 | V1 | Parcial, com lacuna concreta | sem verificação em navegador nesta rodada |
 | 13-pt-br | M1 | V1 | A conferir | — |
@@ -32,7 +32,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 14-csrf | M1 | V1 | Implementado e verificado | TestPanelRejectsBadOriginCSRFAndRevokedSession; realtime_test.go (Origin do WebSocket) |
 | 14-cache | M1 | V1 | Implementado e verificado | TestIdentityCacheServesTheTenantAndDropsOnWrite, TestCacheIsolatesTenantAndRejectsMessages |
 | 14-isolamento | M1 | V1 | Implementado e verificado | RLS, cache por tenant (TestCacheIsolatesTenantAndRejectsMessages) e filas/anexos por tenant nos pacotes ingress, attachments; ver testes de dois tenants |
-| 14-logs | M1 | V1 | A conferir | — |
+| 14-logs | M1 | V1 | Parcial, com lacuna concreta | TestJSONLogRedactsSecrets e TestMessageWithDSNIsRedacted cobrem a redação; o handler JSON (logging.go) não injeta tenant_id automaticamente; não há teste de que todo log carrega tenant_id |
 | 14-migracoes | M1 | V1 | Implementado e verificado | TestBootstrapAndMigrationsAreIdempotent; migrações aplicadas em banco novo pela suíte |
 | 14-jobs-restart | M1 | V1 | Implementado e verificado | TestDispatch_RealHttptest_CrashRecoveryAndRiverRestart; platform/jobs/postgres_test.go |
 | 14-modos | M1 | V1 | Implementado e verificado | platform/runtime/runtime_test.go, cmd/chatisp/smoke_test.go |
@@ -42,38 +42,38 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 01-multi-numeros | M2 | V1 | Implementado e verificado | channel/configuration/service_test.go, shared_app_test.go |
 | 01-multi-caixas | M2 | V1 | Implementado e verificado | channel/configuration/service_test.go |
 | 01-escolher-conector | M2 | V1 | Implementado e verificado | channel/catalog/schema_test.go |
-| 02-receber-texto | M2 | V1 | A conferir | — |
-| 02-enviar-texto | M2 | V1 | A conferir | — |
-| 02-status | M2 | V1 | A conferir | — |
-| 02-falha-envio | M2 | V1 | A conferir | — |
-| 02-identidade-canal | M2 | V1 | A conferir | — |
-| 03-caixa-compartilhada | M2 | V1 | A conferir | — |
-| 03-tempo-real | M2 | V1 | A conferir | contracts/m2-realtime.md |
-| 03-historico | M2 | V1 | A conferir | — |
-| 03-estado-aberta | M2 | V1 | A conferir | — |
-| 03-estado-aguardando | M2 | V1 | A conferir | — |
-| 03-estado-encerrada | M2 | V1 | A conferir | — |
-| 03-assumir | M2 | V1 | A conferir | — |
-| 03-protocolo | M2 | V1 | A conferir | — |
-| 03-eventos | M2 | V1 | A conferir | — |
-| 04-encerrar-motivo | M2 | V1 | A conferir | — |
+| 02-receber-texto | M2 | V1 | Implementado, aguardando homologação externa | pipeline (TestInboundTextDoesNotCarryStructure), fake e metacloud/driver_test.go; sem Meta real (D2-03) |
+| 02-enviar-texto | M2 | V1 | Implementado, aguardando homologação externa | pipeline (TestInboundTextDoesNotCarryStructure), fake e metacloud/driver_test.go; sem Meta real (D2-03) |
+| 02-status | M2 | V1 | Implementado, aguardando homologação externa | pipeline (TestInboundTextDoesNotCarryStructure), fake e metacloud/driver_test.go; sem Meta real (D2-03) |
+| 02-falha-envio | M2 | V1 | Implementado, aguardando homologação externa | pipeline (TestInboundTextDoesNotCarryStructure), fake e metacloud/driver_test.go; sem Meta real (D2-03) |
+| 02-identidade-canal | M2 | V1 | Implementado e verificado | TestDatabaseRejectsIncompatibleBinding, TestMultitenantPayloadDoesNotAssignDefaultTenant |
+| 03-caixa-compartilhada | M2 | V1 | Implementado e verificado | TestInboxesSessionAndMembership; queue tests |
+| 03-tempo-real | M2 | V1 | Implementado e verificado | TestSnapshotCursorRollbackAndResync; features/conversation/use-attendance-events.test.tsx |
+| 03-historico | M2 | V1 | Implementado e verificado | features/conversation/message-timeline.test.tsx, history-events.test.tsx; TestAttemptStatusAndProtocolAdvanceCursor |
+| 03-estado-aberta | M2 | V1 | Implementado e verificado | TestInboundReopensWithinInboxWindow, lifecycle; TestAssumeClosePreservesCycle |
+| 03-estado-aguardando | M2 | V1 | Implementado e verificado | store/accepted_reply_test.go (waiting_customer só com resposta aceita mais nova que a última do cliente), contracts/m2-storage.md |
+| 03-estado-encerrada | M2 | V1 | Implementado e verificado | TestInboundReopensWithinInboxWindow, lifecycle; TestAssumeClosePreservesCycle |
+| 03-assumir | M2 | V1 | Implementado e verificado | TestConcurrentAssumeDoesNotPromoteConversationShareLock, assignment_bridge_test.go (duas assunções simultâneas) |
+| 03-protocolo | M2 | V1 | Implementado e verificado | TestConcurrentOpenKeepsOneProtocol |
+| 03-eventos | M2 | V1 | Implementado e verificado | features/conversation/message-timeline.test.tsx, history-events.test.tsx; TestAttemptStatusAndProtocolAdvanceCursor |
+| 04-encerrar-motivo | M2 | V1 | Implementado e verificado | close-conversation-dialog.test.tsx; TestClosedReplayAndConnectorBinding |
 | 11-websocket | M2 | V1 | Implementado e verificado | realtime/realtime_test.go (Origin, assinatura), TestWebSocketGauge* |
-| 14-id-mensagem | M2 | V1 | A conferir | — |
+| 14-id-mensagem | M2 | V1 | Implementado e verificado | índice único messages_external_key (tenant_id, connector_id, external_message_id) em 00006_attendance.sql; TestStatusDedupLinksWhenMessageArrives |
 | 14-webhook-duravel | M2 | V1 | Implementado e verificado | TestInvalidSignatureDoesNotPersist; ingress/authmeta/handler_test.go |
 | 14-assinatura-meta | M2 | V1 | Implementado e verificado | TestVerifySignatureUsesOriginalBytesAndSecret, TestInvalidSignatureDoesNotPersist |
 | 14-dedup | M2 | V1 | Implementado e verificado | TestStatusDedupLinksWhenMessageArrives, TestBoundedCacheAndDedup |
 | 14-outbox | M2 | V1 | Implementado e verificado | TestFakeIsolatedStatusStaysUncertain, TestClassifyAbsentResponseIsUncertain |
-| 14-fila | M2 | V1 | A conferir | — |
-| 14-filas-limite | M2 | V1 | A conferir | — |
+| 14-fila | M2 | V1 | Implementado e verificado | TestDispatch_RealHttptest_CrashRecoveryAndRiverRestart; platform/jobs |
+| 14-filas-limite | M2 | V1 | Implementado e verificado | TestReserveDispatchTenantGateOrder, TestPublishReservedBudgetAndRelease |
 | 14-retry | M2 | V1 | Implementado e verificado | TestBackoffJitterAndCap |
 | 14-dlq | M2 | V1 | Implementado e verificado | platform/jobs/telemetry_test.go, opsalert/evaluate_test.go |
-| 14-ordenacao | M2 | V1 | A conferir | — |
+| 14-ordenacao | M2 | V1 | Parcial, com lacuna concreta | a linha do tempo ordena por ingested_at e id (messages_timeline_idx, handler.go); trusted_at do driver existe mas não entra na ordenação; sem teste de ordenação com timestamps fora de ordem |
 | 14-conciliacao | M2 | V1 | Implementado e verificado | TestInbound_MessageAndStatusReconciliation, TestSuccessiveAcceptedReplies_SendAndReconcile |
 | 14-concorrencia | M2 | V1 | Implementado e verificado | lifecycle/service_test.go (versão da conversa, conflito) |
 | 14-rate-limit | M2 | V1 | Implementado e verificado | TestOutboundLeaseAndDiscardedInspection, TestStaleLeaseDoesNotReplaceFence, TestOutbound_ConcurrentLease_Dispute |
 | 14-realtime | M2 | V1 | Implementado e verificado | TestSnapshotCursorRollbackAndResync (realtime) |
 | 14-notify | M2 | V1 | Implementado e verificado | TestPGNotifySignaling |
-| 14-autorizacao | M2 | V1 | A conferir | contracts/m2-realtime.md |
+| 14-autorizacao | M2 | V1 | Implementado e verificado | TestDirectoryDeniesCrossTenantRevokedAndParameterEscalation, TestQueuedDeliveryRejectsRevokedSector, acceptance/m3a_revocation_test.go |
 | 14-alerta-token | M2 | V1 | Implementado e verificado | channel/configuration/service_test.go, opsalert/evaluate_test.go, metacloud/driver_test.go |
 | 14-limites-recursos | M2 | V1 | Implementado e verificado | TestPublishReservedBudgetAndRelease, TestReserveDispatchTenantGateOrder |
 | 02-nao-lidas | M3 | V1 | Implementado e verificado | TestAnnotationsPrivateAndPersonal, TestAnnotationReadIntentVersion (attendance); features/annotations |
@@ -96,14 +96,14 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 03-reabrir-mensagem | M3 | V1 simples | Implementado e verificado | TestInboundReopensWithinInboxWindow, TestInboundOutsideWindowOpensNewProtocol |
 | 03-etiquetas | M3 | V1 simples | Implementado e verificado | migração 00014 (annotation_tags, priority normal/urgent), TestAnnotationsHTTP; features/annotations |
 | 03-prioridade | M3 | V1 simples | Implementado e verificado | migração 00014 (annotation_tags, priority normal/urgent), TestAnnotationsHTTP; features/annotations |
-| 03-filtro-etiqueta | M3 | V1 simples | A conferir | — |
-| 04-emojis | M3 | V1 | A conferir | — |
+| 03-filtro-etiqueta | M3 | V1 simples | Implementado e verificado | TestQueueSearchPermissionsAndPersonalRead (filtro TagID) |
+| 04-emojis | M3 | V1 | Implementado e verificado | composer-tools.tsx (emojis) + composer-tools.test.tsx |
 | 04-rascunho | M3 | V1 | Implementado e verificado | features/conversation/productivity.test.tsx, message-composer.test.tsx |
 | 04-notif-ui | M3 | V1 | Implementado e verificado | TestPreferencesHTTPAndIsolation; features/notifications/notifications.test.tsx |
 | 04-notif-som | M3 | V1 | Implementado e verificado | TestPreferencesHTTPAndIsolation; features/notifications/notifications.test.tsx |
 | 04-notif-navegador | M3 | V1 | Parcial, com lacuna concreta | lógica coberta em Vitest; Notification API e permissão reais do navegador não exercidas nesta rodada |
-| 04-formatacao | M3 | V1 simples | A conferir | — |
-| 04-atalhos | M3 | V1 simples | A conferir | — |
+| 04-formatacao | M3 | V1 simples | Implementado e verificado | composer-tools.tsx (botões Negrito/Itálico na sintaxe do WhatsApp) + composer-tools.test.tsx; sem editor rico |
+| 04-atalhos | M3 | V1 simples | Parcial, com lacuna concreta | ctrlKey/metaKey em conversation-workspace.tsx e message-composer.tsx; Playwright de teclado não executado |
 | 04-prefs-notif | M3 | V1 simples | Implementado e verificado | TestPreferencesHTTPAndIsolation; features/notifications/notifications.test.tsx |
 | 05-equipes | M3 | V1 | Implementado e verificado | TestInboxesSessionAndMembership, TestOperatorDirectoryFunctionIsRestricted, sectors tests, TestDirectoryDeniesCrossTenantRevokedAndParameterEscalation |
 | 05-varios-setores | M3 | V1 | Implementado e verificado | TestInboxesSessionAndMembership, TestOperatorDirectoryFunctionIsRestricted, sectors tests, TestDirectoryDeniesCrossTenantRevokedAndParameterEscalation |
@@ -113,17 +113,17 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 07-nome-telefone | M3 | V1 | Implementado e verificado | TestDirectoryPGHTTP, TestContactDocuments |
 | 07-editar | M3 | V1 | Implementado e verificado | TestDirectoryPGHTTP, TestContactDocuments |
 | 07-historico | M3 | V1 | Implementado e verificado | TestHistoryEvents / history-events.test.tsx, TestDirectoryPGHTTP; features/conversation/conversation-sidebar.test.tsx |
-| 07-bloquear | M3 | V1 | A conferir | — |
+| 07-bloquear | M3 | V1 | Implementado e verificado | TestBlockedContactQuarantinesInboundAndStopsPendingDispatch (pipeline/m3_contact_block_test.go) |
 | 07-mesmo-numero | M3 | V1 | A conferir | — |
-| 07-email | M3 | V1 simples | A conferir | — |
-| 07-avatar | M3 | V1 simples | A conferir | — |
-| 07-notas | M3 | V1 simples | A conferir | — |
+| 07-email | M3 | V1 simples | Parcial, com lacuna concreta | contacts-page.tsx e DirectoryPGHTTP cobrem nome/telefone/e-mail/observações no cadastro; teste dedicado de e-mail e notas do contato não achado |
+| 07-avatar | M3 | V1 simples | Não implementado | campo avatar_reference existe no backend (contactdirectory), mas a interface não exibe avatar |
+| 07-notas | M3 | V1 simples | Parcial, com lacuna concreta | contacts-page.tsx e DirectoryPGHTTP cobrem nome/telefone/e-mail/observações no cadastro; teste dedicado de e-mail e notas do contato não achado |
 | 07-busca | M3 | V1 simples | Implementado e verificado | TestNormalizeAndMask, TestValidationErrorOmitsDocument, TestContactDocuments |
 | 07-cpf | M3 | V1 simples | Implementado e verificado | TestNormalizeAndMask, TestValidationErrorOmitsDocument, TestContactDocuments |
 | 12-acesso-setor | M3 | V1 | Implementado e verificado | TestInboxesSessionAndMembership, TestOperatorDirectoryFunctionIsRestricted, sectors tests, TestDirectoryDeniesCrossTenantRevokedAndParameterEscalation |
 | 12-mascara-cpf | M3 | V1 | Implementado e verificado | TestNormalizeAndMask, TestValidationErrorOmitsDocument, TestContactDocuments |
 | 13-lateral | M3 | V1 | Implementado e verificado | TestHistoryEvents / history-events.test.tsx, TestDirectoryPGHTTP; features/conversation/conversation-sidebar.test.tsx |
-| 13-atalhos | M3 | V1 simples | A conferir | — |
+| 13-atalhos | M3 | V1 simples | Parcial, com lacuna concreta | ctrlKey/metaKey em conversation-workspace.tsx e message-composer.tsx; Playwright de teclado não executado |
 | 13-notif-navegador | M3 | V1 | Parcial, com lacuna concreta | lógica coberta em Vitest; Notification API e permissão reais do navegador não exercidas nesta rodada |
 | 14-fulltext | M3 | V1 | Parcial, com lacuna concreta | migração 00016_m3_search.sql e queue.go existem; plano de consulta medido não registrado (a especificação exige medir) |
 | 02-receber-imagens | M4 | V1 | Implementado, aguardando homologação externa | Inbound* (TestInboundImageWebhookDownloadIdempotent, TestInboundDocumentTextDownload, TestInboundAudioMP4Download) com stand-in; sem Meta real (D2-03) |
@@ -133,24 +133,24 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 02-receber-audio | M4 | V1 | Implementado, aguardando homologação externa | Inbound* (TestInboundImageWebhookDownloadIdempotent, TestInboundDocumentTextDownload, TestInboundAudioMP4Download) com stand-in; sem Meta real (D2-03) |
 | 02-enviar-audio | M4 | V1 | Implementado, aguardando homologação externa | TestTranscodeRecorded*WithFFmpeg (ffmpeg 4.2.7 do host), TestSendMediaConvertedAudio*; sem envio real à Meta |
 | 02-gravar-audio | M4 | V1 | Implementado, aguardando homologação externa | TestTranscodeRecorded*WithFFmpeg (ffmpeg 4.2.7 do host), TestSendMediaConvertedAudio*; sem envio real à Meta |
-| 02-receber-video | M4 | V1 | A conferir | — |
+| 02-receber-video | M4 | V1 | Implementado, aguardando homologação externa | decode_media_test.go (vídeo wamid.video com legenda); stand-in, sem Meta real |
 | 02-receber-localizacao | M4 | V1 | Implementado, aguardando homologação externa | TestInboundReactionLocationAndVCard com stand-in; sem Meta real |
 | 02-citacao | M4 | V1 | Parcial, com lacuna concreta | citação funciona no envio (TestSendMediaCitationOverlapsInboundCommit), mas mensagens sem citação ainda podem exibir "Mensagem citada indisponível" (UUID zero, docs/continuidade-nexoisp.md) |
-| 02-janela | M4 | V1 | A conferir | — |
+| 02-janela | M4 | V1 | Implementado e verificado | features/channelpolicy/channel-policy.test.tsx; WindowIndicator em conversation-workspace.tsx |
 | 02-biblioteca-templates | M4 | V1 | Implementado, aguardando homologação externa | TestDispatchTemplateReachesIdentifiedDriver, TestPolicyPostgres, TestListTemplatesDoesNotTrustCacheWithoutDatabase; catálogo simulado, sem Meta real |
 | 02-sync-templates | M4 | V1 | Implementado, aguardando homologação externa | TestDispatchTemplateReachesIdentifiedDriver, TestPolicyPostgres, TestListTemplatesDoesNotTrustCacheWithoutDatabase; catálogo simulado, sem Meta real |
 | 02-envio-template | M4 | V1 | Implementado, aguardando homologação externa | TestDispatchTemplateReachesIdentifiedDriver, TestPolicyPostgres, TestListTemplatesDoesNotTrustCacheWithoutDatabase; catálogo simulado, sem Meta real |
 | 02-download-midia | M4 | V1 | Implementado, aguardando homologação externa | Inbound* (TestInboundImageWebhookDownloadIdempotent, TestInboundDocumentTextDownload, TestInboundAudioMP4Download) com stand-in; sem Meta real (D2-03) |
 | 02-consentimento | M4 | V1 | Implementado, aguardando homologação externa | TestDispatchTemplateReachesIdentifiedDriver, TestPolicyPostgres, TestListTemplatesDoesNotTrustCacheWithoutDatabase; catálogo simulado, sem Meta real |
 | 02-vcard | M4 | V1 simples | Implementado, aguardando homologação externa | TestInboundReactionLocationAndVCard com stand-in; sem Meta real |
-| 02-figurinhas | M4 | V1 simples | A conferir | — |
+| 02-figurinhas | M4 | V1 simples | Implementado, aguardando homologação externa | decode_media.go decodifica sticker; media-message.tsx exibe; sem Meta real |
 | 02-reacoes | M4 | V1 simples | Implementado, aguardando homologação externa | TestInboundReactionLocationAndVCard com stand-in; sem Meta real |
-| 02-interativos | M4 | V1 simples | A conferir | — |
-| 02-saude-numero | M4 | V1 simples | A conferir | — |
-| 02-limites-numero | M4 | V1 simples | A conferir | — |
+| 02-interativos | M4 | V1 simples | Implementado, aguardando homologação externa | decode de interactive e fallback numerado em triage (TestUnambiguousNumberedChoice); sem Meta real |
+| 02-saude-numero | M4 | V1 simples | Não implementado | nenhum código de qualidade/saúde do número encontrado |
+| 02-limites-numero | M4 | V1 simples | Não implementado | nenhum código de tier/limite de mensagens do número encontrado |
 | 04-compositor | M4 | V1 | A conferir | — |
-| 04-drag-colar | M4 | V1 | A conferir | — |
-| 04-preview | M4 | V1 | A conferir | — |
+| 04-drag-colar | M4 | V1 | Parcial, com lacuna concreta | onPaste/onDrop existem em message-composer.tsx e attachment-desk.tsx; sem teste dedicado e sem Playwright |
+| 04-preview | M4 | V1 | Implementado e verificado | features/attachments/attachments.test.tsx, media-panel.test.tsx; attachment-preview.tsx |
 | 04-download-seguro | M4 | V1 | Implementado e verificado | TestPersistentAuthorizedAttachmentLifecycle; features/attachments/attachments.test.tsx |
 | 04-respostas-prontas | M4 | V1 | Implementado e verificado | TestPersistentHTTPAndPolicy, TestClosedVariables; features/cannedreplies/slash-replies.test.tsx, canned-rules.test.tsx |
 | 04-atalho-barra | M4 | V1 | Implementado e verificado | TestPersistentHTTPAndPolicy, TestClosedVariables; features/cannedreplies/slash-replies.test.tsx, canned-rules.test.tsx |
@@ -162,7 +162,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 14-url-assinada | M4 | V1 | Implementado, aguardando homologação externa | TestS3SDKWithExplicitlySimulatedTransport; storage S3 real não usado |
 | 14-upload | M4 | V1 | Implementado e verificado | TestTypeAndNameValidation (attachments); HTML nomeado foto.jpg recusado com 422 no E2E M4A de 04/11 |
 | 14-ffmpeg | M4 | V1 | Parcial, com lacuna concreta | ffmpeg local com tempo, duração e tamanho; sem limite de CPU/memória por cgroup no worker (docs/CONTINUACAO-PRODUTO.md) |
-| 14-uso-meta | M4 | V1 simples | A conferir | — |
+| 14-uso-meta | M4 | V1 simples | Não implementado | nenhuma contabilização de categoria/cobrança reportada pela Meta encontrada |
 | 03-triagem | M5 | V1 simples | Implementado e verificado | TestMenuLimitsAndEmptyDecision, TestUnambiguousNumberedChoice, TestPostgresAndHTTP (triage); acceptance |
 | 03-adiar | M5 | V1 simples | Implementado e verificado | TestLifecyclePostgres (lifecycle); TestAutomationInboundClearsSnoozeInMessageTransaction |
 | 04-presenca | M5 | V1 | Implementado e verificado | TestPresencePostgres (presence); features/queue |
@@ -218,7 +218,7 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 08-resumo | M6 | V1 simples | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
 | 08-faturas | M6 | V1 simples | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
 | 08-segunda-via | M6 | V1 simples | Implementado, aguardando homologação externa | TestFakeSummaryAndInvoicesHonorContract; segunda via enfileirada no E2E de 04/11 com fake; Pix, artefato real e timeout ambíguo real não exercitados |
-| 08-abrir-cadastro | M6 | V1 simples | A conferir | — |
+| 08-abrir-cadastro | M6 | V1 simples | Não implementado | sem link para o cadastro no ERP; depende da URL do ambiente do fornecedor (D2-01) |
 | 08-iframe | M6 | V1 simples | Implementado e verificado | embed tests (origem, URL interna recusada, payload sem corpo); E2E M4B-M6 de 04/11 |
 | 08-protocolo-erp | M6 | V1 simples | Implementado, aguardando homologação externa | TestERPPostgres, TestFakeIsDeterministicAndLabeled, TestSupplierStaysUnwired: fake identificado, adaptador real ausente (D2-01) |
 | 11-api-conversas | M6 | V1 | Implementado e verificado | TestPublicConversationTextAssignAndState, TestPublicTemplate* |
