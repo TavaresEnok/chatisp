@@ -18,9 +18,9 @@ Escopo: fechar Docker/Compose e instalação, documentar o incidente de limpeza,
 
 Duas falhas independentes. A ausência de `docker0` sozinha não explica o build.
 
-1. **Rede do build.** Todo `RUN` na rede padrão falha ao criar o endpoint: `failed to create endpoint ... on network bridge: adding interface veth... to bridge docker0 failed: could not find bridge docker0` (BuildKit e builder clássico: `probe-buildkit-default.log`, `probe-classic-default.log`).
+1. **Rede do build.** Todo `RUN` na rede padrão falha ao criar o endpoint: `failed to create endpoint ... on network bridge: adding interface veth... to bridge docker0 failed: could not find bridge docker0` (BuildKit e builder clássico: `probe-buildkit-default.txt`, `probe-classic-default.txt`).
 2. **Seccomp do 20.10.9 com glibc ≥ 2.34.** Com `--network host` a rede funciona (DNS e download do índice do apt), mas:
-   - `apt-get update` do Debian 13 termina com `E: Problem executing scripts APT::Update::Post-Invoke` (`probe-buildkit-host.log`). O mesmo comando em `docker run` passa com `--security-opt seccomp=unconfined` (rc 0) e falha com o perfil padrão (rc 100).
+   - `apt-get update` do Debian 13 termina com `E: Problem executing scripts APT::Update::Post-Invoke` (`probe-buildkit-host.txt`). O mesmo comando em `docker run` passa com `--security-opt seccomp=unconfined` (rc 0) e falha com o perfil padrão (rc 100).
    - `node` 24 (bookworm, glibc 2.36) aborta já em `node -e 'console.log(1)'`: `Assertion failed: (0) == (uv_thread_create(...))`; com `seccomp=unconfined` executa.
    - O perfil padrão do 20.10.9 nega `clone3` com EPERM; a glibc só recua para `clone` com ENOSYS. O perfil upstream de 20.10.24 (que devolve ENOSYS via `errnoRet: 38`) **não resolveu neste daemon**: o Node continuou abortando, ou seja, o 20.10.9 não aplica o `errnoRet` desse perfil. Perfil permissivo sem regras (`defaultAction: ALLOW`) faz o Node rodar, o que confirma seccomp como causa.
    - Em execução isso também afeta qualquer binário com threads da glibc nova dentro dos contêineres (o `ffmpeg` do Debian 13 na imagem da API, por exemplo). PostgreSQL 18 (trixie) e o binário Go estático não foram afetados nas sondas.
@@ -40,13 +40,13 @@ O builder com seccomp desligado foi negado de novo. Caminho adotado, sem mexer n
 - `deploy/validacao/Dockerfile.alpine`: mesmos estágios, fontes e versões de Node (24.22.1), Go (1.27.3) e Caddy (2.10.2) do `deploy/Dockerfile`; muda só a base (Alpine 3.22 no runtime). Build na rede do host.
 - `CHATISP_VALIDATE_ALPINE=1 ./scripts/compose-validate.sh` usa esse Dockerfile e `postgres:18.6-alpine` (mesma versão 18.6). O restante é o `deploy/compose.yaml` como está: Garage, init do Garage em `debian:13-slim`, migrate, api, worker, Caddy, healthchecks e dependências.
 
-Tentativas até o verde (resumos em `docker-20261105/compose-validate-tentativa-*.log`):
+Tentativas até o verde (resumos em `docker-20261105/compose-validate-tentativa-*.txt`):
 
 1. Rede: `could not find an available, non-overlapping IPv4 address pool`. O `default-address-pools` do daemon (10.177.0.0/16 com tamanho /16) só comporta a rede `bridge`. O script passou a escolher uma /24 livre em 172.31.240–254 (sem rota nem rede Docker), sobrescrevível por `CHATISP_VALIDATE_SUBNET`.
 2–3. `postgres:18.6-trixie` unhealthy: `initdb` falha com `could not execute command "postgres -V": Operation not permitted`. É o mesmo `clone3` negado, agora em tempo de execução. A imagem de banco do Compose também não roda em Docker 20.10.9. No modo de validação, `postgres:18.6-alpine`.
 4. **Defeito do produto:** `curl: (35) ... tlsv1 alert internal error` no Caddy. O `deploy/Caddyfile` tinha só o site `:443` com `tls internal`: sem nome de host, o emissor interno não tem para quem emitir, e o handshake falha também em `https://localhost:8443`. Corrigido para `localhost:443, 127.0.0.1:443` com `default_sni localhost` (comentário no arquivo diz como acrescentar um domínio). Teste de guarda: `TestCaddyfileNamesTheInternalCertificate`, que falha com o `:443` antigo.
 5. Verde. Depois disso o script passou a construir cada etiqueta uma vez (`build chatisp-migrate caddy` + `up --no-build`) e a remover as imagens que ele mesmo baixar.
-6. Verde de novo com o script final (`docker-20261105/compose-validate-final.log`, passos do build em `compose-validate-final-build-steps.log`):
+6. Verde de novo com o script final (`docker-20261105/compose-validate-final.txt`, passos do build em `compose-validate-final-build-steps.txt`):
 
 ```
 subida ok: postgres, garage, migrações, api, worker e caddy (https://127.0.0.1:48077)

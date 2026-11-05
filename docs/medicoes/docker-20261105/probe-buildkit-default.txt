@@ -1,0 +1,25 @@
+#1 [internal] load build definition from Dockerfile
+#1 sha256:df6235e2f50b8c4e67e728c6e35dae8cf9df8ae5f3f9906715b1e9b4cff4bf19
+#1 transferring dockerfile: 161B done
+#1 DONE 0.1s
+
+#2 [internal] load .dockerignore
+#2 sha256:4489ac259899c6ccd44e060fa2db5019da16057311bd6ff614c9215438f0099e
+#2 transferring context: 2B done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/debian:13-slim
+#3 sha256:d16a967a851959c5d489fc8cbbaa4d59cf464ed8859305ab7c79207450520f37
+#3 DONE 0.0s
+
+#4 [1/2] FROM docker.io/library/debian:13-slim
+#4 sha256:0c5e95dfe87504d7432c276b235a631ac2516a96c327a7e418c7f52e0c541408
+#4 CACHED
+
+#5 [2/2] RUN getent hosts deb.debian.org && apt-get update -o Acquire::Retries=0 >/dev/null && echo NET_OK
+#5 sha256:d83623318015ad86554560689e25f63219734c7d5630c11f919cf3b4e4a0bbd8
+#5 ERROR: executor failed running [/bin/sh -c getent hosts deb.debian.org && apt-get update -o Acquire::Retries=0 >/dev/null && echo NET_OK]: failed to create endpoint unp32he4u5kzx7quywx2ovlir on network bridge: adding interface vethce2d6a9 to bridge docker0 failed: could not find bridge docker0: route ip+net: no such network interface
+------
+ > [2/2] RUN getent hosts deb.debian.org && apt-get update -o Acquire::Retries=0 >/dev/null && echo NET_OK:
+------
+executor failed running [/bin/sh -c getent hosts deb.debian.org && apt-get update -o Acquire::Retries=0 >/dev/null && echo NET_OK]: failed to create endpoint unp32he4u5kzx7quywx2ovlir on network bridge: adding interface vethce2d6a9 to bridge docker0 failed: could not find bridge docker0: route ip+net: no such network interface

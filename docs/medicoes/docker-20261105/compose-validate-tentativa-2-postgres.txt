@@ -1,0 +1,2 @@
+dependency failed to start: container chatisp-validate-215835-postgres-1 is unhealthy
+rc=1

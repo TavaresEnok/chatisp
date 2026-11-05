@@ -1,0 +1,5 @@
+dependency failed to start: container chatisp-validate-232470-postgres-1 is unhealthy
+falha (1); logs do projeto chatisp-validate-232470:
+postgres-1  | could not execute command ""/usr/lib/postgresql/18/bin/postgres" -V": Operation not permitted
+postgres-1  | initdb: error: program "postgres" is needed by initdb but was not found in the same directory as "/usr/lib/postgresql/18/bin/initdb"
+rc=1

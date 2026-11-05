@@ -1,0 +1,31 @@
+#1 [internal] load build definition from Dockerfile
+#1 sha256:c31fe65a4d7402af96c3086490aed456f5a93a4fe6816d6e3a94ef1de249adbf
+#1 transferring dockerfile: 37B done
+#1 DONE 0.0s
+
+#2 [internal] load .dockerignore
+#2 sha256:b6e92c8ece501eee594b6fa2c9e62d14169623a58958b4b118a9ef71cd3a129a
+#2 transferring context: 2B done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/debian:13-slim
+#3 sha256:d16a967a851959c5d489fc8cbbaa4d59cf464ed8859305ab7c79207450520f37
+#3 DONE 0.0s
+
+#4 [1/2] FROM docker.io/library/debian:13-slim
+#4 sha256:0c5e95dfe87504d7432c276b235a631ac2516a96c327a7e418c7f52e0c541408
+#4 CACHED
+
+#5 [2/2] RUN getent hosts deb.debian.org && apt-get update -o Acquire::Retries=0 >/dev/null && echo NET_OK
+#5 sha256:2a0719ef7f037ca2981923979539948e52bacba79f1387c5ca66ba7769e6b790
+#5 0.207 2a04:4e42:600::644 debian.map.fastlydns.net deb.debian.org
+#5 0.207 2a04:4e42::644  debian.map.fastlydns.net deb.debian.org
+#5 0.207 2a04:4e42:400::644 debian.map.fastlydns.net deb.debian.org
+#5 0.207 2a04:4e42:200::644 debian.map.fastlydns.net deb.debian.org
+#5 2.505 E: Problem executing scripts APT::Update::Post-Invoke 'rm -f /var/cache/apt/archives/*.deb /var/cache/apt/archives/partial/*.deb /var/cache/apt/*.bin || true'
+#5 2.505 E: Sub-process returned an error code
+#5 ERROR: executor failed running [/bin/sh -c getent hosts deb.debian.org && apt-get update -o Acquire::Retries=0 >/dev/null && echo NET_OK]: exit code: 100
+------
+ > [2/2] RUN getent hosts deb.debian.org && apt-get update -o Acquire::Retries=0 >/dev/null && echo NET_OK:
+------
+executor failed running [/bin/sh -c getent hosts deb.debian.org && apt-get update -o Acquire::Retries=0 >/dev/null && echo NET_OK]: exit code: 100
