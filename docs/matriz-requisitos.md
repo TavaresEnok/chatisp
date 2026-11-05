@@ -1,8 +1,8 @@
 # Matriz de requisitos V1 e V1 simples
 
-Contagem: A conferir: 207; Implementado e verificado: 37; Implementado, aguardando homologação externa: 4; Parcial, com lacuna concreta: 9.
+Contagem: A conferir: 140; Implementado e verificado: 80; Implementado, aguardando homologação externa: 22; Parcial, com lacuna concreta: 15.
 
-Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1/M2 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
+Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1 a M4 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
 
 | Requisito | Marco | Tipo | Estado | Evidência / documentos que citam |
 | --- | --- | --- | --- | --- |
@@ -76,92 +76,92 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 14-autorizacao | M2 | V1 | A conferir | contracts/m2-realtime.md |
 | 14-alerta-token | M2 | V1 | Implementado e verificado | channel/configuration/service_test.go, opsalert/evaluate_test.go, metacloud/driver_test.go |
 | 14-limites-recursos | M2 | V1 | Implementado e verificado | TestPublishReservedBudgetAndRelease, TestReserveDispatchTenantGateOrder |
-| 02-nao-lidas | M3 | V1 | A conferir | — |
-| 03-abas | M3 | V1 | A conferir | — |
-| 03-ve-setores | M3 | V1 | A conferir | — |
-| 03-historico-contato | M3 | V1 | A conferir | — |
-| 03-reabrir-manual | M3 | V1 | A conferir | — |
-| 03-transferir-atendente | M3 | V1 | A conferir | — |
-| 03-transferir-setor | M3 | V1 | A conferir | — |
-| 03-retirar-responsavel | M3 | V1 | A conferir | — |
-| 03-notas | M3 | V1 | A conferir | — |
-| 03-busca-nome | M3 | V1 | A conferir | — |
-| 03-busca-conteudo | M3 | V1 | A conferir | — |
-| 03-busca-protocolo | M3 | V1 | A conferir | — |
-| 03-filtro-estado | M3 | V1 | A conferir | — |
-| 03-filtro-caixa | M3 | V1 | A conferir | — |
-| 03-ordenacao | M3 | V1 | A conferir | — |
-| 03-lida | M3 | V1 | A conferir | — |
-| 03-colisao | M3 | V1 | A conferir | — |
-| 03-reabrir-mensagem | M3 | V1 simples | A conferir | — |
-| 03-etiquetas | M3 | V1 simples | A conferir | — |
-| 03-prioridade | M3 | V1 simples | A conferir | — |
+| 02-nao-lidas | M3 | V1 | Implementado e verificado | TestAnnotationsPrivateAndPersonal, TestAnnotationReadIntentVersion (attendance); features/annotations |
+| 03-abas | M3 | V1 | Implementado e verificado | TestQueueHTTP, TestDirectoryPGHTTP; features/queue/queue-integration.test.tsx, queue-controls.test.tsx |
+| 03-ve-setores | M3 | V1 | Implementado e verificado | TestInboxesSessionAndMembership, TestOperatorDirectoryFunctionIsRestricted, sectors tests, TestDirectoryDeniesCrossTenantRevokedAndParameterEscalation |
+| 03-historico-contato | M3 | V1 | Implementado e verificado | TestHistoryEvents / history-events.test.tsx, TestDirectoryPGHTTP; features/conversation/conversation-sidebar.test.tsx |
+| 03-reabrir-manual | M3 | V1 | Implementado e verificado | TestAssumeClosePreservesCycle, TestAssignmentHTTPReplay, TestTransferSectorRevokesSourceAccess; features/assignment |
+| 03-transferir-atendente | M3 | V1 | Implementado e verificado | TestAssumeClosePreservesCycle, TestAssignmentHTTPReplay, TestTransferSectorRevokesSourceAccess; features/assignment |
+| 03-transferir-setor | M3 | V1 | Implementado e verificado | TestAssumeClosePreservesCycle, TestAssignmentHTTPReplay, TestTransferSectorRevokesSourceAccess; features/assignment |
+| 03-retirar-responsavel | M3 | V1 | Implementado e verificado | TestAssumeClosePreservesCycle, TestAssignmentHTTPReplay, TestTransferSectorRevokesSourceAccess; features/assignment |
+| 03-notas | M3 | V1 | Implementado e verificado | TestAnnotationsPrivateAndPersonal, TestAnnotationReadIntentVersion (attendance); features/annotations |
+| 03-busca-nome | M3 | V1 | Implementado e verificado | TestQueueHTTP, TestDirectoryPGHTTP; features/queue/queue-integration.test.tsx, queue-controls.test.tsx |
+| 03-busca-conteudo | M3 | V1 | Parcial, com lacuna concreta | migração 00016_m3_search.sql e queue.go existem; plano de consulta medido não registrado (a especificação exige medir) |
+| 03-busca-protocolo | M3 | V1 | Implementado e verificado | TestQueueHTTP, TestDirectoryPGHTTP; features/queue/queue-integration.test.tsx, queue-controls.test.tsx |
+| 03-filtro-estado | M3 | V1 | Implementado e verificado | TestQueueHTTP, TestDirectoryPGHTTP; features/queue/queue-integration.test.tsx, queue-controls.test.tsx |
+| 03-filtro-caixa | M3 | V1 | Implementado e verificado | TestQueueHTTP, TestDirectoryPGHTTP; features/queue/queue-integration.test.tsx, queue-controls.test.tsx |
+| 03-ordenacao | M3 | V1 | Implementado e verificado | TestQueueHTTP, TestDirectoryPGHTTP; features/queue/queue-integration.test.tsx, queue-controls.test.tsx |
+| 03-lida | M3 | V1 | Implementado e verificado | TestAnnotationsPrivateAndPersonal, TestAnnotationReadIntentVersion (attendance); features/annotations |
+| 03-colisao | M3 | V1 | Implementado e verificado | TestCollisionHTTPAndSessions; features/collision/use-collision.test.tsx |
+| 03-reabrir-mensagem | M3 | V1 simples | Implementado e verificado | TestInboundReopensWithinInboxWindow, TestInboundOutsideWindowOpensNewProtocol |
+| 03-etiquetas | M3 | V1 simples | Implementado e verificado | migração 00014 (annotation_tags, priority normal/urgent), TestAnnotationsHTTP; features/annotations |
+| 03-prioridade | M3 | V1 simples | Implementado e verificado | migração 00014 (annotation_tags, priority normal/urgent), TestAnnotationsHTTP; features/annotations |
 | 03-filtro-etiqueta | M3 | V1 simples | A conferir | — |
 | 04-emojis | M3 | V1 | A conferir | — |
-| 04-rascunho | M3 | V1 | A conferir | — |
-| 04-notif-ui | M3 | V1 | A conferir | — |
-| 04-notif-som | M3 | V1 | A conferir | — |
-| 04-notif-navegador | M3 | V1 | A conferir | — |
+| 04-rascunho | M3 | V1 | Implementado e verificado | features/conversation/productivity.test.tsx, message-composer.test.tsx |
+| 04-notif-ui | M3 | V1 | Implementado e verificado | TestPreferencesHTTPAndIsolation; features/notifications/notifications.test.tsx |
+| 04-notif-som | M3 | V1 | Implementado e verificado | TestPreferencesHTTPAndIsolation; features/notifications/notifications.test.tsx |
+| 04-notif-navegador | M3 | V1 | Parcial, com lacuna concreta | lógica coberta em Vitest; Notification API e permissão reais do navegador não exercidas nesta rodada |
 | 04-formatacao | M3 | V1 simples | A conferir | — |
 | 04-atalhos | M3 | V1 simples | A conferir | — |
-| 04-prefs-notif | M3 | V1 simples | A conferir | — |
-| 05-equipes | M3 | V1 | A conferir | — |
-| 05-varios-setores | M3 | V1 | A conferir | — |
-| 05-acesso-caixa | M3 | V1 | A conferir | — |
-| 07-criar-receber | M3 | V1 | A conferir | — |
-| 07-criar-manual | M3 | V1 | A conferir | — |
-| 07-nome-telefone | M3 | V1 | A conferir | — |
-| 07-editar | M3 | V1 | A conferir | — |
-| 07-historico | M3 | V1 | A conferir | — |
+| 04-prefs-notif | M3 | V1 simples | Implementado e verificado | TestPreferencesHTTPAndIsolation; features/notifications/notifications.test.tsx |
+| 05-equipes | M3 | V1 | Implementado e verificado | TestInboxesSessionAndMembership, TestOperatorDirectoryFunctionIsRestricted, sectors tests, TestDirectoryDeniesCrossTenantRevokedAndParameterEscalation |
+| 05-varios-setores | M3 | V1 | Implementado e verificado | TestInboxesSessionAndMembership, TestOperatorDirectoryFunctionIsRestricted, sectors tests, TestDirectoryDeniesCrossTenantRevokedAndParameterEscalation |
+| 05-acesso-caixa | M3 | V1 | Implementado e verificado | TestInboxesSessionAndMembership, TestOperatorDirectoryFunctionIsRestricted, sectors tests, TestDirectoryDeniesCrossTenantRevokedAndParameterEscalation |
+| 07-criar-receber | M3 | V1 | Implementado e verificado | TestDirectoryPGHTTP, TestContactDocuments |
+| 07-criar-manual | M3 | V1 | Implementado e verificado | TestDirectoryPGHTTP, TestContactDocuments |
+| 07-nome-telefone | M3 | V1 | Implementado e verificado | TestDirectoryPGHTTP, TestContactDocuments |
+| 07-editar | M3 | V1 | Implementado e verificado | TestDirectoryPGHTTP, TestContactDocuments |
+| 07-historico | M3 | V1 | Implementado e verificado | TestHistoryEvents / history-events.test.tsx, TestDirectoryPGHTTP; features/conversation/conversation-sidebar.test.tsx |
 | 07-bloquear | M3 | V1 | A conferir | — |
 | 07-mesmo-numero | M3 | V1 | A conferir | — |
 | 07-email | M3 | V1 simples | A conferir | — |
 | 07-avatar | M3 | V1 simples | A conferir | — |
 | 07-notas | M3 | V1 simples | A conferir | — |
-| 07-busca | M3 | V1 simples | A conferir | — |
-| 07-cpf | M3 | V1 simples | A conferir | — |
-| 12-acesso-setor | M3 | V1 | A conferir | — |
-| 12-mascara-cpf | M3 | V1 | A conferir | — |
-| 13-lateral | M3 | V1 | A conferir | — |
+| 07-busca | M3 | V1 simples | Implementado e verificado | TestNormalizeAndMask, TestValidationErrorOmitsDocument, TestContactDocuments |
+| 07-cpf | M3 | V1 simples | Implementado e verificado | TestNormalizeAndMask, TestValidationErrorOmitsDocument, TestContactDocuments |
+| 12-acesso-setor | M3 | V1 | Implementado e verificado | TestInboxesSessionAndMembership, TestOperatorDirectoryFunctionIsRestricted, sectors tests, TestDirectoryDeniesCrossTenantRevokedAndParameterEscalation |
+| 12-mascara-cpf | M3 | V1 | Implementado e verificado | TestNormalizeAndMask, TestValidationErrorOmitsDocument, TestContactDocuments |
+| 13-lateral | M3 | V1 | Implementado e verificado | TestHistoryEvents / history-events.test.tsx, TestDirectoryPGHTTP; features/conversation/conversation-sidebar.test.tsx |
 | 13-atalhos | M3 | V1 simples | A conferir | — |
-| 13-notif-navegador | M3 | V1 | A conferir | — |
-| 14-fulltext | M3 | V1 | A conferir | — |
-| 02-receber-imagens | M4 | V1 | A conferir | — |
-| 02-enviar-imagens | M4 | V1 | A conferir | — |
-| 02-receber-documentos | M4 | V1 | A conferir | — |
-| 02-enviar-documentos | M4 | V1 | A conferir | — |
-| 02-receber-audio | M4 | V1 | A conferir | — |
-| 02-enviar-audio | M4 | V1 | A conferir | — |
-| 02-gravar-audio | M4 | V1 | A conferir | — |
+| 13-notif-navegador | M3 | V1 | Parcial, com lacuna concreta | lógica coberta em Vitest; Notification API e permissão reais do navegador não exercidas nesta rodada |
+| 14-fulltext | M3 | V1 | Parcial, com lacuna concreta | migração 00016_m3_search.sql e queue.go existem; plano de consulta medido não registrado (a especificação exige medir) |
+| 02-receber-imagens | M4 | V1 | Implementado, aguardando homologação externa | Inbound* (TestInboundImageWebhookDownloadIdempotent, TestInboundDocumentTextDownload, TestInboundAudioMP4Download) com stand-in; sem Meta real (D2-03) |
+| 02-enviar-imagens | M4 | V1 | Implementado, aguardando homologação externa | TestOutboundMediaImageAndDocument, TestOutboundMediaOfficialLoopbackCarriesBytes; sem Meta real |
+| 02-receber-documentos | M4 | V1 | Implementado, aguardando homologação externa | Inbound* (TestInboundImageWebhookDownloadIdempotent, TestInboundDocumentTextDownload, TestInboundAudioMP4Download) com stand-in; sem Meta real (D2-03) |
+| 02-enviar-documentos | M4 | V1 | Implementado, aguardando homologação externa | TestOutboundMediaImageAndDocument, TestOutboundMediaOfficialLoopbackCarriesBytes; sem Meta real |
+| 02-receber-audio | M4 | V1 | Implementado, aguardando homologação externa | Inbound* (TestInboundImageWebhookDownloadIdempotent, TestInboundDocumentTextDownload, TestInboundAudioMP4Download) com stand-in; sem Meta real (D2-03) |
+| 02-enviar-audio | M4 | V1 | Implementado, aguardando homologação externa | TestTranscodeRecorded*WithFFmpeg (ffmpeg 4.2.7 do host), TestSendMediaConvertedAudio*; sem envio real à Meta |
+| 02-gravar-audio | M4 | V1 | Implementado, aguardando homologação externa | TestTranscodeRecorded*WithFFmpeg (ffmpeg 4.2.7 do host), TestSendMediaConvertedAudio*; sem envio real à Meta |
 | 02-receber-video | M4 | V1 | A conferir | — |
-| 02-receber-localizacao | M4 | V1 | A conferir | — |
-| 02-citacao | M4 | V1 | A conferir | — |
+| 02-receber-localizacao | M4 | V1 | Implementado, aguardando homologação externa | TestInboundReactionLocationAndVCard com stand-in; sem Meta real |
+| 02-citacao | M4 | V1 | Parcial, com lacuna concreta | citação funciona no envio (TestSendMediaCitationOverlapsInboundCommit), mas mensagens sem citação ainda podem exibir "Mensagem citada indisponível" (UUID zero, docs/continuidade-nexoisp.md) |
 | 02-janela | M4 | V1 | A conferir | — |
-| 02-biblioteca-templates | M4 | V1 | A conferir | — |
-| 02-sync-templates | M4 | V1 | A conferir | — |
-| 02-envio-template | M4 | V1 | A conferir | — |
-| 02-download-midia | M4 | V1 | A conferir | — |
-| 02-consentimento | M4 | V1 | A conferir | — |
-| 02-vcard | M4 | V1 simples | A conferir | — |
+| 02-biblioteca-templates | M4 | V1 | Implementado, aguardando homologação externa | TestDispatchTemplateReachesIdentifiedDriver, TestPolicyPostgres, TestListTemplatesDoesNotTrustCacheWithoutDatabase; catálogo simulado, sem Meta real |
+| 02-sync-templates | M4 | V1 | Implementado, aguardando homologação externa | TestDispatchTemplateReachesIdentifiedDriver, TestPolicyPostgres, TestListTemplatesDoesNotTrustCacheWithoutDatabase; catálogo simulado, sem Meta real |
+| 02-envio-template | M4 | V1 | Implementado, aguardando homologação externa | TestDispatchTemplateReachesIdentifiedDriver, TestPolicyPostgres, TestListTemplatesDoesNotTrustCacheWithoutDatabase; catálogo simulado, sem Meta real |
+| 02-download-midia | M4 | V1 | Implementado, aguardando homologação externa | Inbound* (TestInboundImageWebhookDownloadIdempotent, TestInboundDocumentTextDownload, TestInboundAudioMP4Download) com stand-in; sem Meta real (D2-03) |
+| 02-consentimento | M4 | V1 | Implementado, aguardando homologação externa | TestDispatchTemplateReachesIdentifiedDriver, TestPolicyPostgres, TestListTemplatesDoesNotTrustCacheWithoutDatabase; catálogo simulado, sem Meta real |
+| 02-vcard | M4 | V1 simples | Implementado, aguardando homologação externa | TestInboundReactionLocationAndVCard com stand-in; sem Meta real |
 | 02-figurinhas | M4 | V1 simples | A conferir | — |
-| 02-reacoes | M4 | V1 simples | A conferir | — |
+| 02-reacoes | M4 | V1 simples | Implementado, aguardando homologação externa | TestInboundReactionLocationAndVCard com stand-in; sem Meta real |
 | 02-interativos | M4 | V1 simples | A conferir | — |
 | 02-saude-numero | M4 | V1 simples | A conferir | — |
 | 02-limites-numero | M4 | V1 simples | A conferir | — |
 | 04-compositor | M4 | V1 | A conferir | — |
 | 04-drag-colar | M4 | V1 | A conferir | — |
 | 04-preview | M4 | V1 | A conferir | — |
-| 04-download-seguro | M4 | V1 | A conferir | — |
-| 04-respostas-prontas | M4 | V1 | A conferir | — |
-| 04-atalho-barra | M4 | V1 | A conferir | — |
-| 04-assinatura | M4 | V1 simples | A conferir | — |
-| 04-variaveis | M4 | V1 simples | A conferir | — |
-| 07-iniciar-template | M4 | V1 | A conferir | — |
-| 14-download-midia | M4 | V1 | A conferir | — |
-| 14-s3 | M4 | V1 | A conferir | — |
-| 14-url-assinada | M4 | V1 | A conferir | — |
-| 14-upload | M4 | V1 | A conferir | — |
-| 14-ffmpeg | M4 | V1 | A conferir | — |
+| 04-download-seguro | M4 | V1 | Implementado e verificado | TestPersistentAuthorizedAttachmentLifecycle; features/attachments/attachments.test.tsx |
+| 04-respostas-prontas | M4 | V1 | Implementado e verificado | TestPersistentHTTPAndPolicy, TestClosedVariables; features/cannedreplies/slash-replies.test.tsx, canned-rules.test.tsx |
+| 04-atalho-barra | M4 | V1 | Implementado e verificado | TestPersistentHTTPAndPolicy, TestClosedVariables; features/cannedreplies/slash-replies.test.tsx, canned-rules.test.tsx |
+| 04-assinatura | M4 | V1 simples | Implementado e verificado | TestHumanSignatureOnceAndTemplateOptOut |
+| 04-variaveis | M4 | V1 simples | Implementado e verificado | TestPersistentHTTPAndPolicy, TestClosedVariables; features/cannedreplies/slash-replies.test.tsx, canned-rules.test.tsx |
+| 07-iniciar-template | M4 | V1 | Implementado, aguardando homologação externa | TestDispatchTemplateReachesIdentifiedDriver, TestPolicyPostgres, TestListTemplatesDoesNotTrustCacheWithoutDatabase; catálogo simulado, sem Meta real |
+| 14-download-midia | M4 | V1 | Implementado e verificado | TestInboundMediaFailuresStayOnTheMessage, TestInboundAttachmentBudget, TestInboundImageWebhookDownloadIdempotent |
+| 14-s3 | M4 | V1 | Implementado, aguardando homologação externa | TestS3SDKWithExplicitlySimulatedTransport; storage S3 real não usado |
+| 14-url-assinada | M4 | V1 | Implementado, aguardando homologação externa | TestS3SDKWithExplicitlySimulatedTransport; storage S3 real não usado |
+| 14-upload | M4 | V1 | Implementado e verificado | TestTypeAndNameValidation (attachments); HTML nomeado foto.jpg recusado com 422 no E2E M4A de 04/11 |
+| 14-ffmpeg | M4 | V1 | Parcial, com lacuna concreta | ffmpeg local com tempo, duração e tamanho; sem limite de CPU/memória por cgroup no worker (docs/CONTINUACAO-PRODUTO.md) |
 | 14-uso-meta | M4 | V1 simples | A conferir | — |
 | 03-triagem | M5 | V1 simples | A conferir | — |
 | 03-adiar | M5 | V1 simples | A conferir | — |

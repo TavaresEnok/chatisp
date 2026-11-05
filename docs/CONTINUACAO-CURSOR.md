@@ -155,3 +155,5 @@ Pendências internas: conferir as 248 linhas "A conferir" da matriz contra códi
 Próxima tarefa concreta: conferir a matriz por marco, começando por M1 e M2 (autenticação, RLS, isolamento), e rodar o E2E com um Chromium disponível.
 Pendências externas: iguais às da seção anterior (D2-01 a D2-07).
 Como retomar: `cd` na worktree, `git log --oneline -5`, abrir `docs/matriz-requisitos.md`; subir com `CHATISP_DEV_TLS=1 ./scripts/dev.sh` (portas livres via variáveis do README).
+
+Atualização (05/11/2026): matriz de M1 a M4 classificada (`4e9a665` e o commit seguinte). Ficaram "A conferir" em M3/M4: 03-filtro-etiqueta, 04-emojis, 04-formatacao, 04-atalhos, 13-atalhos, 04-compositor, 04-drag-colar, 04-preview, 07-bloquear, 07-mesmo-numero, 07-email, 07-avatar, 07-notas, 02-receber-video, 02-figurinhas, 02-janela, 02-interativos, 02-saude-numero, 02-limites-numero, 14-uso-meta. Próxima tarefa: conferir esses 20 e depois M5 a M8.
