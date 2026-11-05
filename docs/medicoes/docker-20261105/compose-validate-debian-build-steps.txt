@@ -1,0 +1,8 @@
+#11 [chatisp-migrate api 4/4] RUN go build -mod=vendor -trimpath -o /out/chatisp ./cmd/chatisp
+#20 [caddy web 1/7] FROM docker.io/library/node:24.22.1-bookworm-slim
+#21 [caddy edge 1/3] FROM docker.io/library/caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+#25 [caddy web 4/7] RUN npm ci --no-audit --no-fund
+#28 [caddy web 7/7] RUN npm run build
+#5 [chatisp-migrate runtime 1/4] FROM docker.io/library/debian:13-slim
+#6 [chatisp-migrate api 1/4] FROM docker.io/library/golang:1.27.3-bookworm@sha256:b08bc99468058b6d8a0ada17fa54996b910d5e82a7e95bee0372e3bd98415258
+#8 [chatisp-migrate runtime 2/4] RUN apt-get update 	&& apt-get install -y --no-install-recommends ca-certificates curl ffmpeg 	&& rm -rf /var/lib/apt/lists/* 	

@@ -57,7 +57,26 @@ compose ok: build, healthchecks, migrações, HTTPS, login, reinício e encerram
 
 Provado: build das imagens a partir das fontes, subida com todos os healthchecks (`postgres`, `garage`, `chatisp-api`, `chatisp-worker`, `caddy`), migrações concluídas (`chatisp-migrate` saiu com 0), HTTPS pelo Caddy (`/healthz`, `/readyz`, painel), `chatisp bootstrap -superadmin` dentro do Compose, login `POST /api/panel/session` com `__Host-session`, reinício com o mesmo login e o bootstrap repetido sem recriar nada, e `down -v` sem contêiner, volume nem rede do projeto.
 
-**Não provado neste host:** as imagens Debian, ou seja, o `deploy/Dockerfile` (apt do Debian 13, Node 24 bookworm) e o `postgres:18.6-trixie`. Elas exigem Docker ≥ 20.10.10. Prova que encerra: `./scripts/compose-validate.sh` sem `CHATISP_VALIDATE_ALPINE` num host assim.
+### Validação com as imagens Debian originais (05/11/2026, 16:00–16:10 UTC)
+
+Autorizado pelo usuário ("faça o que for necessário"). O Docker compartilhado não foi atualizado nem reiniciado, porque isso pararia os contêineres em execução de outros projetos. Contêiner privilegiado (dind) e builder com seccomp desligado foram negados pela política de permissões da sessão. Caminho usado, sem privilégio:
+
+- Pacotes `uidmap` e `slirp4netns` instalados via apt (pré-requisitos do modo rootless) e **desinstalados** no fim.
+- Binários estáticos oficiais em diretório temporário: Docker 27.5.1 e extras rootless (`download.docker.com`), Compose v2.32.4 e Buildx v0.20.1 (GitHub). Daemon rootless rodando como o usuário `enok`, com seccomp `builtin` (o perfil novo, que devolve ENOSYS em `clone3`), dados, socket e configuração próprios.
+- Prova prévia nesse daemon: `apt-get update` no `debian:13-slim` e `node -e ... execSync` no `node:24.22.1-bookworm-slim`, as duas coisas que falhavam no 20.10.9, passaram.
+- `./scripts/compose-validate.sh` **sem** `CHATISP_VALIDATE_ALPINE`, com `deploy/Dockerfile` e `deploy/compose.yaml` sem nenhuma alteração. Build: `node:24.22.1-bookworm-slim` (`npm ci`, `npm run build`), `golang:1.27.3-bookworm`, `debian:13-slim` (`apt-get install ca-certificates curl ffmpeg`), `caddy:2.10.2`; banco `postgres:18.6-trixie`. Passou de primeira (`docker-20261105/compose-validate-debian.txt` e `compose-validate-debian-build-steps.txt`):
+
+```
+docker 27.5.1 / Docker Compose version v2.32.4
+subida ok: postgres, garage, migrações, api, worker e caddy (https://127.0.0.1:36653)
+login ok pelo Caddy com o administrador do bootstrap
+reinício ok: o mesmo administrador entra e o bootstrap não recria nada
+compose ok: build, healthchecks, migrações, HTTPS, login, reinício e encerramento sem sobras (chatisp-validate-877457)
+```
+
+- Desmontagem: daemon rootless parado (PID conferido), dados (4,3 GB, com as imagens que ele baixou) apagados de dentro do namespace de usuário, binários e link `/tmp/cvrl` removidos, pacotes desinstalados. O Docker compartilhado ficou como estava: 20.10.9, ativo, nenhum recurso `chatisp-validate`, as mesmas 7 imagens sem etiqueta anteriores.
+
+Requisito de instalação confirmado: Docker Engine ≥ 20.10.10. O modo rootless do Docker atual também serve.
 
 ### Procedimento exato num host compatível
 
@@ -94,7 +113,8 @@ Encontrada nesta verificação e fechada na mesma rodada, a pedido:
 | 10 imagens sem etiqueta criadas às 15:25:38 (`a4c33921d28a`, `12aaed8f12ef`, `7622eb3b3728`, `6e4465aebc22`, `0a12c7afeeea`, `e1c81aaa4e48`, `81279bf79229`, `2c850e2886d4`, `e240dc08d47f`, `95c0634276ee`), vindas dos três serviços que construíam a mesma etiqueta | conferidas uma a uma (histórico com `chatisp`, nenhum contêiner) e removidas; o script agora constrói uma vez |
 | `postgres:18.6-alpine` (ausente antes) | removido; o script remove as imagens que ele mesmo baixar |
 | Imagem da sonda `chatisp-probe-alpine:1` | removida |
-| Cache de build de 05/11 (10:05–10:06 da rodada anterior, 14:39 e 15:24–15:30 desta): lista em `docker-20261105/build-cache-20261105.txt` | **ainda presente** (cerca de 2,1 GB; as entradas de 22/10 são de outro projeto). A remoção por ID (`docker builder prune -f --filter id=<ID>`, uma entrada por vez) foi negada pela política de permissões. É cache reaproveitável e não afeta outros projetos. |
+| Cache de build de 05/11 (lista em `docker-20261105/build-cache-20261105.txt`) | removido por ID (`docker builder prune -f --filter id=<ID>`, em passadas, depois da autorização): de 2,1 GB para 867 kB. Ficaram 6 registros de 0 B ("from local"), referências a camadas de imagens locais encadeadas a um registro de 22/10 de outro projeto |
+| Ambiente rootless (Docker 27.5.1, dados de 4,3 GB, binários, link `/tmp/cvrl`) e pacotes `uidmap`/`slirp4netns` | removidos/desinstalados |
 
 ## 2. Incidente de limpeza
 
@@ -116,15 +136,15 @@ Fonte: transcrição da sessão anterior (`~/.claude/projects/-home-enok-srv-pro
 
 ## 3. Matriz final
 
-Contagem em `docs/matriz-requisitos.md`: 205 verificados, 33 aguardando homologação externa, 19 parciais, 0 não implementados (257). Mudanças: 14 linhas saíram de "aguardando homologação" por terem implementação faltante (adaptador real do ERP e conector Evolution). 12-superadmin e 14-provisionamento saíram de "verificado" pela lacuna do primeiro usuário e voltaram depois de `chatisp bootstrap` e do convite do admin do provedor, com testes. 12-https passou a verificado com a validação do Compose.
+Contagem em `docs/matriz-requisitos.md`: 207 verificados, 33 aguardando homologação externa, 17 parciais, 0 não implementados (257). Mudanças: 14 linhas saíram de "aguardando homologação" por terem implementação faltante (adaptador real do ERP e conector Evolution). 12-superadmin e 14-provisionamento saíram de "verificado" pela lacuna do primeiro usuário e voltaram depois de `chatisp bootstrap` e do convite do admin do provedor, com testes. 12-https, 13-self-host e 13-compose passaram a verificados com a validação do Compose (bases musl no Docker do host e imagens Debian originais no Docker 27.5.1 rootless).
 
 ### Os seis parciais anteriores
 
 | Requisito | Código que já existe | O que falta implementar | Informação ou ambiente externo | Prova que encerra |
 | --- | --- | --- | --- | --- |
 | 12-https | `deploy/Caddyfile` corrigido (site com nome, `default_sni`), cookies `__Host-session` com `Secure; HttpOnly; SameSite=Lax` | nada | nada | **fechado**: login pelo Caddy em HTTPS no `compose-validate.sh` (05/11, 15:33) |
-| 13-self-host | `deploy/compose.yaml`, `deploy/Dockerfile`, `.env.example` com teste de guarda, `compose-validate.sh`, `chatisp bootstrap` e convite do admin do provedor; pilha completa validada com bases musl | nada | host com Docker ≥ 20.10.10 | `compose-validate.sh` sem `CHATISP_VALIDATE_ALPINE` (imagens Debian) |
-| 13-compose | idem; Compose executado de ponta a ponta com bases musl | nada | idem | idem |
+| 13-self-host | `deploy/compose.yaml`, `deploy/Dockerfile`, `.env.example` com teste de guarda, `compose-validate.sh`, `chatisp bootstrap` e convite do admin do provedor | nada | nada | **fechado**: `compose-validate.sh` com as imagens Debian originais em Docker 27.5.1 (05/11, 16:10) |
+| 13-compose | idem | nada | nada | **fechado**: idem |
 | 08-aprovacao | ação sensível oculta (`TestSensitiveStaysHiddenWithoutVerification`); auditoria de ação ERP | mecanismo de aprovação (operação, parâmetros, hash, prazo, aprovador, uso único), junto com a primeira ação sensível | D2-01 (ERP) e D2-02 (verificação do cliente) | testes do mecanismo: uso único, mudança de parâmetro invalida, prazo |
 | 08-verificacao-cliente | a ação sensível fica oculta sem verificação | reutilizar o mecanismo do provedor | D2-02 | teste com o mecanismo real ou seu contrato documentado |
 | 14-carga | `internal/loadlocal`, `scripts/ops-load-local.sh` (recusa-se como capacidade) | roteiro k6 com o perfil | D2-07 (perfil, metas, RPO/RTO) | relatório k6 com p95, CPU, RAM e I/O medidos |
@@ -162,4 +182,4 @@ Modo `-scan module` com padrão não é aceito pelo v1.9.0 ("patterns are not ac
 
 ## Reexecução
 
-Terceira parte (validação do Compose): `go test` de `cmd/chatisp` (teste do Caddyfile) e seis execuções do `compose-validate.sh`, a última verde. Primeira parte (commit `89a95fa`): só sondas Docker, verificação dos contêineres e imagens do host, govulncheck (símbolo e pacote) e `go list` do grafo; nenhum código de produção mudou. Segunda parte (primeiro usuário): código mudou em `auth`, `httpapi`, `cmd/chatisp` e no painel. Foram reexecutados a suíte Go completa, `scripts/lint.sh`, o Vitest completo e os E2E `ux` e `m7-ops`. Os E2E `m3b`, `m4a` e `m4b-m6` não tocam essas áreas e não foram repetidos.
+Quarta parte (imagens Debian): `compose-validate.sh` original no Docker 27.5.1 rootless, verde. Terceira parte (validação do Compose): `go test` de `cmd/chatisp` (teste do Caddyfile) e seis execuções do `compose-validate.sh`, a última verde. Primeira parte (commit `89a95fa`): só sondas Docker, verificação dos contêineres e imagens do host, govulncheck (símbolo e pacote) e `go list` do grafo; nenhum código de produção mudou. Segunda parte (primeiro usuário): código mudou em `auth`, `httpapi`, `cmd/chatisp` e no painel. Foram reexecutados a suíte Go completa, `scripts/lint.sh`, o Vitest completo e os E2E `ux` e `m7-ops`. Os E2E `m3b`, `m4a` e `m4b-m6` não tocam essas áreas e não foram repetidos.

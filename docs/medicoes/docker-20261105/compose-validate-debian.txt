@@ -1,0 +1,445 @@
+docker 27.5.1
+Docker Compose version v2.32.4
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ caddy  Built
+ chatisp-migrate  Built
+ garage Pulling 
+ postgres Pulling 
+ 8da82df9bbd4 Pulling fs layer 
+ 37fb86c2a767 Already exists 
+ e9dd37612d7b Pulling fs layer 
+ 369949eb0229 Pulling fs layer 
+ 7e0f86eb8508 Pulling fs layer 
+ da434b32d480 Pulling fs layer 
+ bcc75ab4e010 Pulling fs layer 
+ a28de24f57c0 Pulling fs layer 
+ 6d141360b363 Pulling fs layer 
+ fcd0e9514062 Pulling fs layer 
+ cbe0afc9eb7b Pulling fs layer 
+ fc6c21aca07c Pulling fs layer 
+ 2a59118cca0e Pulling fs layer 
+ eac25292b613 Pulling fs layer 
+ 6d141360b363 Waiting 
+ fcd0e9514062 Waiting 
+ cbe0afc9eb7b Waiting 
+ fc6c21aca07c Waiting 
+ 2a59118cca0e Waiting 
+ eac25292b613 Waiting 
+ a28de24f57c0 Waiting 
+ 7e0f86eb8508 Waiting 
+ bcc75ab4e010 Waiting 
+ da434b32d480 Waiting 
+ e9dd37612d7b Downloading [==================================================>]  1.168kB/1.168kB
+ e9dd37612d7b Verifying Checksum 
+ e9dd37612d7b Download complete 
+ e9dd37612d7b Extracting [==================================================>]  1.168kB/1.168kB
+ 369949eb0229 Downloading [>                                                  ]  80.34kB/6.443MB
+ 8da82df9bbd4 Downloading [>                                                  ]  276.9kB/27.67MB
+ e9dd37612d7b Extracting [==================================================>]  1.168kB/1.168kB
+ e9dd37612d7b Pull complete 
+ 369949eb0229 Verifying Checksum 
+ 369949eb0229 Download complete 
+ 369949eb0229 Extracting [>                                                  ]  65.54kB/6.443MB
+ 8da82df9bbd4 Downloading [===========>                                       ]  6.264MB/27.67MB
+ 369949eb0229 Extracting [===============>                                   ]  2.032MB/6.443MB
+ 8da82df9bbd4 Downloading [================================>                  ]  18.15MB/27.67MB
+ 8da82df9bbd4 Verifying Checksum 
+ 8da82df9bbd4 Download complete 
+ 369949eb0229 Extracting [===============================>                   ]  3.998MB/6.443MB
+ 8da82df9bbd4 Extracting [>                                                  ]  294.9kB/27.67MB
+ 7e0f86eb8508 Downloading [>                                                  ]  15.79kB/1.257MB
+ 7e0f86eb8508 Verifying Checksum 
+ 7e0f86eb8508 Download complete 
+ 369949eb0229 Extracting [========================================>          ]  5.177MB/6.443MB
+ 8da82df9bbd4 Extracting [===>                                               ]  1.769MB/27.67MB
+ 369949eb0229 Extracting [================================================>  ]  6.291MB/6.443MB
+ 8da82df9bbd4 Extracting [=====>                                             ]  3.244MB/27.67MB
+ 369949eb0229 Extracting [==================================================>]  6.443MB/6.443MB
+ da434b32d480 Downloading [>                                                  ]  97.71kB/8.204MB
+ bcc75ab4e010 Downloading [>                                                  ]  15.79kB/1.312MB
+ 369949eb0229 Pull complete 
+ 7e0f86eb8508 Extracting [=>                                                 ]  32.77kB/1.257MB
+ bcc75ab4e010 Verifying Checksum 
+ bcc75ab4e010 Download complete 
+ 8da82df9bbd4 Extracting [========>                                          ]  4.719MB/27.67MB
+ da434b32d480 Verifying Checksum 
+ da434b32d480 Download complete 
+ 7e0f86eb8508 Extracting [==================================================>]  1.257MB/1.257MB
+ a28de24f57c0 Downloading [==================================================>]     116B/116B
+ a28de24f57c0 Verifying Checksum 
+ a28de24f57c0 Download complete 
+ 7e0f86eb8508 Pull complete 
+ 8da82df9bbd4 Extracting [===========>                                       ]  6.488MB/27.67MB
+ da434b32d480 Extracting [>                                                  ]   98.3kB/8.204MB
+ 8da82df9bbd4 Extracting [==============>                                    ]  7.963MB/27.67MB
+ da434b32d480 Extracting [========>                                          ]  1.376MB/8.204MB
+ da434b32d480 Extracting [===================>                               ]  3.244MB/8.204MB
+ 8da82df9bbd4 Extracting [==================>                                ]  10.03MB/27.67MB
+ 6d141360b363 Downloading [==================================================>]  3.145kB/3.145kB
+ 6d141360b363 Download complete 
+ fcd0e9514062 Downloading [>                                                  ]  539.2kB/115.4MB
+ da434b32d480 Extracting [===========================>                       ]  4.522MB/8.204MB
+ 8da82df9bbd4 Extracting [=====================>                             ]   11.8MB/27.67MB
+ cbe0afc9eb7b Downloading [=========>                                         ]  3.502kB/19.43kB
+ cbe0afc9eb7b Download complete 
+ fcd0e9514062 Downloading [=====>                                             ]  12.96MB/115.4MB
+ da434b32d480 Extracting [================================>                  ]  5.308MB/8.204MB
+ 8da82df9bbd4 Extracting [=========================>                         ]  13.86MB/27.67MB
+ fcd0e9514062 Downloading [==========>                                        ]  24.85MB/115.4MB
+ da434b32d480 Extracting [=====================================>             ]  6.193MB/8.204MB
+ 8da82df9bbd4 Extracting [=============================>                     ]  16.22MB/27.67MB
+ fcd0e9514062 Downloading [===============>                                   ]  36.73MB/115.4MB
+ da434b32d480 Extracting [==============================================>    ]  7.668MB/8.204MB
+ fc6c21aca07c Download complete 
+ 8da82df9bbd4 Extracting [=================================>                 ]  18.58MB/27.67MB
+ fcd0e9514062 Downloading [=====================>                             ]  48.62MB/115.4MB
+ da434b32d480 Extracting [==================================================>]  8.204MB/8.204MB
+ da434b32d480 Pull complete 
+ bcc75ab4e010 Extracting [=>                                                 ]  32.77kB/1.312MB
+ 2a59118cca0e Downloading [==================================================>]  6.107kB/6.107kB
+ 2a59118cca0e Verifying Checksum 
+ 2a59118cca0e Download complete 
+ 8da82df9bbd4 Extracting [======================================>            ]  21.23MB/27.67MB
+ fcd0e9514062 Downloading [=========================>                         ]  59.96MB/115.4MB
+ bcc75ab4e010 Extracting [================================================>  ]  1.278MB/1.312MB
+ bcc75ab4e010 Extracting [==================================================>]  1.312MB/1.312MB
+ bcc75ab4e010 Pull complete 
+ 8da82df9bbd4 Extracting [==========================================>        ]   23.3MB/27.67MB
+ a28de24f57c0 Extracting [==================================================>]     116B/116B
+ fcd0e9514062 Downloading [===============================>                   ]  72.39MB/115.4MB
+ a28de24f57c0 Extracting [==================================================>]     116B/116B
+ a28de24f57c0 Pull complete 
+ 6d141360b363 Extracting [==================================================>]  3.145kB/3.145kB
+ 6d141360b363 Extracting [==================================================>]  3.145kB/3.145kB
+ 6d141360b363 Pull complete 
+ 8da82df9bbd4 Extracting [=============================================>     ]  25.07MB/27.67MB
+ fcd0e9514062 Downloading [====================================>              ]  83.74MB/115.4MB
+ eac25292b613 Downloading [==================================================>]     184B/184B
+ eac25292b613 Verifying Checksum 
+ eac25292b613 Download complete 
+ 8da82df9bbd4 Extracting [===============================================>   ]  26.54MB/27.67MB
+ fcd0e9514062 Downloading [=========================================>         ]   96.7MB/115.4MB
+ 8da82df9bbd4 Extracting [==================================================>]  27.67MB/27.67MB
+ 8da82df9bbd4 Pull complete 
+ fcd0e9514062 Downloading [==============================================>    ]    108MB/115.4MB
+ garage Pulled 
+ fcd0e9514062 Download complete 
+ fcd0e9514062 Extracting [>                                                  ]  557.1kB/115.4MB
+ fcd0e9514062 Extracting [>                                                  ]  1.671MB/115.4MB
+ fcd0e9514062 Extracting [=>                                                 ]  2.785MB/115.4MB
+ fcd0e9514062 Extracting [=>                                                 ]  4.456MB/115.4MB
+ fcd0e9514062 Extracting [==>                                                ]  6.128MB/115.4MB
+ fcd0e9514062 Extracting [===>                                               ]  7.242MB/115.4MB
+ fcd0e9514062 Extracting [===>                                               ]  8.356MB/115.4MB
+ fcd0e9514062 Extracting [====>                                              ]   9.47MB/115.4MB
+ fcd0e9514062 Extracting [====>                                              ]  10.58MB/115.4MB
+ fcd0e9514062 Extracting [=====>                                             ]   11.7MB/115.4MB
+ fcd0e9514062 Extracting [=====>                                             ]  12.81MB/115.4MB
+ fcd0e9514062 Extracting [======>                                            ]  13.93MB/115.4MB
+ fcd0e9514062 Extracting [======>                                            ]   15.6MB/115.4MB
+ fcd0e9514062 Extracting [=======>                                           ]  16.71MB/115.4MB
+ fcd0e9514062 Extracting [=======>                                           ]  17.83MB/115.4MB
+ fcd0e9514062 Extracting [========>                                          ]  18.94MB/115.4MB
+ fcd0e9514062 Extracting [========>                                          ]  20.61MB/115.4MB
+ fcd0e9514062 Extracting [=========>                                         ]  21.73MB/115.4MB
+ fcd0e9514062 Extracting [=========>                                         ]  22.84MB/115.4MB
+ fcd0e9514062 Extracting [==========>                                        ]  24.51MB/115.4MB
+ fcd0e9514062 Extracting [===========>                                       ]  25.62MB/115.4MB
+ fcd0e9514062 Extracting [===========>                                       ]  26.74MB/115.4MB
+ fcd0e9514062 Extracting [============>                                      ]  28.41MB/115.4MB
+ fcd0e9514062 Extracting [=============>                                     ]  30.08MB/115.4MB
+ fcd0e9514062 Extracting [=============>                                     ]  31.75MB/115.4MB
+ fcd0e9514062 Extracting [==============>                                    ]  33.42MB/115.4MB
+ fcd0e9514062 Extracting [===============>                                   ]  35.09MB/115.4MB
+ fcd0e9514062 Extracting [===============>                                   ]  36.21MB/115.4MB
+ fcd0e9514062 Extracting [================>                                  ]  37.88MB/115.4MB
+ fcd0e9514062 Extracting [=================>                                 ]  39.55MB/115.4MB
+ fcd0e9514062 Extracting [=================>                                 ]  40.67MB/115.4MB
+ fcd0e9514062 Extracting [==================>                                ]  42.34MB/115.4MB
+ fcd0e9514062 Extracting [==================>                                ]  43.45MB/115.4MB
+ fcd0e9514062 Extracting [===================>                               ]  45.12MB/115.4MB
+ fcd0e9514062 Extracting [====================>                              ]  46.79MB/115.4MB
+ fcd0e9514062 Extracting [====================>                              ]  48.46MB/115.4MB
+ fcd0e9514062 Extracting [=====================>                             ]  50.14MB/115.4MB
+ fcd0e9514062 Extracting [======================>                            ]  51.81MB/115.4MB
+ fcd0e9514062 Extracting [======================>                            ]  52.92MB/115.4MB
+ fcd0e9514062 Extracting [=======================>                           ]  54.03MB/115.4MB
+ fcd0e9514062 Extracting [=======================>                           ]  55.15MB/115.4MB
+ fcd0e9514062 Extracting [========================>                          ]  55.71MB/115.4MB
+ fcd0e9514062 Extracting [========================>                          ]  56.82MB/115.4MB
+ fcd0e9514062 Extracting [=========================>                         ]  57.93MB/115.4MB
+ fcd0e9514062 Extracting [=========================>                         ]  59.05MB/115.4MB
+ fcd0e9514062 Extracting [==========================>                        ]  60.16MB/115.4MB
+ fcd0e9514062 Extracting [==========================>                        ]  61.83MB/115.4MB
+ fcd0e9514062 Extracting [===========================>                       ]  62.95MB/115.4MB
+ fcd0e9514062 Extracting [===========================>                       ]  64.62MB/115.4MB
+ fcd0e9514062 Extracting [============================>                      ]  66.29MB/115.4MB
+ fcd0e9514062 Extracting [=============================>                     ]  67.96MB/115.4MB
+ fcd0e9514062 Extracting [==============================>                    ]  69.63MB/115.4MB
+ fcd0e9514062 Extracting [==============================>                    ]   71.3MB/115.4MB
+ fcd0e9514062 Extracting [===============================>                   ]  72.97MB/115.4MB
+ fcd0e9514062 Extracting [================================>                  ]  74.09MB/115.4MB
+ fcd0e9514062 Extracting [================================>                  ]  75.76MB/115.4MB
+ fcd0e9514062 Extracting [=================================>                 ]  76.87MB/115.4MB
+ fcd0e9514062 Extracting [=================================>                 ]  77.99MB/115.4MB
+ fcd0e9514062 Extracting [==================================>                ]   79.1MB/115.4MB
+ fcd0e9514062 Extracting [==================================>                ]  80.77MB/115.4MB
+ fcd0e9514062 Extracting [===================================>               ]  82.44MB/115.4MB
+ fcd0e9514062 Extracting [====================================>              ]  83.56MB/115.4MB
+ fcd0e9514062 Extracting [====================================>              ]  84.67MB/115.4MB
+ fcd0e9514062 Extracting [=====================================>             ]  86.34MB/115.4MB
+ fcd0e9514062 Extracting [=====================================>             ]  87.46MB/115.4MB
+ fcd0e9514062 Extracting [======================================>            ]  88.57MB/115.4MB
+ fcd0e9514062 Extracting [=======================================>           ]  90.24MB/115.4MB
+ fcd0e9514062 Extracting [=======================================>           ]  91.36MB/115.4MB
+ fcd0e9514062 Extracting [========================================>          ]  92.47MB/115.4MB
+ fcd0e9514062 Extracting [========================================>          ]  93.59MB/115.4MB
+ fcd0e9514062 Extracting [=========================================>         ]   94.7MB/115.4MB
+ fcd0e9514062 Extracting [=========================================>         ]  95.81MB/115.4MB
+ fcd0e9514062 Extracting [=========================================>         ]  96.93MB/115.4MB
+ fcd0e9514062 Extracting [==========================================>        ]  98.04MB/115.4MB
+ fcd0e9514062 Extracting [==========================================>        ]  99.16MB/115.4MB
+ fcd0e9514062 Extracting [===========================================>       ]  100.3MB/115.4MB
+ fcd0e9514062 Extracting [===========================================>       ]  101.4MB/115.4MB
+ fcd0e9514062 Extracting [============================================>      ]  101.9MB/115.4MB
+ fcd0e9514062 Extracting [============================================>      ]  103.1MB/115.4MB
+ fcd0e9514062 Extracting [=============================================>     ]  104.2MB/115.4MB
+ fcd0e9514062 Extracting [=============================================>     ]  105.3MB/115.4MB
+ fcd0e9514062 Extracting [==============================================>    ]  106.4MB/115.4MB
+ fcd0e9514062 Extracting [==============================================>    ]  107.5MB/115.4MB
+ fcd0e9514062 Extracting [===============================================>   ]  108.6MB/115.4MB
+ fcd0e9514062 Extracting [===============================================>   ]  109.2MB/115.4MB
+ fcd0e9514062 Extracting [===============================================>   ]  109.7MB/115.4MB
+ fcd0e9514062 Extracting [===============================================>   ]  110.3MB/115.4MB
+ fcd0e9514062 Extracting [================================================>  ]  110.9MB/115.4MB
+ fcd0e9514062 Extracting [================================================>  ]  111.4MB/115.4MB
+ fcd0e9514062 Extracting [================================================>  ]    112MB/115.4MB
+ fcd0e9514062 Extracting [================================================>  ]  113.1MB/115.4MB
+ fcd0e9514062 Extracting [=================================================> ]  113.6MB/115.4MB
+ fcd0e9514062 Extracting [=================================================> ]  114.2MB/115.4MB
+ fcd0e9514062 Extracting [=================================================> ]  114.8MB/115.4MB
+ fcd0e9514062 Extracting [=================================================> ]  115.3MB/115.4MB
+ fcd0e9514062 Extracting [==================================================>]  115.4MB/115.4MB
+ fcd0e9514062 Pull complete 
+ cbe0afc9eb7b Extracting [==================================================>]  19.43kB/19.43kB
+ cbe0afc9eb7b Extracting [==================================================>]  19.43kB/19.43kB
+ cbe0afc9eb7b Pull complete 
+ fc6c21aca07c Extracting [==================================================>]     127B/127B
+ fc6c21aca07c Extracting [==================================================>]     127B/127B
+ fc6c21aca07c Pull complete 
+ 2a59118cca0e Extracting [==================================================>]  6.107kB/6.107kB
+ 2a59118cca0e Extracting [==================================================>]  6.107kB/6.107kB
+ 2a59118cca0e Pull complete 
+ eac25292b613 Extracting [==================================================>]     184B/184B
+ eac25292b613 Extracting [==================================================>]     184B/184B
+ eac25292b613 Pull complete 
+ postgres Pulled 
+ Network chatisp-validate-877457_default  Creating
+ Network chatisp-validate-877457_default  Created
+ Volume "chatisp-validate-877457_caddy-data"  Creating
+ Volume "chatisp-validate-877457_caddy-data"  Created
+ Volume "chatisp-validate-877457_caddy-config"  Creating
+ Volume "chatisp-validate-877457_caddy-config"  Created
+ Volume "chatisp-validate-877457_postgres-data"  Creating
+ Volume "chatisp-validate-877457_postgres-data"  Created
+ Volume "chatisp-validate-877457_garage-config"  Creating
+ Volume "chatisp-validate-877457_garage-config"  Created
+ Volume "chatisp-validate-877457_garage-meta"  Creating
+ Volume "chatisp-validate-877457_garage-meta"  Created
+ Volume "chatisp-validate-877457_garage-data"  Creating
+ Volume "chatisp-validate-877457_garage-data"  Created
+ Container chatisp-validate-877457-postgres-1  Creating
+ Container chatisp-validate-877457-garage-init-1  Creating
+ Container chatisp-validate-877457-garage-init-1  Created
+ Container chatisp-validate-877457-garage-1  Creating
+ Container chatisp-validate-877457-postgres-1  Created
+ Container chatisp-validate-877457-chatisp-migrate-1  Creating
+ Container chatisp-validate-877457-garage-1  Created
+ Container chatisp-validate-877457-chatisp-migrate-1  Created
+ Container chatisp-validate-877457-chatisp-worker-1  Creating
+ Container chatisp-validate-877457-chatisp-api-1  Creating
+ Container chatisp-validate-877457-chatisp-worker-1  Created
+ Container chatisp-validate-877457-chatisp-api-1  Created
+ Container chatisp-validate-877457-caddy-1  Creating
+ Container chatisp-validate-877457-caddy-1  Created
+ Container chatisp-validate-877457-garage-init-1  Starting
+ Container chatisp-validate-877457-postgres-1  Starting
+ Container chatisp-validate-877457-garage-init-1  Started
+ Container chatisp-validate-877457-garage-init-1  Waiting
+ Container chatisp-validate-877457-postgres-1  Started
+ Container chatisp-validate-877457-postgres-1  Waiting
+ Container chatisp-validate-877457-garage-init-1  Exited
+ Container chatisp-validate-877457-garage-1  Starting
+ Container chatisp-validate-877457-garage-1  Started
+ Container chatisp-validate-877457-postgres-1  Healthy
+ Container chatisp-validate-877457-chatisp-migrate-1  Starting
+ Container chatisp-validate-877457-chatisp-migrate-1  Started
+ Container chatisp-validate-877457-chatisp-migrate-1  Waiting
+ Container chatisp-validate-877457-chatisp-migrate-1  Waiting
+ Container chatisp-validate-877457-chatisp-migrate-1  Exited
+ Container chatisp-validate-877457-chatisp-worker-1  Starting
+ Container chatisp-validate-877457-chatisp-migrate-1  Exited
+ Container chatisp-validate-877457-chatisp-api-1  Starting
+ Container chatisp-validate-877457-chatisp-api-1  Started
+ Container chatisp-validate-877457-chatisp-api-1  Waiting
+ Container chatisp-validate-877457-chatisp-worker-1  Started
+ Container chatisp-validate-877457-chatisp-api-1  Healthy
+ Container chatisp-validate-877457-caddy-1  Starting
+ Container chatisp-validate-877457-caddy-1  Started
+ Container chatisp-validate-877457-garage-1  Waiting
+ Container chatisp-validate-877457-chatisp-migrate-1  Waiting
+ Container chatisp-validate-877457-chatisp-api-1  Waiting
+ Container chatisp-validate-877457-chatisp-worker-1  Waiting
+ Container chatisp-validate-877457-caddy-1  Waiting
+ Container chatisp-validate-877457-postgres-1  Waiting
+ Container chatisp-validate-877457-garage-init-1  Waiting
+ Container chatisp-validate-877457-chatisp-worker-1  Healthy
+ Container chatisp-validate-877457-caddy-1  Healthy
+ Container chatisp-validate-877457-chatisp-migrate-1  Exited
+ Container chatisp-validate-877457-garage-1  Healthy
+ Container chatisp-validate-877457-postgres-1  Healthy
+ Container chatisp-validate-877457-garage-init-1  Exited
+ Container chatisp-validate-877457-chatisp-api-1  Healthy
+subida ok: postgres, garage, migrações, api, worker e caddy (https://127.0.0.1:36653)
+bootstrap: provedor 120d2877-8c88-463a-8a28-a97d959b1bfb criado; admin@validacao.example (admin e superadmin). O MFA é exigido no primeiro acesso.
+login ok pelo Caddy com o administrador do bootstrap
+ Container chatisp-validate-877457-chatisp-api-1  Restarting
+ Container chatisp-validate-877457-chatisp-worker-1  Restarting
+ Container chatisp-validate-877457-chatisp-migrate-1  Restarting
+ Container chatisp-validate-877457-garage-init-1  Restarting
+ Container chatisp-validate-877457-garage-1  Restarting
+ Container chatisp-validate-877457-postgres-1  Restarting
+ Container chatisp-validate-877457-caddy-1  Restarting
+ Container chatisp-validate-877457-chatisp-migrate-1  Started
+ Container chatisp-validate-877457-garage-init-1  Started
+ Container chatisp-validate-877457-chatisp-api-1  Started
+ Container chatisp-validate-877457-postgres-1  Started
+ Container chatisp-validate-877457-caddy-1  Started
+ Container chatisp-validate-877457-chatisp-worker-1  Started
+ Container chatisp-validate-877457-garage-1  Started
+ Container chatisp-validate-877457-garage-init-1  Created
+ Container chatisp-validate-877457-postgres-1  Running
+ Container chatisp-validate-877457-garage-1  Running
+ Container chatisp-validate-877457-chatisp-migrate-1  Created
+ Container chatisp-validate-877457-caddy-1  Running
+ Container chatisp-validate-877457-garage-init-1  Starting
+ Container chatisp-validate-877457-postgres-1  Waiting
+ Container chatisp-validate-877457-garage-init-1  Started
+ Container chatisp-validate-877457-garage-init-1  Waiting
+ Container chatisp-validate-877457-garage-init-1  Exited
+ Container chatisp-validate-877457-postgres-1  Healthy
+ Container chatisp-validate-877457-chatisp-migrate-1  Starting
+ Container chatisp-validate-877457-chatisp-migrate-1  Started
+ Container chatisp-validate-877457-chatisp-migrate-1  Waiting
+ Container chatisp-validate-877457-chatisp-migrate-1  Waiting
+ Container chatisp-validate-877457-chatisp-migrate-1  Exited
+ Container chatisp-validate-877457-chatisp-worker-1  Starting
+ Container chatisp-validate-877457-chatisp-migrate-1  Exited
+ Container chatisp-validate-877457-chatisp-api-1  Starting
+ Container chatisp-validate-877457-chatisp-worker-1  Started
+ Container chatisp-validate-877457-chatisp-api-1  Started
+ Container chatisp-validate-877457-chatisp-api-1  Waiting
+ Container chatisp-validate-877457-chatisp-api-1  Healthy
+ Container chatisp-validate-877457-chatisp-api-1  Waiting
+ Container chatisp-validate-877457-chatisp-worker-1  Waiting
+ Container chatisp-validate-877457-caddy-1  Waiting
+ Container chatisp-validate-877457-postgres-1  Waiting
+ Container chatisp-validate-877457-garage-init-1  Waiting
+ Container chatisp-validate-877457-garage-1  Waiting
+ Container chatisp-validate-877457-chatisp-migrate-1  Waiting
+ Container chatisp-validate-877457-chatisp-worker-1  Healthy
+ Container chatisp-validate-877457-garage-init-1  Exited
+ Container chatisp-validate-877457-chatisp-api-1  Healthy
+ Container chatisp-validate-877457-chatisp-migrate-1  Exited
+ Container chatisp-validate-877457-caddy-1  Healthy
+ Container chatisp-validate-877457-postgres-1  Healthy
+ Container chatisp-validate-877457-garage-1  Healthy
+reinício ok: o mesmo administrador entra e o bootstrap não recria nada
+ Container chatisp-validate-877457-garage-1  Stopping
+ Container chatisp-validate-877457-caddy-1  Stopping
+ Container chatisp-validate-877457-chatisp-worker-1  Stopping
+ Container chatisp-validate-877457-chatisp-worker-1  Stopped
+ Container chatisp-validate-877457-chatisp-worker-1  Removing
+ Container chatisp-validate-877457-chatisp-worker-1  Removed
+ Container chatisp-validate-877457-garage-1  Stopped
+ Container chatisp-validate-877457-garage-1  Removing
+ Container chatisp-validate-877457-garage-1  Removed
+ Container chatisp-validate-877457-garage-init-1  Stopping
+ Container chatisp-validate-877457-garage-init-1  Stopped
+ Container chatisp-validate-877457-garage-init-1  Removing
+ Container chatisp-validate-877457-garage-init-1  Removed
+ Container chatisp-validate-877457-caddy-1  Stopped
+ Container chatisp-validate-877457-caddy-1  Removing
+ Container chatisp-validate-877457-caddy-1  Removed
+ Container chatisp-validate-877457-chatisp-api-1  Stopping
+ Container chatisp-validate-877457-chatisp-api-1  Stopped
+ Container chatisp-validate-877457-chatisp-api-1  Removing
+ Container chatisp-validate-877457-chatisp-api-1  Removed
+ Container chatisp-validate-877457-chatisp-migrate-1  Stopping
+ Container chatisp-validate-877457-chatisp-migrate-1  Stopped
+ Container chatisp-validate-877457-chatisp-migrate-1  Removing
+ Container chatisp-validate-877457-chatisp-migrate-1  Removed
+ Container chatisp-validate-877457-postgres-1  Stopping
+ Container chatisp-validate-877457-postgres-1  Stopped
+ Container chatisp-validate-877457-postgres-1  Removing
+ Container chatisp-validate-877457-postgres-1  Removed
+ Volume chatisp-validate-877457_garage-config  Removing
+ Volume chatisp-validate-877457_garage-data  Removing
+ Volume chatisp-validate-877457_caddy-config  Removing
+ Volume chatisp-validate-877457_caddy-data  Removing
+ Volume chatisp-validate-877457_garage-meta  Removing
+ Volume chatisp-validate-877457_postgres-data  Removing
+ Network chatisp-validate-877457_default  Removing
+ Volume chatisp-validate-877457_garage-data  Removed
+ Volume chatisp-validate-877457_garage-config  Removed
+ Volume chatisp-validate-877457_caddy-data  Removed
+ Volume chatisp-validate-877457_garage-meta  Removed
+ Volume chatisp-validate-877457_caddy-config  Removed
+ Volume chatisp-validate-877457_postgres-data  Removed
+ Network chatisp-validate-877457_default  Removed
+compose ok: build, healthchecks, migrações, HTTPS, login, reinício e encerramento sem sobras (chatisp-validate-877457)
+rc=0
