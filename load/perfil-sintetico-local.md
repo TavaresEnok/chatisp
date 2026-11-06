@@ -27,3 +27,7 @@ O relatório sai no log do teste. `aceito_como_capacidade` permanece falso. p95,
 ## Como fechar a D2-07
 
 Quem opera o piloto escreve, fora deste arquivo, o perfil real: quantidade de provedores, atendentes simultâneos, números, mensagens, mídia, retenção, p95, RPO e RTO. O lugar previsto é a resposta da D2-07 em `docs/perguntas.md`. Enquanto essa resposta não existir, k6 não roda e nenhum número medido aqui entra em oferta ou em relatório de capacidade.
+
+## Base k6 posterior — 06/11/2026
+
+O [roteiro parametrizado de laboratório](k6-lab.md) foi adicionado depois deste ensaio. O binário k6 foi executado somente contra um servidor HTTPS falso para verificar protocolo, TLS, guardas e encerramento de sessão. Isso não é execução de carga contra o ChatISP, perfil do piloto, medição de capacidade nem definição de metas D2-07. As limitações deste documento continuam válidas.

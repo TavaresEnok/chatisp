@@ -7,7 +7,7 @@ Webchat de atendimento para provedores de internet: WhatsApp Cloud API oficial e
 
 Identificadores de código em inglês. Interface, mensagens e documentos em pt-BR.
 
-A instalação persistente existente foi configurada para `https://chatisp.tokstiloesporte.com/entrar`, preservando o projeto `chatisp-pronto-hoje` e o acesso local de recuperação. A cadeia interna com certificado público passou nas provas; o encaminhamento do IP público ainda impede comprovar acesso pela Internet. Consulte o [estado e as evidências](docs/medicoes/publicacao-20261106/relatorio.md) antes de operar; não refaça o bootstrap nem recrie os volumes.
+A instalação persistente existente foi configurada para `https://chatisp.tokstiloesporte.com/entrar`, preservando o projeto `chatisp-pronto-hoje` e o acesso local de recuperação. O proprietário confirmou acesso à página em outra rede; as provas automatizadas de TLS e operação passaram pela borda interna. Consulte o [estado e as evidências](docs/medicoes/fechamento-publicacao-20261106/relatorio.md) antes de operar; não refaça o bootstrap nem recrie os volumes.
 
 ## Ambiente
 
