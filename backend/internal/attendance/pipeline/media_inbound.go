@@ -207,6 +207,7 @@ type mediaHandler struct {
 type mediaClaim struct {
 	done         bool
 	stale        bool
+	intentExists bool
 	token        string
 	conversation uuid.UUID
 	connector    uuid.UUID
@@ -276,14 +277,14 @@ func (h *mediaHandler) DownloadInboundMedia(ctx context.Context, tenantID, messa
 	if fetchErr != nil {
 		// A stale reservation may already have a durable upload intent and an
 		// object of unknown version. Keep it retryable until cleanup succeeds.
-		if claim.stale {
+		if claim.intentExists {
 			return ErrUnavailable
 		}
 		return h.failOwned(ctx, tenantID, messageID, claim, "download_falhou")
 	}
 	sniffed, sum, code := media.InspectInbound(claim.content.Type, claim.content.MIME, blob.Body)
 	if code != "" {
-		if claim.stale {
+		if claim.intentExists {
 			return ErrUnavailable
 		}
 		claim.content.SniffedMIME = sniffed
@@ -435,6 +436,9 @@ func (h *mediaHandler) claimMedia(ctx context.Context, tenantID, messageID uuid.
 		}
 		claim.stale = claim.content.MediaStatus == "reserved"
 		if claim.stale {
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attachments WHERE tenant_id=$1 AND conversation_id=$2 AND request_id=$3 AND state='upload')`, tenantID, claim.conversation, messageID).Scan(&claim.intentExists); err != nil {
+				return err
+			}
 			if h.storage == nil {
 				return ErrUnavailable
 			}
@@ -505,6 +509,9 @@ func (h *mediaHandler) failOwned(ctx context.Context, tenantID, messageID uuid.U
 	}
 	var applied bool
 	err = h.db.WithTenantTx(ctx, tenantID, func(ctx context.Context, tx pgx.Tx) error {
+		if err := automationTenant(ctx, tx, tenantID); err != nil {
+			return err
+		}
 		tag, err := tx.Exec(ctx, `
 			UPDATE messages SET content_context=$3::jsonb
 			 WHERE tenant_id=$1 AND id=$2

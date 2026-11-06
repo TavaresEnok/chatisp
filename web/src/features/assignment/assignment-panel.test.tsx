@@ -70,3 +70,17 @@ it.each(["unmount", "inbox", "conversation", "session"])("ignora conclusão da i
   if (change !== "unmount") expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   view.unmount(); client.clear();
 });
+
+it("permite repetir a leitura de candidatos sem fechar a transferência", async () => {
+  let reads = 0;
+  vi.stubGlobal("fetch", vi.fn(async () => {
+    if (++reads === 1) return new Response(null, { status: 503 });
+    return new Response(JSON.stringify({ candidates: [{ membership_id: "m2", assigned: 0, capacity: 2 }] }), { headers: { "content-type": "application/json" } });
+  }));
+  const principal = { tenantId: "t", userId: "u", sessionId: "s", membershipId: "m", role: "agent" as const, email: "a@b", expiresAt: "2099", mfaEnrollmentRequired: false };
+  const user = userEvent.setup();
+  render(<QueryClientProvider client={new QueryClient()}><AssignmentPanel principal={principal} inbox="i" conversation="c" version={4} onChanged={vi.fn()} /></QueryClientProvider>);
+  await user.click(screen.getByRole("button", { name: "Transferir para atendente" }));
+  await user.click(await screen.findByRole("button", { name: "Tentar novamente candidatos" }));
+  expect(await screen.findByRole("option", { name: /Atendente indisponível/ })).toHaveValue("m2");
+});

@@ -34,7 +34,7 @@ func (s *Service) Convert(ctx context.Context, p auth.Principal, inbox, conv, id
 	var out MediaItem
 	var original []byte
 	var row storedAttachment
-	missing := false
+	var refusal error
 	e := s.run(ctx, p, inbox, conv, func(c context.Context, tx pgx.Tx) error {
 		item, e := loadItem(c, tx, p.TenantID, conv, id)
 		if e != nil {
@@ -60,21 +60,25 @@ func (s *Service) Convert(ctx context.Context, p auth.Principal, inbox, conv, id
 			if e = markRefused(c, tx, p.TenantID, id, FFmpegFailedDetail); e != nil {
 				return e
 			}
-			return ErrConvert
+			refusal = ErrConvert
+			return nil
 		}
 		if _, lookErr := s.look(); lookErr != nil {
-			missing = true
+			refusal = ErrFFmpegMissing
 			if item.ConversionState == "refused" && item.ConversionError == FFmpegMissingDetail {
-				return ErrFFmpegMissing
+				return nil
 			}
 			if e = markRefused(c, tx, p.TenantID, id, FFmpegMissingDetail); e != nil {
 				return e
 			}
-			return ErrFFmpegMissing
+			return nil
 		}
 		return nil
 	})
-	if missing || errors.Is(e, ErrFFmpegMissing) {
+	if e != nil {
+		return out, e
+	}
+	if errors.Is(refusal, ErrFFmpegMissing) {
 		if out.ID != uuid.Nil {
 			out.ConversionState = "refused"
 			out.ConversionError = FFmpegMissingDetail
@@ -82,14 +86,11 @@ func (s *Service) Convert(ctx context.Context, p auth.Principal, inbox, conv, id
 		}
 		return out, ErrFFmpegMissing
 	}
-	if errors.Is(e, ErrConvert) {
+	if errors.Is(refusal, ErrConvert) {
 		out.ConversionState = "refused"
 		out.ConversionError = FFmpegFailedDetail
 		out.OutputAttachmentID = nil
 		return out, ErrConvert
-	}
-	if e != nil {
-		return out, e
 	}
 	produced, runErr := s.transcode(ctx, original)
 	if runErr != nil || len(produced) == 0 || len(produced) > convertOutput {
@@ -101,23 +102,19 @@ func (s *Service) Convert(ctx context.Context, p auth.Principal, inbox, conv, id
 	if e != nil {
 		return s.refuse(ctx, p, inbox, conv, id, out, FFmpegFailedDetail, e)
 	}
-	if e = s.Attachments.Upload(ctx, p, inbox, conv, rec.ID, bytesReader(produced)); e != nil {
-		return s.refuse(ctx, p, inbox, conv, id, out, FFmpegFailedDetail, e)
-	}
-	validated, e := s.Attachments.Validate(ctx, p, inbox, conv, rec.ID)
-	if e != nil || validated.State != "validated" || validated.MediaType == "" {
-		if e == nil {
-			e = ErrConvert
-		}
-		return s.refuse(ctx, p, inbox, conv, id, out, FFmpegFailedDetail, e)
-	}
+	var publishErr error
+	conflict := false
 	e = s.run(ctx, p, inbox, conv, func(c context.Context, tx pgx.Tx) error {
 		current, e := loadItem(c, tx, p.TenantID, conv, id)
 		if e != nil {
 			return e
 		}
 		if current.ConversionState == "converted" {
-			return ErrConflict
+			if e = s.Attachments.ReleaseReserved(c, tx, p.TenantID, rec.ID); e != nil {
+				return e
+			}
+			conflict = true
+			return nil
 		}
 		again, e := readExact(c, s.Attachments.Storage, row)
 		if e != nil {
@@ -125,6 +122,10 @@ func (s *Service) Convert(ctx context.Context, p auth.Principal, inbox, conv, id
 		}
 		if !bytes.Equal(again, original) {
 			return ErrConflict
+		}
+		if e = s.Attachments.CompleteConverted(c, tx, p.TenantID, conv, rec.ID, produced); e != nil {
+			publishErr = e
+			return e
 		}
 		tag, e := tx.Exec(c, `
 			UPDATE media_items
@@ -140,12 +141,17 @@ func (s *Service) Convert(ctx context.Context, p auth.Principal, inbox, conv, id
 		out = current
 		out.ConversionState = "converted"
 		out.ConversionError = ""
-		published := rec.ID
-		out.OutputAttachmentID = &published
+		out.OutputAttachmentID = &rec.ID
 		return nil
 	})
 	if e != nil {
+		if publishErr != nil {
+			return s.refuse(ctx, p, inbox, conv, id, out, FFmpegFailedDetail, publishErr)
+		}
 		return out, e
+	}
+	if conflict {
+		return out, ErrConflict
 	}
 	return out, nil
 }

@@ -35,6 +35,58 @@ type memStorage struct {
 	deleteErr error
 }
 
+func TestInboundMediaFailureWaitsForSuspensionToEnd(t *testing.T) {
+	ctx := context.Background()
+	st := seedTenantWithMeta(t, "suspend-media-app", "suspend-media-waba", "5511999990197", "suspend-media-token", "suspend-media-secret")
+	files := &memStorage{}
+	fetcher := &whatsapp.FakeFetcher{Objects: map[string]whatsapp.MediaBlob{}}
+	inbound := NewInboundHandler(testStore, testAttendanceSvc).(*inboundHandler)
+	inbound.jobs = testJobs
+	body, err := metacloud.MarshalMessageEnvelope(metacloud.MessageFixture{WABAID: st.wabaID, PhoneNumberID: st.phoneID, MessageID: "wamid.suspend.media", From: "551198887719", Timestamp: "1700000700", Type: "image", Object: map[string]any{"id": "missing", "mime_type": "image/jpeg"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	delivery := storeDelivery(t, st.appID, body)
+	if err := NewIngressHandler(testPools.Ingress, testJobs, testConfigServer).ExpandIngress(ctx, delivery); err != nil {
+		t.Fatal(err)
+	}
+	applyDelivery(t, inbound, st.tenantID, delivery)
+	var message uuid.UUID
+	if err := testStore.WithTenantTx(ctx, st.tenantID, func(ctx context.Context, tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT id FROM messages WHERE tenant_id=$1 AND external_message_id='wamid.suspend.media'`, st.tenantID).Scan(&message)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	downloader := mediaWorkers(t, files, fetcher)
+	downloader.beforeFetch = func() { setSuspension(t, st, "suspended") }
+	if err := downloader.DownloadInboundMedia(ctx, st.tenantID, message); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("download durante suspensão: %v", err)
+	}
+	var status string
+	if err := testStore.WithTenantTx(ctx, st.tenantID, func(ctx context.Context, tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT content_context->>'media_status' FROM messages WHERE tenant_id=$1 AND id=$2`, st.tenantID, message).Scan(&status)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if status != "reserved" {
+		t.Fatalf("mídia alterada durante suspensão: %s", status)
+	}
+	setSuspension(t, st, "active")
+	downloader.beforeFetch = nil
+	downloader.reserveFor = -1
+	if err := downloader.DownloadInboundMedia(ctx, st.tenantID, message); err != nil {
+		t.Fatalf("retomada após suspensão: %v", err)
+	}
+	if err := testStore.WithTenantTx(ctx, st.tenantID, func(ctx context.Context, tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT content_context->>'media_status' FROM messages WHERE tenant_id=$1 AND id=$2`, st.tenantID, message).Scan(&status)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if status != "failed" {
+		t.Fatalf("falha sem objeto pendente não foi concluída: %s", status)
+	}
+}
+
 func TestInboundMediaPrivacyDuringCreate(t *testing.T) {
 	ctx := context.Background()
 	st := seedTenantWithMeta(t, "app-media-privacy", "waba-media-privacy", "5511999990141", "token-media-privacy", "secret-media-privacy")

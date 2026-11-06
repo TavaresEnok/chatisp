@@ -19,11 +19,18 @@ vite_port=${CHATISP_DEV_VITE_PORT:-5173}
 ready_timeout=${CHATISP_DEV_READY_TIMEOUT:-180}
 pg_data=${CHATISP_DEV_PG_DATA:-$root/.tmp/dev-pg}
 pg_log=${CHATISP_DEV_PG_LOG:-$root/.tmp/dev-pg.log}
+CHATISP_DEV_TLS=${CHATISP_DEV_TLS:-1}
+export CHATISP_DEV_TLS
 
 die() {
 	echo "dev.sh: $*" >&2
 	exit 1
 }
+
+case "$CHATISP_DEV_TLS" in
+0 | 1) ;;
+*) die "CHATISP_DEV_TLS deve ser 1 (HTTPS) ou 0 (diagnóstico HTTP)" ;;
+esac
 
 # Grava na hora. O stdout do script costuma ir para um arquivo e o bash só
 # descarrega o buffer no exit; um sinal no meio da espera de /healthz perderia
@@ -523,18 +530,18 @@ export CHATISP_META_APP_ID="${CHATISP_META_APP_ID:-dev-meta-app-id}"
 
 note "API em ${api_origin} e painel em ${panel_origin}"
 note "Métricas em ${metrics_addr}"
-if [ "${CHATISP_DEV_TLS:-0}" = "1" ]; then
+if [ "$CHATISP_DEV_TLS" = "1" ]; then
 	command -v openssl >/dev/null 2>&1 || die "CHATISP_DEV_TLS=1 exige openssl"
 	tls_dir=$(mktemp -d /tmp/chatisp-dev-tls-XXXXXX)
 	chmod 700 "$tls_dir"
 	openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=chatisp-dev-loopback" \
-		-addext "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1" \
+		-addext "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1,IP:${vite_host}" \
 		-keyout "$tls_dir/key.pem" -out "$tls_dir/cert.pem" >/dev/null 2>&1 || die "não foi possível gerar o certificado local"
 	export CHATISP_DEV_TLS_KEY="$tls_dir/key.pem"
 	export CHATISP_DEV_TLS_CERT="$tls_dir/cert.pem"
 	note "HTTPS local ligado: certificado autoassinado descartável (1 dia, só loopback, apagado ao sair). O navegador pedirá para aceitá-lo. O cookie Secure funciona nesta origem."
 else
-	note "O cookie de sessão permanece Secure. Em HTTP o navegador não guarda essa sessão. Para uma sessão real use CHATISP_DEV_TLS=1 ./scripts/dev.sh ou o Compose com Caddy em https://localhost:8443."
+	note "Diagnóstico HTTP: o cookie de sessão permanece Secure. Em HTTP o navegador não guarda essa sessão. Use o padrão HTTPS para acessar o painel."
 fi
 
 setsid go -C backend run -mod=vendor ./cmd/chatisp all &
@@ -570,7 +577,7 @@ if [ "$api_ready" != 1 ]; then
 	die "a API não ficou pronta em ${api_origin}. PostgreSQL, API e Vite deste script foram encerrados"
 fi
 
-note "API pronta em ${api_origin}; painel em ${panel_origin}. $( [ "${CHATISP_DEV_TLS:-0}" = "1" ] && echo "Abra o painel em HTTPS." || echo "O cookie de sessão permanece Secure e em HTTP o navegador não guarda essa sessão.")"
+note "API pronta em ${api_origin}; painel em ${panel_origin}. $( [ "$CHATISP_DEV_TLS" = "1" ] && echo "Abra o painel em HTTPS." || echo "O cookie de sessão permanece Secure e em HTTP o navegador não guarda essa sessão.")"
 
 set +e
 wait -n

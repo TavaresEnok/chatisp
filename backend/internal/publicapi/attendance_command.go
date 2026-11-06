@@ -14,7 +14,10 @@ import (
 	"chatisp/internal/attendance/store"
 )
 
-const publicTextLimit = 16000
+const (
+	publicTextLimit     = 16000     // UTF-8 bytes, including the signature applied by attendance.
+	publicTextJSONLimit = 128 << 10 // Includes JSON escaping, request ID and structure.
+)
 
 type textBody struct {
 	Body            string `json:"body"`
@@ -49,13 +52,13 @@ func (h *handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body textBody
-	if err := decodeJSON(r, &body); err != nil {
+	if err := decodeJSONLimit(r, &body, publicTextJSONLimit); err != nil {
 		writeProblem(w, http.StatusBadRequest, "mensagem inválida")
 		return
 	}
 	text := strings.TrimSpace(body.Body)
 	requestID := strings.TrimSpace(body.ClientRequestID)
-	if text == "" || utf8.RuneCountInString(text) > publicTextLimit || !validCommandKey(requestID) || body.ExpectedVersion < 1 {
+	if text == "" || len(text) > publicTextLimit || !validCommandKey(requestID) || body.ExpectedVersion < 1 {
 		writeProblem(w, http.StatusBadRequest, "mensagem inválida")
 		return
 	}

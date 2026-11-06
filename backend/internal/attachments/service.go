@@ -286,6 +286,41 @@ func (s *Service) upload(c context.Context, tx pgx.Tx, tenant uuid.UUID, r Recor
 	return e
 }
 
+// CompleteConverted publishes a validated OGG into an existing durable upload
+// intent. If this transaction fails, Cleanup can recover the object's key.
+// The caller authorizes the conversation and holds its media-item lock.
+func (s *Service) CompleteConverted(ctx context.Context, tx pgx.Tx, tenant, conv, id uuid.UUID, body []byte) error {
+	if s == nil || tx == nil || !storageReady(s.Storage) {
+		return ErrStorage
+	}
+	r, err := load(ctx, tx, tenant, conv, id)
+	if err != nil {
+		return err
+	}
+	typ, digest, err := inspect(body, r.direction)
+	if err != nil || typ != "application/ogg" {
+		return ErrInvalid
+	}
+	if err = s.upload(ctx, tx, tenant, r, bytes.NewReader(body)); err != nil {
+		return err
+	}
+	r, err = load(ctx, tx, tenant, conv, id)
+	if err != nil {
+		return err
+	}
+	reader, err := s.Storage.Read(ctx, r.key, r.version)
+	if err != nil {
+		return ErrStorage
+	}
+	stored, err := io.ReadAll(io.LimitReader(reader, r.Bytes+1))
+	reader.Close()
+	if err != nil || !bytes.Equal(stored, body) {
+		return ErrStorage
+	}
+	_, err = tx.Exec(ctx, `UPDATE attachments SET state='validated',media_type=$3,sha256=$4 WHERE tenant_id=$1 AND id=$2`, tenant, id, typ, digest)
+	return err
+}
+
 // Validate inspects the exact immutable version, never the current key. Rejected
 // bytes enter durable failed state and remain unavailable until cleanup.
 func (s *Service) Validate(ctx context.Context, p auth.Principal, inbox, conv, id uuid.UUID) (Record, error) {

@@ -217,7 +217,6 @@ func (s *Service) SetMembershipStatus(ctx context.Context, actor Principal, memb
 	if status == "disabled" && membershipID == actor.MembershipID {
 		return ErrForbidden
 	}
-	var membership db.Membership
 	var changed bool
 	err := s.store.WithTenant(ctx, actor.TenantID, func(ctx context.Context) error {
 		if err := s.store.LockTenant(ctx); err != nil {
@@ -234,8 +233,12 @@ func (s *Service) SetMembershipStatus(ctx context.Context, actor Principal, memb
 		if err != nil {
 			return err
 		}
-		membership = row
 		if row.Status == status {
+			if status == "disabled" {
+				return s.store.WithAuthInTenant(ctx, func(ctx context.Context) error {
+					return s.store.RevokeUserTenantSessions(ctx, actor.TenantID, row.UserID, s.now())
+				})
+			}
 			return nil
 		}
 		if status == "active" && row.Status != "disabled" {
@@ -256,8 +259,16 @@ func (s *Service) SetMembershipStatus(ctx context.Context, actor Principal, memb
 		if n != 1 {
 			return db.ErrNotFound
 		}
+		// Revoke before the state transition commits. If revocation fails, the
+		// membership remains in its previous state; if the later commit fails,
+		// an extra revocation is safe. Revoke on reactivation as well to close
+		// sessions left by an earlier interrupted disable.
+		if err := s.store.WithAuthInTenant(ctx, func(ctx context.Context) error {
+			return s.store.RevokeUserTenantSessions(ctx, actor.TenantID, row.UserID, s.now())
+		}); err != nil {
+			return err
+		}
 		changed = true
-		membership.Status = status
 		return nil
 	})
 	if err != nil {
@@ -265,15 +276,6 @@ func (s *Service) SetMembershipStatus(ctx context.Context, actor Principal, memb
 	}
 	if !changed {
 		return nil
-	}
-	if status == "disabled" {
-		err = s.store.WithAuth(ctx, func(ctx context.Context) error {
-			return s.store.RevokeUserTenantSessions(ctx, actor.TenantID, membership.UserID, s.now())
-		})
-		if err != nil {
-			s.log.ErrorContext(ctx, "falha ao revogar sessões do usuário", "component", "auth")
-			return ErrUnavailable
-		}
 	}
 	s.audit(ctx, actor.TenantID, actor.UserID, actor.MembershipID, auditAction, "membership", &membershipID, "success")
 	s.log.InfoContext(ctx, "vínculo atualizado", "component", "auth")
@@ -295,19 +297,15 @@ func (s *Service) changeProvider(ctx context.Context, actor Principal, tenantID 
 			return err
 		}
 		updated = row
+		// Keep the tenant transition uncommitted until session revocation has
+		// succeeded, including when recovering from an earlier partial suspend.
+		if err := s.store.RevokePlatformTenantSessions(ctx, tenantID, s.now()); err != nil {
+			return err
+		}
 		return s.writePlatformAudit(ctx, actor.UserID, action, tenantID)
 	})
 	if err != nil {
 		return db.Tenant{}, s.mapProvider(err)
-	}
-	if status == "suspended" {
-		err = s.store.WithAuth(ctx, func(ctx context.Context) error {
-			return s.store.RevokeTenantSessions(ctx, tenantID, s.now())
-		})
-		if err != nil {
-			s.log.ErrorContext(ctx, "falha ao revogar sessões do provedor", "component", "auth")
-			return db.Tenant{}, ErrUnavailable
-		}
 	}
 	s.log.InfoContext(ctx, "provedor atualizado", "component", "auth")
 	return updated, nil

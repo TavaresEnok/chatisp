@@ -219,12 +219,12 @@ func (s *Service) ResetMFA(ctx context.Context, actor Principal, target uuid.UUI
 }
 
 func (s *Service) finishLogin(ctx context.Context, identity db.LoginIdentity, membership db.LoginMembership, account, ip, code string) (IssuedSession, error) {
-	if s.keys == nil {
-		return s.issueAndAudit(ctx, identity, membership, account, "full", false, false)
-	}
 	record, err := s.mfaRecord(ctx, identity.UserID)
 	if err != nil {
 		return IssuedSession{}, err
+	}
+	if s.keys == nil {
+		return s.issueAndAudit(ctx, identity, membership, record, account, "full", false, false)
 	}
 	required := mfaRequired(identity.Memberships, membership, record.IsSuperadmin)
 	if record.Confirmed {
@@ -235,7 +235,7 @@ func (s *Service) finishLogin(ctx context.Context, identity db.LoginIdentity, me
 		if err != nil {
 			return IssuedSession{}, err
 		}
-		issued, err := s.issueAndAudit(ctx, identity, membership, account, "full", false, false)
+		issued, err := s.issueAndAudit(ctx, identity, membership, record, account, "full", false, false)
 		if err != nil {
 			return IssuedSession{}, err
 		}
@@ -248,13 +248,13 @@ func (s *Service) finishLogin(ctx context.Context, identity db.LoginIdentity, me
 		return issued, nil
 	}
 	if required {
-		return s.issueAndAudit(ctx, identity, membership, account, "enrollment", true, false)
+		return s.issueAndAudit(ctx, identity, membership, record, account, "enrollment", true, false)
 	}
-	return s.issueAndAudit(ctx, identity, membership, account, "full", false, false)
+	return s.issueAndAudit(ctx, identity, membership, record, account, "full", false, false)
 }
 
-func (s *Service) issueAndAudit(ctx context.Context, identity db.LoginIdentity, membership db.LoginMembership, account, assurance string, enrollment, skipAudit bool) (IssuedSession, error) {
-	issued, err := s.issueSession(ctx, identity.UserID, identity.Email, membership, account, assurance)
+func (s *Service) issueAndAudit(ctx context.Context, identity db.LoginIdentity, membership db.LoginMembership, record db.MFARecord, account, assurance string, enrollment, skipAudit bool) (IssuedSession, error) {
+	issued, err := s.issueSession(ctx, identity.UserID, identity.Email, membership, account, assurance, identity.PasswordHash, record)
 	if err != nil {
 		return IssuedSession{}, err
 	}

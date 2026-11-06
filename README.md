@@ -3,7 +3,7 @@
 Webchat de atendimento para provedores de internet: WhatsApp Cloud API oficial e modalidade Web/Evolution opcional; ERP existente integrado por API.
 
 - Especificação normativa: [docs/especificacao.md](docs/especificacao.md) (V4.1, 28/10/2026).
-- Referência funcional (fora do build): checkout do Chatwoot em `/home/enok/Documentos/projetos/webchat/chatwoot`, commit `f428ad8e6f`.
+- Referência funcional: [docs/chatwoot-referencia.md](docs/chatwoot-referencia.md).
 
 Identificadores de código em inglês. Interface, mensagens e documentos em pt-BR.
 
@@ -12,7 +12,7 @@ Identificadores de código em inglês. Interface, mensagens e documentos em pt-B
 - Go 1.27.3, com o módulo em `backend/`.
 - Node.js 24 e npm 11.19.1, o npm que acompanha esse Node. O npm 10 de `/usr/local/bin` não deve gravar o lockfile. Os scripts colocam o npm 11 à frente no `PATH` quando ele está instalado ao lado de um Node 24.
 - gcc para o que o toolchain Go pedir.
-- Neste host não há Docker, make, PostgreSQL de sistema nem root. Os scripts abaixo cobrem esse caso. Onde houver GNU make, `make test` executa `scripts/test.sh` e os outros alvos seguem a mesma regra.
+- GNU make é opcional: `make test` executa `scripts/test.sh` e os outros alvos seguem a mesma regra.
 
 ## Sem Docker
 
@@ -24,7 +24,7 @@ Na raiz do repositório:
 
 O script instala, se ainda não estiverem no disco, os binários de teste do PostgreSQL 18.4 (`npm ci --prefix backend/tools/pg`), sobe esse servidor só em loopback, aplica as migrações, cria os papéis do banco e um atendente local, e então inicia o processo `chatisp` no modo `all` junto com o Vite. Se a API não ficar pronta, ou se o script receber um sinal, ele encerra só o PostgreSQL, a API e o Vite que ele mesmo iniciou. Um serviço que já escutava na máquina não é parado nem tem a porta trocada.
 
-No padrão, a API fica em `http://127.0.0.1:8080`, as métricas em `127.0.0.1:9090`, o PostgreSQL em `127.0.0.1:55432` e o painel em `http://127.0.0.1:5173`. O Vite encaminha `/api`, `/healthz` e `/readyz` para o endereço da API. A origem do painel acompanha o host e a porta do Vite.
+No padrão, a API fica em `http://127.0.0.1:8080`, as métricas em `127.0.0.1:9090`, o PostgreSQL em `127.0.0.1:55432` e o painel em `https://127.0.0.1:5173`. O Vite encaminha `/api`, `/healthz` e `/readyz` para o endereço da API. A origem do painel acompanha o host e a porta do Vite.
 
 | Variável | Padrão | Uso |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ No padrão, a API fica em `http://127.0.0.1:8080`, as métricas em `127.0.0.1:90
 | `CHATISP_DEV_VITE_HOST` | `127.0.0.1` | painel Vite |
 | `CHATISP_DEV_VITE_PORT` | `5173` | painel Vite |
 
-Só entram endereços loopback (`127.0.0.0/8` ou `::1`). `0.0.0.0` e nomes de host são recusados. As quatro portas precisam ser distintas. Se alguma já estiver em uso, o script sai com erro. Neste host a porta 8080 costuma ser do Tomcat; escolha outro endereço local:
+Só entram endereços loopback (`127.0.0.0/8` ou `::1`). `0.0.0.0` e nomes de host são recusados. As quatro portas precisam ser distintas. Se alguma já estiver em uso, o script sai com erro. Para escolher outras portas:
 
 ```sh
 CHATISP_HTTP_ADDR=127.0.0.1:18080 \
@@ -46,8 +46,8 @@ CHATISP_DEV_VITE_PORT=5174 \
 ```
 
 - Na primeira subida, o terminal mostra o e-mail `dev.local@example.com` e a senha gerada. Ela não é gravada no repositório. Nas subidas seguintes a senha não muda.
-- O cookie de sessão é `__Host-session` com a flag `Secure`. O launcher local fala HTTP só para desenvolvimento. Em HTTP o navegador não guarda essa sessão, então o painel aberto nesse endereço não fica autenticado. O script não desliga `Secure` e não cria outro tipo de sessão. Para uma sessão real no navegador, use o Compose com Caddy em `https://localhost:8443`.
-- Alternativa sem Docker: `CHATISP_DEV_TLS=1 ./scripts/dev.sh`. O script gera um certificado autoassinado de 1 dia só para loopback (`openssl`, em `/tmp`, apagado ao sair), serve o Vite em HTTPS e passa a origem do painel para `https://`. Abra `https://127.0.0.1:5173/entrar` (ou a porta escolhida), aceite o aviso do certificado e entre; o cookie `__Host-session` continua `Secure`. A API permanece em HTTP loopback atrás do proxy do Vite. Só para desenvolvimento: produção segue com o Caddy.
+- O launcher gera por padrão um certificado autoassinado de 1 dia só para loopback (`openssl`, em `/tmp`, apagado ao sair). Abra `https://127.0.0.1:5173/entrar` (ou a porta escolhida), aceite o aviso do certificado e entre; o cookie `__Host-session` continua `Secure`. A API permanece em HTTP loopback atrás do Vite. Para uma instalação local persistente, use o Compose com Caddy em `https://localhost:8443`.
+- `CHATISP_DEV_TLS=0 ./scripts/dev.sh` habilita HTTP apenas para diagnóstico. Em HTTP o navegador não guarda essa sessão, então o painel não fica autenticado; a flag `Secure` não é alterada.
 
 Atalhos, quando o make existir:
 
@@ -68,9 +68,9 @@ Para experimentar o atendimento com banco descartável e Meta simulado, veja [o 
 
 O demo inclui setor padrão e vínculo setor/caixa do agente para o recorte M3A. [A entrega M3A](docs/m3a-entrega.md) registra as provas de autorização, contatos, compositor e notificações, a revogação de vínculo populado com histórico preservado e o backlog restante. A migração incremental 00012 separa identidade histórica e autorização operacional.
 
-O [roteiro M3B](docs/m3b-entrega.md) acrescenta fixture opt-in `m2demo m3b` e `npm --prefix web run test:e2e:m3b`, com PostgreSQL descartável, workers, Meta falso e navegador Playwright. O runner aceita `M3B_CHROMIUM_EXECUTABLE` ou detecta `.paseo-build-tmp/browser/chromium-launcher` relativo ao repositório. Em 03/11/2026 o cenário passou no Chromium 140.0.7339.186 provisionado: receber, assumir, transferir, responder, encerrar e revogação entre setores. M3 completo (incluindo auto-reabertura X e CPF/CNPJ autorizado com cifra/HMAC), revisão independente e gate amplo final permanecem pendentes.
+O [roteiro M3B](docs/m3b-entrega.md) descreve a fixture `m2demo m3b` e `npm --prefix web run test:e2e:m3b`, com PostgreSQL descartável, workers, Meta falso e Playwright.
 
-O [roteiro M4A](docs/m4a-entrega.md) acrescenta `m2demo m4a` e `npm --prefix web run test:e2e:m4a`, reutilizando o mesmo PostgreSQL embutido e o mesmo Chromium. O runner usa o launcher local, o cache do Playwright ou o Chromium 1193 da conta, e falha sem baixar browser. Em 03/11/2026 o cenário passou no Chromium 140.0.7339.186: respostas, atalho, assinatura, horário por caixa, janela expirada no despacho, template driver aceito na fila com a janela já fechada, recusa `template_not_authorized` do catálogo fake com consentimento ainda válido, opt-out `consent_required` num passo separado e anexo autorizado. M4B, M5 e os marcos M3/M4/M5 inteiros continuam pendentes. Auto-reabertura X e documentos autorizados do M3, o pipeline de mídia e áudio do M4B, round-robin, presença e triagem do M5, e as integrações, relatórios e M8 seguem no backlog.
+O [roteiro M4A](docs/m4a-entrega.md) descreve `m2demo m4a` e `npm --prefix web run test:e2e:m4a`. Para limitações e homologações ainda abertas, consulte [dependências externas](docs/dependencias-externas.md).
 
 ```sh
 ./scripts/test.sh
@@ -98,12 +98,12 @@ npm --prefix web run build
 
 ## Com Docker
 
-Requisitos: Docker com Compose, em uma máquina que possa puxar imagens. Este host de desenvolvimento não executa esse caminho.
+Requisitos: Docker Engine 20.10.10 ou mais novo, Compose 2.24.4 ou mais novo e `openssl`. O build precisa baixar imagens e dependências. As versões efetivamente testadas e suas limitações estão em [operação](docs/operacao.md).
 
 ```sh
-cp deploy/.env.example deploy/.env
-# edite deploy/.env e troque os placeholders
-docker compose -f deploy/compose.yaml --env-file deploy/.env up --build
+./deploy/init-local-env.sh
+docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --build
+docker compose -f deploy/compose.yaml --env-file deploy/.env ps
 ```
 
 O Compose sobe:
@@ -113,16 +113,33 @@ O Compose sobe:
 - `chatisp migrate`, depois os modos `api` e `worker`.
 - Caddy na frente, com certificado interno. O painel fica em `https://localhost:8443`.
 
-`deploy/.env.example` só tem placeholders. Segredos reais ficam em `deploy/.env`, que não entra no Git.
+O gerador cria `deploy/.env` com segredos aleatórios e permissão 0600; ele recusa sobrescrever um arquivo existente. Preserve esse arquivo em local seguro: as chaves são necessárias para recuperar dados cifrados. Os volumes persistem entre reinícios; `down -v` os apaga. `deploy/.env.example` documenta as opções e contém apenas placeholders.
 
-Primeiro administrador, uma vez, com a senha pela entrada padrão:
+Abra `https://localhost:8443`. O certificado é de uma CA interna do laboratório, não reconhecida automaticamente pelo navegador; confira a CA da instalação antes de autorizá-la no navegador. A raiz pública pode ser copiada, sem a chave privada, com `docker compose -f deploy/compose.yaml --env-file deploy/.env cp caddy:/data/caddy/pki/authorities/local/root.crt /tmp/chatisp-local-ca.crt`. Não instale essa CA globalmente sem uma decisão explícita. O storage usa `storage.localhost:8443`.
 
-```sh
-printf '%s\n' "$SENHA_DO_ADMIN" | docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm -T chatisp-migrate bootstrap -email admin@provedor.example -superadmin
+Primeiro administrador de provedor, uma vez, com senha lida sem eco. Informe um e-mail e escolha um limite de bytes para anexos; sem limite os anexos são recusados. O exemplo abaixo usa um limite sintético para o laboratório:
+
+```bash
+read -r -s -p 'Senha do administrador: ' SENHA_DO_ADMIN; echo
+printf '%s\n' "$SENHA_DO_ADMIN" | docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm -T chatisp-migrate bootstrap -email admin@exemplo.local -storage-bytes 1073741824
+unset SENHA_DO_ADMIN
 ```
 
-Requisitos do host: Docker Engine 20.10.10 ou mais novo e Compose 2.24.4 ou mais novo. Validação completa em ambiente isolado: `./scripts/compose-validate.sh` (ver `docs/operacao.md`).
+No primeiro acesso, configure MFA. Sem SMTP configurado, convites e recuperação de senha ficam indisponíveis. A opção `-superadmin` cria uma conta de plataforma que não opera o atendimento; nesse caso, é preciso SMTP para convidar um administrador de provedor. O bootstrap não promove uma conta existente numa instalação já criada. Consulte [operação](docs/operacao.md) antes de escolher o papel inicial.
 
-Para produção, defina `CHATISP_ENV=production` e a chave `CHATISP_DATA_KEYS` ou `CHATISP_DATA_KEYS_FILE` com `CHATISP_DATA_KEY_VERSION`. O exemplo de Compose deixa `development` para a instalação local com Docker.
+O Compose usa `CHATISP_ENV=production` também no laboratório, mantém o envio oficial Meta desligado e publica HTTPS apenas em loopback. O serviço Garage local é de nó único e não substitui backup independente. Para domínio próprio e certificado público, consulte [implantação](docs/implantacao.md). Validação completa em ambiente isolado: `./scripts/compose-validate.sh`.
+
+### Laboratório com Docker 20.10.9
+
+Em hosts com Docker 20.10.9, o perfil abaixo usa bases Alpine e rede do host apenas durante o build, para contornar a incompatibilidade do seccomp antigo com as imagens Debian. É uma instalação local persistente de laboratório, sem domínio público nem implantação de produção. Escolha um nome exclusivo para o projeto e o prefixo de imagem; use os mesmos argumentos em todos os comandos da instalação. As portas, a CA interna e os volumes continuam os do Compose base.
+
+```sh
+./deploy/init-local-env.sh
+export CHATISP_LOCAL_IMAGE_PREFIX=chatisp-pronto-hoje
+docker compose -p chatisp-pronto-hoje -f deploy/compose.yaml -f deploy/compose.local-alpine.yaml --env-file deploy/.env config -q
+docker compose -p chatisp-pronto-hoje -f deploy/compose.yaml -f deploy/compose.local-alpine.yaml --env-file deploy/.env up -d --build
+```
+
+Para criar o primeiro administrador, use a leitura de senha e os argumentos de `bootstrap` mostrados acima, acrescentando ao comando Compose os mesmos `-p` e `-f` deste perfil. Se a porta 8443 já estiver ocupada, escolha uma porta livre e ajuste em `deploy/.env` as três variáveis `CHATISP_PUBLIC_PORT`, `CHATISP_PANEL_ORIGINS=https://localhost:<porta>` e `CHATISP_ATTACHMENTS_S3_PUBLIC_ENDPOINT=https://storage.localhost:<porta>` antes da subida. Não altere `CHATISP_PUBLIC_BIND` para fora de loopback. O perfil não configura SMTP e não ativa simulação da Meta.
 
 Não há chamada a Meta, Evolution ou ERP neste fluxo.

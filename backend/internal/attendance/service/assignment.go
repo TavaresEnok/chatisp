@@ -104,8 +104,19 @@ func (s Service) assign(ctx context.Context, p Principal, in AssignmentInput, ki
 			}
 			targetSector = id
 		}
+		resolution := "queued"
+		if member != uuid.Nil {
+			resolution = "assigned"
+		}
+		cleared, err := clearManualSnooze(ctx, tx, p.TenantID, in.ConversationID, in.At, resolution)
+		if err != nil {
+			return err
+		}
 		out, err = s.Repo.ApplyAssignment(ctx, tx, p.TenantID, in.ConversationID, p.UserID, member, targetSector, in.ExpectedVersion, kind, in.At)
 		if err != nil {
+			return err
+		}
+		if err := recordManualSnoozeClear(ctx, tx, p.TenantID, p.UserID, out, in.At, cleared); err != nil {
 			return err
 		}
 		result, err := json.Marshal(out)

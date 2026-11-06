@@ -93,6 +93,27 @@ func (s *Store) WithAuth(ctx context.Context, fn func(context.Context) error) er
 	return nil
 }
 
+// WithAuthInTenant reuses the existing app transaction when a tenant-scoped
+// operation must also call the restricted auth functions. This avoids holding
+// one pool connection while waiting for a second one.
+func (s *Store) WithAuthInTenant(ctx context.Context, fn func(context.Context) error) error {
+	scope, err := tenantFrom(ctx)
+	if err != nil {
+		return err
+	}
+	var previous string
+	if err := scope.tx.QueryRow(ctx, `SELECT COALESCE(current_setting('app.access_scope', true), '')`).Scan(&previous); err != nil {
+		return mapErr(err)
+	}
+	if err := setLocal(ctx, scope.tx, "app.access_scope", "auth"); err != nil {
+		return err
+	}
+	if err := fn(context.WithValue(ctx, authKey{}, authScope{tx: scope.tx})); err != nil {
+		return err
+	}
+	return setLocal(ctx, scope.tx, "app.access_scope", previous)
+}
+
 // WithPlatform opens a transaction on the platform pool and sets the platform scope.
 // It does not grant a tenant context.
 func (s *Store) WithPlatform(ctx context.Context, fn func(context.Context) error) error {

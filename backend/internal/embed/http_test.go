@@ -40,3 +40,17 @@ func TestPutRecusaCampoDeMensagem(t *testing.T) {
 		t.Fatalf("ecoou corpo: %s", rec.Body.String())
 	}
 }
+
+func TestPutRecusaJSONAdicionalEExcesso(t *testing.T) {
+	router := chi.NewRouter()
+	Mount(router, Dependencies{TrustedOrigins: []string{"https://painel.example"}, Panels: New(nil)})
+	for _, body := range []string{`{"allowed_origin":"https://erp.example","panel_url":"https://erp.example"}{}`, `{"allowed_origin":"https://erp.example","panel_url":"https://erp.example"}` + strings.Repeat(" ", 8192)} {
+		req := httptest.NewRequest(http.MethodPut, "/api/panel/embed", strings.NewReader(body))
+		req.Header.Set("Origin", "https://painel.example")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+		}
+	}
+}

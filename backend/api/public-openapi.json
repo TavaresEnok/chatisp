@@ -906,7 +906,7 @@
       "post": {
         "operationId": "sendMessage",
         "summary": "Envia uma mensagem de texto pelo atendimento",
-        "description": "Escopo exigido: conversations.write. O texto segue Service.Send do atendimento, em nome do atendente atual da conversa. A chave é do token e do tenant. A janela de 24 horas e a assinatura do painel são as mesmas. Não envia mídia nem template.",
+        "description": "Escopo exigido: conversations.write. O texto segue Service.Send do atendimento, em nome do atendente atual da conversa. A chave é do token e do tenant. A janela de 24 horas e a assinatura do painel são as mesmas. O texto com assinatura não pode exceder 16000 bytes UTF-8; excesso responde 400. O corpo JSON tem limite de 128 KiB. Não envia mídia nem template.",
         "tags": [
           "mensagens"
         ],
@@ -2017,7 +2017,7 @@
         "properties": {
           "body": {
             "type": "string",
-            "description": "Texto livre. A assinatura do atendente atual é aplicada pelo atendimento.",
+            "description": "Texto livre em UTF-8. O texto final, incluindo a assinatura do atendente aplicada pelo atendimento, tem limite de 16000 bytes; o excesso é recusado com HTTP 400.",
             "minLength": 1,
             "maxLength": 16000
           },

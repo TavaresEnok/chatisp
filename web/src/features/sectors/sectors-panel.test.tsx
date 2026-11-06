@@ -34,3 +34,22 @@ it("descarta setores e vínculos ao mudar papel na mesma sessão", async () => {
   expect(screen.queryByText("vinculo privado")).not.toBeInTheDocument(); expect(screen.queryByText(/Setor privado/)).not.toBeInTheDocument();
   await screen.findByRole("button", { name: /Meu setor/ }); expect(view.queryClient.getQueryCache().findAll({ queryKey: ["m3"] }).some(q => JSON.stringify(q.state.data)?.includes("vinculo privado"))).toBe(false);
 });
+it("permite repetir leitura de setores e limpa o destino ao trocar de setor", async () => {
+  let reads = 0;
+  vi.stubGlobal("fetch", vi.fn(async (req: Request) => {
+    const path = new URL(req.url).pathname;
+    if (path.endsWith("/sectors")) {
+      if (++reads === 1) return new Response(null, { status: 503 });
+      return new Response(JSON.stringify({ sectors: [{ id: "s1", name: "Suporte", active: true }, { id: "s2", name: "Vendas", active: true }] }), { headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ membership_ids: [], inbox_ids: [], default_inbox_ids: [] }), { headers: { "content-type": "application/json" } });
+  }));
+  useSessionStore.getState().applySession({ tenantId: "t", userId: "u", sessionId: "s", email: "a@b.test", membershipId: "m", role: "admin", expiresAt: "2099-01-01", mfaEnrollmentRequired: false }, "csrf");
+  const user = userEvent.setup(); renderPanel("/equipes");
+  await user.click(await screen.findByRole("button", { name: "Tentar novamente setores" }));
+  await user.click(await screen.findByRole("button", { name: "Suporte — Ativo" }));
+  await user.type(screen.getByLabelText("Identificador do membro ou caixa"), "m1");
+  await user.click(screen.getByRole("button", { name: "Vendas — Ativo" }));
+  expect(screen.getByLabelText("Identificador do membro ou caixa")).toHaveValue("");
+  expect(screen.getByRole("button", { name: "Vincular membro" })).toBeDisabled();
+});

@@ -294,7 +294,7 @@ func OpenAPIJSON() []byte {
 			Type: "object", AdditionalProperties: &falseValue,
 			Required: []string{"body", "client_request_id", "expected_version"},
 			Properties: map[string]docSchema{
-				"body":              {Type: "string", MinLength: &one, MaxLength: &sixteenThousand, Description: "Texto livre. A assinatura do atendente atual é aplicada pelo atendimento."},
+				"body":              {Type: "string", MinLength: &one, MaxLength: &sixteenThousand, Description: "Texto livre em UTF-8. O texto final, incluindo a assinatura do atendente aplicada pelo atendimento, tem limite de 16000 bytes; o excesso é recusado com HTTP 400."},
 				"client_request_id": {Type: "string", MinLength: &one, MaxLength: &twoHundred, Description: "Idempotência do token e do tenant. Outro token e o painel não compartilham esta chave."},
 				"expected_version":  {Type: "integer", Minimum: &one, Description: "version lida em GET da conversa."},
 			},
@@ -455,7 +455,7 @@ func OpenAPIJSON() []byte {
 			op.Responses["200"] = jsonResp("Contato da conversa", "Contact")
 			op.Responses["404"] = problemResp("Conversa ou contato não encontrado")
 		case "sendMessage":
-			op.Description = "Escopo exigido: conversations.write. O texto segue Service.Send do atendimento, em nome do atendente atual da conversa. A chave é do token e do tenant. A janela de 24 horas e a assinatura do painel são as mesmas. Não envia mídia nem template."
+			op.Description = "Escopo exigido: conversations.write. O texto segue Service.Send do atendimento, em nome do atendente atual da conversa. A chave é do token e do tenant. A janela de 24 horas e a assinatura do painel são as mesmas. O texto com assinatura não pode exceder 16000 bytes UTF-8; excesso responde 400. O corpo JSON tem limite de 128 KiB. Não envia mídia nem template."
 			op.RequestBody = bodyRef("TextSend")
 			op.Responses["201"] = jsonResp("Texto aceito na outbox", "TemplateResult")
 			op.Responses["200"] = jsonResp("Replay da mesma chave e do mesmo texto", "TemplateResult")

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -107,6 +108,56 @@ func TestPublicConversationTextAssignAndState(t *testing.T) {
 	}
 	if countAttempts(t, tenant, quiet) != 0 {
 		t.Fatal("janela fechada gravou tentativa")
+	}
+
+	// A second conversation isolates size tests from the main scenario.
+	if err := testStore.WithTenantTx(ctx, tenant, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO messages(tenant_id,id,conversation_id,connector_id,direction,origin,visibility,body,local_state,trusted_at,historical) VALUES($1,$2,$3,$4,'inbound','customer','public','oi','received',clock_timestamp(),false)`, tenant, uuid.New(), quiet, connector)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	path := "/v1/conversations/" + quiet.String() + "/messages"
+	sendSized := func(text, key string) *httptest.ResponseRecorder {
+		data, err := json.Marshal(textBody{Body: text, ClientRequestID: key, ExpectedVersion: publicVersion(t, api, quiet, secret)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return postPublic(t, api, path, secret, data)
+	}
+	for _, tc := range []struct{ text, key string }{{strings.Repeat("a", 9216), "large-ascii"}, {strings.Repeat("é", 5000), "large-unicode"}} {
+		r := sendSized(tc.text, tc.key)
+		if r.Code != http.StatusCreated {
+			t.Fatalf("%s: %d %s", tc.key, r.Code, r.Body.String())
+		}
+	}
+	tooLarge := sendSized(strings.Repeat("é", 8001), "too-large-unicode")
+	if tooLarge.Code != http.StatusBadRequest {
+		t.Fatalf("unicode excedente: %d %s", tooLarge.Code, tooLarge.Body.String())
+	}
+	if err := testStore.WithTenantTx(ctx, tenant, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO attendant_signature_settings(tenant_id,enabled,prefix,version) VALUES($1,true,'Assinatura ',1) ON CONFLICT (tenant_id) DO UPDATE SET enabled=true,prefix='Assinatura ',version=attendant_signature_settings.version+1`, tenant)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	atLimit := sendSized(strings.Repeat("a", 15989), "signature-at-limit")
+	if atLimit.Code != http.StatusCreated {
+		t.Fatalf("assinatura no limite: %d %s", atLimit.Code, atLimit.Body.String())
+	}
+	before := countAttempts(t, tenant, quiet)
+	overflow := sendSized(strings.Repeat("a", 15999), "signature-overflow")
+	if overflow.Code != http.StatusBadRequest {
+		t.Fatalf("assinatura excedente: %d %s", overflow.Code, overflow.Body.String())
+	}
+	if countAttempts(t, tenant, quiet) != before {
+		t.Fatal("assinatura excedente criou tentativa")
+	}
+	if err := testStore.WithTenantTx(ctx, tenant, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `UPDATE attendant_signature_settings SET enabled=false WHERE tenant_id=$1`, tenant)
+		return err
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	body := []byte(`{"body":"resposta local","client_request_id":"txt-1","expected_version":1}`)

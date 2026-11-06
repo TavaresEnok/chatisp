@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/mail"
@@ -88,6 +89,8 @@ func TestSuspendAndReactivatePreservesDataAndAudits(t *testing.T) {
 	if _, err := svc.SuspendProvider(ctx, actor, created.ID); !errors.Is(err, ErrTenantState) {
 		t.Fatalf("segunda suspensão: %v", err)
 	}
+	// Simulate a session left live by an older interrupted suspension.
+	restoreLiveSessionForTest(t, providerSession.Principal.SessionID)
 	active, err := svc.ReactivateProvider(ctx, actor, created.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -192,6 +195,8 @@ func TestDisabledUserLosesSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Simulate a session left live by an older interrupted disable.
+	restoreLiveSessionForTest(t, agent.Principal.SessionID)
 	if err := svc.SetMembershipStatus(ctx, admin, agentMembership, "active"); err != nil {
 		t.Fatal(err)
 	}
@@ -201,6 +206,204 @@ func TestDisabledUserLosesSessions(t *testing.T) {
 	restored := loginIssued(t, svc, agentEmail, password)
 	if restored.Principal.MembershipID != agentMembership || restored.Principal.Role != "agent" {
 		t.Fatalf("reativação: %+v", restored.Principal)
+	}
+}
+
+func restoreLiveSessionForTest(t *testing.T, id uuid.UUID) {
+	t.Helper()
+	conn, err := pgx.Connect(context.Background(), testEnv.AdminURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(context.Background())
+	if _, err := conn.Exec(context.Background(), `UPDATE sessions SET revoked_at=NULL WHERE id=$1`, id); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSessionCreationWaitsForMembershipTransition(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newAdminService(t)
+	a := seedAccount(t, "agent", "senha-correta-10")
+	identity, found, err := svc.loadIdentity(ctx, a.email)
+	if err != nil || !found {
+		t.Fatalf("identidade: %v", err)
+	}
+	result := make(chan error, 1)
+	err = testStore.WithTenant(ctx, a.tenant, func(ctx context.Context) error {
+		if err := testStore.LockTenant(ctx); err != nil {
+			return err
+		}
+		go func() {
+			_, err := svc.issueSession(context.Background(), a.user, a.email, db.LoginMembership{TenantID: a.tenant, MembershipID: a.membership, Role: "agent"}, "", "full", identity.PasswordHash, db.MFARecord{})
+			result <- err
+		}()
+		select {
+		case err := <-result:
+			t.Fatalf("sessão criada durante transição: %v", err)
+		case <-time.After(100 * time.Millisecond):
+		}
+		_, err := testStore.UpdateMembershipStatus(ctx, a.membership, "disabled")
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := <-result; !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("sessão criada após desativação: %v", err)
+	}
+	if countLiveSessions(t, a.tenant, a.user) != 0 {
+		t.Fatal("sessão permaneceu após desativação")
+	}
+}
+
+func TestVerifiedPasswordCannotIssueSessionAfterReset(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newAdminService(t)
+	a := seedAccount(t, "agent", "senha-correta-10")
+	identity, found, err := svc.loadIdentity(ctx, a.email)
+	if err != nil || !found {
+		t.Fatalf("identidade: %v", err)
+	}
+	if ok, err := VerifyPassword("senha-correta-10", identity.PasswordHash); err != nil || !ok {
+		t.Fatal("senha inicial não conferiu")
+	}
+	// Model a reset completing after password verification but before session insertion.
+	setPassword(t, a.user, "senha-nova-segura")
+	if _, err := svc.issueAndAudit(ctx, identity, identity.Memberships[0], db.MFARecord{}, a.email, "full", false, false); err == nil {
+		t.Fatal("senha já substituída abriu sessão")
+	}
+}
+
+func TestTenantAuthUsesOnePoolConnection(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	config, err := pgxpool.ParseConfig(testURLs.App)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.MaxConns = 2
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	store := db.NewStore(pool, testPools.Platform)
+	ready, release, done := make(chan struct{}, 2), make(chan struct{}), make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		tenant := uuid.New()
+		go func() {
+			done <- store.WithTenant(ctx, tenant, func(ctx context.Context) error {
+				if err := store.LockTenant(ctx); err != nil {
+					return err
+				}
+				ready <- struct{}{}
+				<-release
+				return store.WithAuthInTenant(ctx, func(ctx context.Context) error {
+					_, err := store.VerifiedPasswordCurrent(ctx, uuid.New(), "not-a-credential", db.MFARecord{})
+					return err
+				})
+			})
+		}()
+	}
+	<-ready
+	<-ready
+	close(release)
+	for i := 0; i < 2; i++ {
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestProviderTransitionDoesNotWaitForSaturatedAppPool(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	a := seedAccount(t, "agent", "senha-correta-10")
+	config, err := pgxpool.ParseConfig(testURLs.App)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.MaxConns = 2
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	store := db.NewStore(pool, testPools.Platform)
+	ready, done := make(chan struct{}, 2), make(chan error, 2)
+	err = store.WithPlatform(ctx, func(ctx context.Context) error {
+		if _, err := store.SetTenantStatus(ctx, a.tenant, "suspended"); err != nil {
+			return err
+		}
+		for i := 0; i < 2; i++ {
+			go func() {
+				done <- store.WithTenant(context.Background(), a.tenant, func(c context.Context) error {
+					ready <- struct{}{}
+					return store.LockTenant(c)
+				})
+			}()
+		}
+		<-ready
+		<-ready
+		return store.RevokePlatformTenantSessions(ctx, a.tenant, time.Now())
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestPasswordResetWaitsForSessionAndRevokesIt(t *testing.T) {
+	ctx := context.Background()
+	svc, box := newAdminService(t)
+	a := seedAccount(t, "agent", "senha-correta-10")
+	identity, found, err := svc.loadIdentity(ctx, a.email)
+	if err != nil || !found {
+		t.Fatalf("identidade: %v", err)
+	}
+	if err := svc.RequestPasswordReset(ctx, a.email, "203.0.113.44"); err != nil {
+		t.Fatal(err)
+	}
+	token := lastLine(box.Snapshot()[0].Text)
+	resetDone := make(chan error, 1)
+	sessionID := uuid.New()
+	_, tokenHash, err := NewSecret()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, csrfHash, err := NewSecret()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = testStore.WithAuth(ctx, func(ctx context.Context) error {
+		ok, err := testStore.VerifiedPasswordCurrent(ctx, a.user, identity.PasswordHash, db.MFARecord{})
+		if err != nil || !ok {
+			t.Fatalf("hash válido: %v %v", ok, err)
+		}
+		go func() {
+			resetDone <- svc.ConfirmPasswordReset(context.Background(), token, "senha-nova-segura", "203.0.113.45")
+		}()
+		select {
+		case err := <-resetDone:
+			t.Fatalf("reset não aguardou o login: %v", err)
+		case <-time.After(150 * time.Millisecond):
+		}
+		now := svc.now()
+		return testStore.InsertSession(ctx, db.NewSession{ID: sessionID, TokenHash: tokenHash, CSRFHash: csrfHash, UserID: a.user, TenantID: a.tenant, MembershipID: a.membership, Now: now, IdleExpiresAt: now.Add(time.Minute), AbsoluteExpiresAt: now.Add(time.Hour)})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := <-resetDone; err != nil {
+		t.Fatal(err)
+	}
+	if countLiveSessions(t, a.tenant, a.user) != 0 {
+		t.Fatal("reset deixou sessão concorrente ativa")
 	}
 }
 

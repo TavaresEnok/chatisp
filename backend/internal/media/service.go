@@ -4,7 +4,6 @@
 package media
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -330,5 +329,3 @@ func loadItem(ctx context.Context, tx pgx.Tx, tenant, conv, id uuid.UUID) (Media
 	item.DurationMS = duration
 	return item, e
 }
-
-func bytesReader(b []byte) io.ReadSeeker { return bytes.NewReader(b) }

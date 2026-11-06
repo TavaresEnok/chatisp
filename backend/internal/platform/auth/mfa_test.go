@@ -129,8 +129,26 @@ func TestAdminMustEnrollBeforePanelAndRecoveryIsSingleUse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	priorIdentity, found, err := otherSvc.loadIdentity(context.Background(), other.email)
+	if err != nil || !found {
+		t.Fatalf("identidade MFA: %v", err)
+	}
+	priorMFA, err := otherSvc.mfaRecord(context.Background(), other.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifiedCode, err := totp.GenerateCode(otherEnroll.Secret, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := otherSvc.verifyFactor(context.Background(), other.user, priorIdentity.Memberships[0], priorMFA, verifiedCode, "203.0.113.99"); err != nil {
+		t.Fatal(err)
+	}
 	if err := svc.ResetMFA(context.Background(), actor, other.user); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := otherSvc.issueAndAudit(context.Background(), priorIdentity, priorIdentity.Memberships[0], priorMFA, other.email, "full", false, false); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("fator redefinido abriu sessão: %v", err)
 	}
 	resetLogin, err := otherSvc.Login(context.Background(), other.email, "senha-correta-10", other.tenant.String(), "203.0.113.88")
 	if err != nil || !resetLogin.EnrollmentRequired {
@@ -139,6 +157,20 @@ func TestAdminMustEnrollBeforePanelAndRecoveryIsSingleUse(t *testing.T) {
 
 	assertAuditActions(t, admin.tenant, "mfa.enroll", "mfa.recovery", "mfa.reset")
 	assertPlatformAudit(t, "mfa.enroll", "mfa.recovery", "mfa.reset")
+
+	// A valid second factor cannot revive a password verified before a reset.
+	identity, found, err := svc.loadIdentity(context.Background(), admin.email)
+	if err != nil || !found {
+		t.Fatalf("identidade: %v", err)
+	}
+	setPassword(t, admin.user, "senha-nova-segura")
+	fresh, err = totp.GenerateCode(enrollment.Secret, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.finishLogin(context.Background(), identity, identity.Memberships[0], admin.email, "203.0.113.89", fresh); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("MFA após troca de senha: %v", err)
+	}
 }
 
 func TestMFAAttemptLimit(t *testing.T) {

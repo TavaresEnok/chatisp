@@ -502,10 +502,17 @@ func (h *handler) listDirectory(w http.ResponseWriter, r *http.Request, load fun
 }
 
 func decodeJSON(r *http.Request, dest any) error {
-	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 8192))
+	return decodeJSONLimit(r, dest, 8192)
+}
+
+func decodeJSONLimit(r *http.Request, dest any, limit int64) error {
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, limit))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(dest); err != nil && !errors.Is(err, io.EOF) {
+	if err := dec.Decode(dest); err != nil {
 		return err
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		return errors.New("corpo JSON inválido")
 	}
 	return nil
 }

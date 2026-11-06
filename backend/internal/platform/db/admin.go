@@ -97,6 +97,17 @@ func (s *Store) SetTenantStatus(ctx context.Context, id uuid.UUID, status string
 	return updated, nil
 }
 
+// RevokePlatformTenantSessions uses the existing platform transaction; it
+// cannot read session secrets and requires the restricted platform scope.
+func (s *Store) RevokePlatformTenantSessions(ctx context.Context, id uuid.UUID, now time.Time) error {
+	scope, err := platformFrom(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = scope.tx.Exec(ctx, `SELECT platform_revoke_tenant_sessions($1, $2)`, id, now)
+	return mapErr(err)
+}
+
 // LockTenant serializes plan checks for the active tenant.
 // The application role cannot lock the tenant row itself: it has no UPDATE there.
 func (s *Store) LockTenant(ctx context.Context) error {

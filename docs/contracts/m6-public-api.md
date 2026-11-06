@@ -69,6 +69,8 @@ A leitura de conversa, no detalhe e na lista, inclui `version`. Esse é o `expec
 
 `POST /v1/conversations/{ref}/messages` chama `Service.Send` em nome do atendente atual. Sem atendente a resposta é 422. A janela de 24 horas do texto livre é a mesma do painel. A chave `client_request_id` é do token e do tenant, derivada com o espaço `pubapi`, e não se mistura com o painel nem com outro token. Repetir a chave depois de transferir devolve a mesma mensagem. Outro texto na mesma chave responde 409. Não envia mídia.
 
+O limite efetivo é de **16000 bytes UTF-8 incluindo a assinatura do atendente**; excedê-lo responde 400 sem criar tentativa. A rota aceita até 128 KiB de JSON para acomodar escapes de um texto válido. As outras entradas públicas mantêm 8 KiB e exigem um único objeto seguido de EOF. O envelope canônico de idempotência tem teto técnico de 256 KiB; isso não amplia o texto permitido.
+
 `POST /v1/conversations/{ref}/assignment` chama `Service.TransferToMember`. O destino é `assignee_id`, uma membership ativa do setor da conversa. O token não tem sessão: o ator operacional é o administrador ativo mais antigo do provedor, ou o autor já gravado naquela chave. Capacidade esgotada responde 409. A mesma chave com outro destino responde 409.
 
 `POST /v1/conversations/{ref}/state` chama `Service.Close` quando `status` é `closed` e `Service.Reopen` quando `status` é `open`. O encerramento exige `reason`, `result` (`resolved`, `no_response`, `referred_external` ou `spam`) e `summary`. Não envia despedida. O ator operacional é o mesmo administrador da atribuição. Reabrir não aceita motivo. O webhook de contato continua de fora.

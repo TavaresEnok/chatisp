@@ -1,0 +1,31 @@
+# Compatibilidade do laboratório local com Docker 20.10.9: seccomp antigo
+# bloqueia clone3 nas imagens Debian. Não usar este perfil como produção.
+# Combine com compose.yaml e forneça CHATISP_LOCAL_IMAGE_PREFIX e -p explícitos.
+x-local-runtime: &local-runtime
+  image: ${CHATISP_LOCAL_IMAGE_PREFIX:?defina CHATISP_LOCAL_IMAGE_PREFIX}:runtime
+  build:
+    context: ..
+    dockerfile: deploy/validacao/Dockerfile.alpine
+    target: runtime
+    network: host
+
+services:
+  postgres:
+    image: postgres:18.6-alpine
+  chatisp-migrate:
+    <<: *local-runtime
+  chatisp-api:
+    <<: *local-runtime
+  chatisp-worker:
+    <<: *local-runtime
+  storage-setup:
+    image: ${CHATISP_LOCAL_IMAGE_PREFIX:?defina CHATISP_LOCAL_IMAGE_PREFIX}:runtime
+  caddy:
+    image: ${CHATISP_LOCAL_IMAGE_PREFIX:?defina CHATISP_LOCAL_IMAGE_PREFIX}:edge
+    build:
+      context: ..
+      dockerfile: deploy/validacao/Dockerfile.alpine
+      target: edge
+      network: host
+  trust-export:
+    image: ${CHATISP_LOCAL_IMAGE_PREFIX:?defina CHATISP_LOCAL_IMAGE_PREFIX}:edge

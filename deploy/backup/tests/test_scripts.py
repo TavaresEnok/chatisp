@@ -22,6 +22,11 @@ with open(os.environ['CALLS'], 'a') as out: out.write(json.dumps(sys.argv[1:])+'
 source=' '.join(sys.argv[1:])
 if os.environ.get('DENY_LOCK') and 'mkdir /mirror/.operation-lock' in source: sys.exit(1)
 if os.environ.get('DENY_AUDIT') and 'successes.log' in source: sys.exit(1)
+if 'mkdir -p /mirror/ledgers; : >' in source:
+ open(os.environ['FAKE_MARKER'], 'w').close()
+if os.environ.get('DENY_LEDGER_SQL') and '\\\\copy' in source: sys.exit(1)
+if '--entrypoint' in sys.argv and 'rm' in sys.argv and any('.inflight' in a for a in sys.argv):
+ os.unlink(os.environ['FAKE_MARKER'])
 if 'printf' in source and '$CHATISP_DATA_KEYS' in source:
  print('CHATISP_DATA_KEYS='+os.environ['SYNTHETIC_KEY'])
  print('CHATISP_DATA_KEY_VERSION=1')
@@ -37,7 +42,8 @@ if 'cat >' in source: sys.stdin.buffer.read()
         self.status = self.root / 'status.prom'
         self.env = dict(os.environ, COMPOSE_CMD=f'{self.fake} --env-file {self.envfile}',
                         BACKUP_INSTALLATION='fixture-a', CALLS=str(self.calls), SYNTHETIC_KEY=key,
-                        BACKUP_KEYS_PASSPHRASE_FILE=str(self.pass_file), BACKUP_STATUS_FILE=str(self.status))
+                        BACKUP_KEYS_PASSPHRASE_FILE=str(self.pass_file), BACKUP_STATUS_FILE=str(self.status),
+                        FAKE_MARKER=str(self.root / 'inflight'))
 
     def run_script(self, script, *args, **extra):
         return subprocess.run(['bash', str(HERE / script), *args], env=dict(self.env, **extra), capture_output=True, text=True)
@@ -72,6 +78,26 @@ if 'cat >' in source: sys.stdin.buffer.read()
         self.assertIn("select id, tenant_id, object_key", queries[1])
         self.assertIn("from privacy_ingress_guards", queries[2])
 
+    def test_failed_first_ledger_query_leaves_inflight_marker(self):
+        result = self.run_script('chatisp-backup.sh', 'ledger', DENY_LEDGER_SQL='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((self.root / 'inflight').exists())
+        self.assertFalse(self.status.exists())
+
+    def test_restore_rejects_mismatched_env_and_alias_before_stopping(self):
+        other = self.root / 'other-env'
+        other.write_text('OTHER=value\n')
+        alias = self.root / 'alias-env'
+        alias.symlink_to(self.envfile)
+        for extra in (
+            {'RESTORE_KEYS_OUT': str(self.root / 'keys'), 'RESTORE_ENV_FILE': str(other)},
+            {'RESTORE_KEYS_OUT': str(alias)},
+            {'RESTORE_KEYS_OUT': str(self.root / 'keys'), 'COMPOSE_CMD': f'{self.fake} --env-file {self.envfile} --env-file {other}'},
+        ):
+            result = self.run_script('chatisp-restore.sh', **extra)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(self.calls.exists())
+
     def test_failed_audit_does_not_report_new_success(self):
         result = self.run_script('chatisp-backup.sh', 'ledger', DENY_AUDIT='1')
         self.assertNotEqual(result.returncode, 0)
@@ -103,6 +129,16 @@ if 'cat >' in source: sys.stdin.buffer.read()
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(kind, result.stderr)
                 self.assertNotIn('healthy-b', result.stderr)
+
+    def test_check_rejects_overflowing_limit_and_malformed_timestamp(self):
+        self.status.write_text('\n'.join(
+            'chatisp_backup_last_success_timestamp_seconds{installation="fixture-a",kind="%s"} 08' % kind
+            for kind in ('postgres', 'attachments', 'keys', 'ledger')))
+        result = self.run_script('chatisp-backup.sh', 'check', BACKUP_MAX_AGE_SECONDS='999999999999999999999999')
+        self.assertNotEqual(result.returncode, 0)
+        result = self.run_script('chatisp-backup.sh', 'check', BACKUP_MAX_AGE_SECONDS='3600')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('backup atrasado', result.stderr)
 
     def test_map_uses_full_tenant_attachment_identity_and_rejects_wrong_namespace(self):
         source = (HERE / 'chatisp-restore.sh').read_text()

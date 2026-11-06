@@ -1,7 +1,8 @@
 # Só para validar o Compose em hosts com Docker 20.10.9 (seccomp nega clone3 e quebra a glibc
 # nova do Debian 13 e do Node 24 bookworm). Mesmos estágios, fontes e versões de Node, Go e
-# Caddy de deploy/Dockerfile; muda só a base (musl). Não é a imagem de instalação.
-# Uso: CHATISP_VALIDATE_ALPINE=1 ./scripts/compose-validate.sh
+# Caddy de deploy/Dockerfile; muda só a base (musl). Apenas para laboratório local.
+# Uso: CHATISP_VALIDATE_ALPINE=1 ./scripts/compose-validate.sh ou
+# deploy/compose.local-alpine.yaml, conforme README. Não é perfil de produção.
 FROM node:24.22.1-alpine AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./

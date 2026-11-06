@@ -481,7 +481,7 @@ func (s *Service) AcceptInvite(ctx context.Context, token, password, ip string) 
 		return IssuedSession{}, ErrInvalidToken
 	}
 	_ = s.clearKind(ctx, kindTokenIP, ip)
-	issued, err := s.issueForMembership(ctx, result.UserID, result.TenantID, result.MembershipID, ip)
+	issued, err := s.issueForMembership(ctx, result.UserID, result.TenantID, result.MembershipID, passwordHash)
 	if err != nil {
 		return IssuedSession{}, err
 	}
@@ -655,7 +655,7 @@ func (s *Service) RevokeSession(ctx context.Context, actor Principal, sessionID 
 	}
 }
 
-func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, email string, membership db.LoginMembership, clearAccount, assurance string) (IssuedSession, error) {
+func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, email string, membership db.LoginMembership, clearAccount, assurance, verifiedHash string, record db.MFARecord) (IssuedSession, error) {
 	raw, tokenHash, err := NewSecret()
 	if err != nil {
 		return IssuedSession{}, ErrUnavailable
@@ -674,31 +674,48 @@ func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, email stri
 		assurance = "full"
 	}
 	sessionID := uuid.New()
-	err = s.store.WithAuth(ctx, func(ctx context.Context) error {
-		if clearAccount != "" {
-			if err := s.store.ClearFailures(ctx, kindLoginAccount, SubjectHash(kindLoginAccount, clearAccount)); err != nil {
-				return err
-			}
-		}
-		if err := s.store.InsertSession(ctx, db.NewSession{
-			ID:                sessionID,
-			TokenHash:         tokenHash,
-			UserID:            userID,
-			TenantID:          membership.TenantID,
-			MembershipID:      membership.MembershipID,
-			CSRFHash:          csrfHash,
-			Now:               now,
-			IdleExpiresAt:     idle,
-			AbsoluteExpiresAt: absolute,
-		}); err != nil {
+	// Serialize session creation with tenant suspension and membership changes.
+	// The auth insert rechecks their state after this lock is acquired.
+	err = s.store.WithTenant(ctx, membership.TenantID, func(ctx context.Context) error {
+		if err := s.store.LockTenant(ctx); err != nil {
 			return err
 		}
-		if assurance == "enrollment" {
-			return s.store.SetSessionAssurance(ctx, sessionID, assurance)
-		}
-		return nil
+		return s.store.WithAuthInTenant(ctx, func(ctx context.Context) error {
+			current, err := s.store.VerifiedPasswordCurrent(ctx, userID, verifiedHash, record)
+			if err != nil {
+				return err
+			}
+			if !current {
+				return ErrInvalidCredentials
+			}
+			if clearAccount != "" {
+				if err := s.store.ClearFailures(ctx, kindLoginAccount, SubjectHash(kindLoginAccount, clearAccount)); err != nil {
+					return err
+				}
+			}
+			if err := s.store.InsertSession(ctx, db.NewSession{
+				ID:                sessionID,
+				TokenHash:         tokenHash,
+				UserID:            userID,
+				TenantID:          membership.TenantID,
+				MembershipID:      membership.MembershipID,
+				CSRFHash:          csrfHash,
+				Now:               now,
+				IdleExpiresAt:     idle,
+				AbsoluteExpiresAt: absolute,
+			}); err != nil {
+				return err
+			}
+			if assurance == "enrollment" {
+				return s.store.SetSessionAssurance(ctx, sessionID, assurance)
+			}
+			return nil
+		})
 	})
 	if err != nil {
+		if errors.Is(err, ErrInvalidCredentials) {
+			return IssuedSession{}, ErrInvalidCredentials
+		}
 		s.log.ErrorContext(ctx, "falha ao abrir sessão", "component", "auth")
 		return IssuedSession{}, ErrUnavailable
 	}
@@ -718,7 +735,7 @@ func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, email stri
 	}, nil
 }
 
-func (s *Service) issueForMembership(ctx context.Context, userID, tenantID, membershipID uuid.UUID, _ string) (IssuedSession, error) {
+func (s *Service) issueForMembership(ctx context.Context, userID, tenantID, membershipID uuid.UUID, verifiedHash string) (IssuedSession, error) {
 	var email string
 	err := s.store.WithPlatform(ctx, func(ctx context.Context) error {
 		user, err := s.store.FindUserByID(ctx, userID)
@@ -749,11 +766,11 @@ func (s *Service) issueForMembership(ctx context.Context, userID, tenantID, memb
 		return IssuedSession{}, ErrUnavailable
 	}
 	assurance := "full"
+	record, err := s.mfaRecord(ctx, userID)
+	if err != nil {
+		return IssuedSession{}, err
+	}
 	if s.keys != nil {
-		record, err := s.mfaRecord(ctx, userID)
-		if err != nil {
-			return IssuedSession{}, err
-		}
 		if record.Confirmed {
 			return IssuedSession{}, ErrMFARequired
 		}
@@ -767,7 +784,7 @@ func (s *Service) issueForMembership(ctx context.Context, userID, tenantID, memb
 		Role:         role,
 		Status:       "active",
 		TenantStatus: "active",
-	}, email, assurance)
+	}, email, assurance, verifiedHash, record)
 	if err != nil {
 		return IssuedSession{}, err
 	}

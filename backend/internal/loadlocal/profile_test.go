@@ -51,6 +51,33 @@ func TestReadProcess(t *testing.T) {
 	}
 }
 
+func TestReadProcessIgnoresUnrelatedIOCounters(t *testing.T) {
+	_, _, err := ioBytes("read_bytes: 100\nwrite_bytes: 40\ncancelled_write_bytes: -1\n")
+	if err != nil {
+		t.Fatalf("contador não utilizado impediu a leitura: %v", err)
+	}
+}
+
+func TestProfileFromEnv(t *testing.T) {
+	values := map[string]string{"CHATISP_LOAD_CLIENTS": "2", "CHATISP_LOAD_REQUESTS_PER_CLIENT": "3"}
+	get := func(key string) string { return values[key] }
+	p, err := ProfileFromEnv(get)
+	if err != nil || p.Clients != 2 || p.RequestsPerClient != 3 {
+		t.Fatalf("perfil = %+v, erro = %v", p, err)
+	}
+	for _, value := range []string{"0", "-1", "33", "x"} {
+		values["CHATISP_LOAD_CLIENTS"] = value
+		if _, err := ProfileFromEnv(get); err == nil {
+			t.Fatalf("aceitou clientes=%q", value)
+		}
+	}
+	values["CHATISP_LOAD_CLIENTS"] = "1"
+	values["CHATISP_LOAD_REQUESTS_PER_CLIENT"] = "101"
+	if _, err := ProfileFromEnv(get); err == nil {
+		t.Fatal("aceitou pedidos acima do limite")
+	}
+}
+
 func TestFormatKeepsCapacityRejected(t *testing.T) {
 	text := Format(Report{Requests: 200, Failures: 0, P95Millis: 1.5, RSSBytes: 10, ReadBytes: 2, WriteBytes: 3, CPUTicks: 4})
 	if strings.Contains(text, "http://") || strings.Contains(text, "postgres://") || !strings.Contains(text, `"aceito_como_capacidade":false`) || !strings.Contains(text, `"aceite":"local-sintetico"`) {

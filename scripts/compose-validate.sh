@@ -18,11 +18,60 @@
 # Playwright (web/node_modules) e Chromium já provisionado. No Docker 20.10.9 sem docker0, use
 # CHATISP_VALIDATE_ALPINE=1 (bases musl, build na rede do host); isso não prova as imagens Debian.
 set -euo pipefail
+# O supervisor tem um grupo próprio para toda a jornada. Assim, um sinal dirigido
+# ao supervisor também interrompe o backup/restore e seus comandos descendentes;
+# a limpeza só começa depois de todos eles terem terminado.
+if [ "${CHATISP_VALIDATE_WORKER:-0}" != 1 ]; then
+	command -v setsid >/dev/null || { echo "setsid é obrigatório" >&2; exit 1; }
+	project="chatisp-validate-$$"
+	tmp=$(mktemp -d "${TMPDIR:-/tmp}/chatisp-compose-XXXXXX")
+	export CHATISP_VALIDATE_PROJECT="$project" CHATISP_VALIDATE_TMP="$tmp" CHATISP_VALIDATE_WORKER=1
+	setsid bash "$0" "$@" &
+	worker=$!
+	interrupted=0
+	stop_worker() { interrupted=$1; kill -TERM -- "-$worker" 2>/dev/null || true; }
+	trap 'stop_worker 130' INT
+	trap 'stop_worker 143' TERM
+	status=0
+	wait "$worker" || status=$?
+	if [ "$interrupted" -ne 0 ]; then status=$interrupted; fi
+	# O líder pode terminar antes dos descendentes. Nunca enviar sinal a outro
+	# grupo: setsid criou um grupo exclusivo identificado pelo PID do worker.
+	kill -TERM -- "-$worker" 2>/dev/null || true
+	for _ in {1..50}; do
+		live=$(ps -eo pgid=,stat= | awk -v group="$worker" '$1 == group && $2 !~ /^Z/ {n++} END {print n+0}')
+		[ "$live" = 0 ] && break
+		sleep 0.1
+	done
+	if [ "$live" != 0 ]; then
+		kill -KILL -- "-$worker" 2>/dev/null || true
+		while :; do
+			live=$(ps -eo pgid=,stat= | awk -v group="$worker" '$1 == group && $2 !~ /^Z/ {n++} END {print n+0}')
+			[ "$live" = 0 ] && break
+			sleep 0.1
+		done
+	fi
+	trap '' INT TERM
+	if [ "$status" -ne 0 ] && [ "${CHATISP_VALIDATE_KEEP_ON_FAILURE:-0}" = 1 ]; then
+		echo "diagnóstico preservado por opção explícita: projeto=$project diretório=$tmp; cleanup obrigatório após investigar" >&2
+	else
+		if [ -f "$tmp/override.yaml" ] && [ -f "$tmp/env" ]; then
+			root=$(cd "$(dirname "$0")/.." && pwd)
+			backup_files=()
+			[ "${CHATISP_VALIDATE_BACKUP:-0}" = 1 ] && backup_files=(-f "$root/deploy/backup/compose.backup.yaml")
+			docker compose -p "$project" -f "$root/deploy/compose.yaml" "${backup_files[@]}" -f "$tmp/override.yaml" --env-file "$tmp/env" down -v --remove-orphans >/dev/null 2>&1 || true
+			docker image rm "${project}:runtime" "${project}:edge" "${project}:smtp-sink" "${project}:postgres-backup" >/dev/null 2>&1 || true
+		fi
+		rm -rf "$tmp"
+	fi
+	exit "$status"
+fi
 backup=${CHATISP_VALIDATE_BACKUP:-0}
 root=$(cd "$(dirname "$0")/.." && pwd)
-project="chatisp-validate-$$"
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/chatisp-compose-XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
+project=$CHATISP_VALIDATE_PROJECT
+tmp=$CHATISP_VALIDATE_TMP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 # CA e certificado descartáveis apenas para o SMTP do laboratório. O nome SAN
 # corresponde ao serviço na rede Compose; a chave nunca sai do diretório temporário.
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=ChatISP validation CA' -keyout "$tmp/smtp-ca.key" -out "$tmp/smtp-ca.crt" >/dev/null 2>&1
@@ -85,9 +134,7 @@ if [ "${CHATISP_VALIDATE_ALPINE:-0}" = 1 ]; then
       network: host"
 fi
 postgres_extra=""
-pulled_images=()
 if [ -n "$build_extra" ]; then
-	docker image inspect postgres:18.6-alpine >/dev/null 2>&1 || pulled_images+=(postgres:18.6-alpine)
 	postgres_extra="
   postgres:
     image: postgres:18.6-alpine"
@@ -186,28 +233,6 @@ base="https://localhost:${port}"
 storage_base="https://storage.localhost:${port}"
 sink="http://127.0.0.1:${sink_port}"
 
-cleanup() {
-	local status=$?
-	if [ "$status" -ne 0 ]; then
-		echo "falha ($status); logs do projeto ${project}:" >&2
-		"${compose[@]}" ps -a >&2 || true
-		# Erros de jobs River (o log os omite): texto gravado na própria linha do job.
-		"${compose[@]}" exec -T postgres psql -U chatisp -d chatisp -At -c "select kind, state, left(errors::text, 700) from river.river_job where state <> 'completed' order by id limit 6" >&2 2>/dev/null || true
-		"${compose[@]}" logs --no-color --tail 60 >&2 || true
-	fi
-	if [ "$status" -ne 0 ] && [ "${CHATISP_VALIDATE_KEEP_ON_FAILURE:-0}" = 1 ]; then
-		echo "diagnóstico preservado por opção explícita: projeto=$project diretório=$tmp; cleanup obrigatório após investigar" >&2
-		return
-	fi
-	"${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
-	docker image rm "$runtime_image" "$edge_image" "$sink_image" "$pg_image" >/dev/null 2>&1 || true
-	# Só as imagens que este script baixou (ausentes antes da execução).
-	if [ "${#pulled_images[@]}" -gt 0 ]; then
-		docker image rm "${pulled_images[@]}" >/dev/null 2>&1 || true
-	fi
-	rm -rf "$tmp"
-}
-trap cleanup EXIT
 
 curl_ca() { curl -fsS --cacert "$tmp/ca.crt" --resolve "localhost:${port}:127.0.0.1" --resolve "storage.localhost:${port}:127.0.0.1" "$@"; }
 

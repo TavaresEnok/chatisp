@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -201,6 +202,10 @@ func TestPipelinePreservesOriginalWithoutFFmpeg(t *testing.T) {
 	if !errors.Is(e, media.ErrFFmpegMissing) || refused.ConversionState != "refused" || refused.ConversionError != media.FFmpegMissingDetail || refused.OutputAttachmentID != nil {
 		t.Fatalf("recusa %#v %v", refused, e)
 	}
+	storedRefusal, e := svc.Get(ctx, p, inbox, conv, sent.ID)
+	if e != nil || storedRefusal.ConversionState != "refused" || storedRefusal.ConversionError != media.FFmpegMissingDetail {
+		t.Fatalf("recusa não persistida: %#v %v", storedRefusal, e)
+	}
 	if sum := sha256.Sum256(storage.objects[objectKey(t, ctx, store, tenant, voice)]); sum != originalSum {
 		t.Fatal("o original mudou na recusa")
 	}
@@ -235,6 +240,10 @@ func TestPipelinePreservesOriginalWithoutFFmpeg(t *testing.T) {
 	if errors.Is(e, media.ErrFFmpegMissing) {
 		t.Fatal("o limite foi tratado como ausência de ffmpeg")
 	}
+	storedOver, e := svc.Get(ctx, p, inbox, conv, longItem.ID)
+	if e != nil || storedOver.ConversionState != "refused" || storedOver.ConversionError != media.FFmpegFailedDetail {
+		t.Fatalf("recusa por limite não persistida: %#v %v", storedOver, e)
+	}
 	if sum := sha256.Sum256(storage.objects[objectKey(t, ctx, store, tenant, longID)]); sum != sha256.Sum256(longWav) {
 		t.Fatal("o original longo mudou")
 	}
@@ -268,6 +277,101 @@ func TestPipelinePreservesOriginalWithoutFFmpeg(t *testing.T) {
 	outKey := objectKey(t, ctx, store, tenant, *converted.OutputAttachmentID)
 	if !bytes.HasPrefix(storage.objects[outKey], []byte("OggS\x00")) {
 		t.Fatal("saída não é o ogg produzido")
+	}
+
+	raceSource := publish(t, ctx, attachmentsSvc, p, inbox, conv, "corrida.wav", wav, "outgoing")
+	raceItem, e := svc.Accept(ctx, p, inbox, conv, media.AcceptInput{AttachmentID: raceSource})
+	if e != nil {
+		t.Fatal(e)
+	}
+	var beforeCount int
+	var beforeBytes int64
+	if e = store.WithTenantTx(ctx, tenant, func(c context.Context, tx pgx.Tx) error {
+		if err := tx.QueryRow(c, `SELECT count(*) FROM attachments WHERE tenant_id=$1 AND conversation_id=$2`, tenant, conv).Scan(&beforeCount); err != nil {
+			return err
+		}
+		return tx.QueryRow(c, `SELECT reserved_bytes FROM attachment_budgets WHERE tenant_id=$1`, tenant).Scan(&beforeBytes)
+	}); e != nil {
+		t.Fatal(e)
+	}
+	started, release := make(chan struct{}, 2), make(chan struct{})
+	concurrent := *svc
+	concurrent.RunFFmpeg = func(_ context.Context, _ string, args []string) error {
+		started <- struct{}{}
+		<-release
+		return os.WriteFile(args[len(args)-1], []byte("OggS\x00audio-original-preservado-nao-substituido"), 0o600)
+	}
+	errs := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		go func() { _, err := concurrent.Convert(ctx, p, inbox, conv, raceItem.ID); errs <- err }()
+	}
+	for i := 0; i < 2; i++ {
+		select {
+		case <-started:
+		case <-time.After(15 * time.Second):
+			close(release)
+			t.Fatal("conversões não chegaram ao transcodificador")
+		}
+	}
+	close(release)
+	first, second := <-errs, <-errs
+	if !((first == nil && errors.Is(second, media.ErrConflict)) || (second == nil && errors.Is(first, media.ErrConflict))) {
+		t.Fatalf("conversões: %v / %v", first, second)
+	}
+	var afterCount int
+	var afterBytes int64
+	if e = store.WithTenantTx(ctx, tenant, func(c context.Context, tx pgx.Tx) error {
+		if err := tx.QueryRow(c, `SELECT count(*) FROM attachments WHERE tenant_id=$1 AND conversation_id=$2`, tenant, conv).Scan(&afterCount); err != nil {
+			return err
+		}
+		return tx.QueryRow(c, `SELECT reserved_bytes FROM attachment_budgets WHERE tenant_id=$1`, tenant).Scan(&afterBytes)
+	}); e != nil {
+		t.Fatal(e)
+	}
+	if afterCount != beforeCount+1 || afterBytes-beforeBytes != int64(len("OggS\x00audio-original-preservado-nao-substituido")) {
+		t.Fatalf("anexo órfão ou quota indevida: anexos %d->%d, bytes %d->%d", beforeCount, afterCount, beforeBytes, afterBytes)
+	}
+
+	// A failed transaction after object creation leaves the durable upload
+	// intent, so expiry cleanup can remove the otherwise unknown version.
+	convertedBytes := []byte("OggS\x00audio-original-preservado-nao-substituido")
+	intent, e := attachmentsSvc.Register(ctx, p, inbox, conv, attachments.RegisterInput{RequestID: uuid.New(), Name: "audio.ogg", Bytes: int64(len(convertedBytes)), Direction: "outgoing"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	var intentKey string
+	if e = store.WithTenantTx(ctx, tenant, func(c context.Context, tx pgx.Tx) error {
+		return tx.QueryRow(c, `SELECT object_key FROM attachments WHERE tenant_id=$1 AND id=$2`, tenant, intent.ID).Scan(&intentKey)
+	}); e != nil {
+		t.Fatal(e)
+	}
+	rollback := errors.New("rollback após criar objeto")
+	e = store.WithTenantTx(ctx, tenant, func(c context.Context, tx pgx.Tx) error {
+		if err := attachmentsSvc.CompleteConverted(c, tx, tenant, conv, intent.ID, convertedBytes); err != nil {
+			return err
+		}
+		return rollback
+	})
+	if !errors.Is(e, rollback) {
+		t.Fatal(e)
+	}
+	if got, err := attachmentsSvc.Get(ctx, p, inbox, conv, intent.ID); err != nil || got.State != "upload" {
+		t.Fatalf("intenção perdida: %#v %v", got, err)
+	}
+	if _, ok := storage.objects[intentKey+"@v1"]; !ok {
+		t.Fatal("objeto de teste não foi criado")
+	}
+	if e = store.WithTenantTx(ctx, tenant, func(c context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(c, `UPDATE attachments SET expires_at=$3 WHERE tenant_id=$1 AND id=$2`, tenant, intent.ID, now.Add(-time.Second))
+		return err
+	}); e != nil {
+		t.Fatal(e)
+	}
+	if n, err := attachmentsSvc.Cleanup(ctx, p, inbox, conv); err != nil || n != 1 {
+		t.Fatalf("limpeza de intenção: %d %v", n, err)
+	}
+	if _, ok := storage.objects[intentKey+"@v1"]; ok {
+		t.Fatal("limpeza não removeu versão sem confirmação")
 	}
 }
 
@@ -330,9 +434,14 @@ func pngBytes() []byte {
 	return []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 13, 'I', 'H', 'D', 'R', 0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0, 0, 0, 0, 0}
 }
 
-type simStorage struct{ objects map[string][]byte }
+type simStorage struct {
+	mu      sync.Mutex
+	objects map[string][]byte
+}
 
 func (s *simStorage) Create(_ context.Context, key string, r io.ReadSeeker, n int64) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.objects[key+"@v1"]; ok {
 		return "", attachments.ErrConflict
 	}
@@ -344,6 +453,8 @@ func (s *simStorage) Create(_ context.Context, key string, r io.ReadSeeker, n in
 	return "v1", nil
 }
 func (s *simStorage) Read(_ context.Context, key, version string) (io.ReadCloser, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	b, ok := s.objects[key+"@"+version]
 	if !ok {
 		return nil, attachments.ErrStorage
@@ -353,4 +464,13 @@ func (s *simStorage) Read(_ context.Context, key, version string) (io.ReadCloser
 func (s *simStorage) Sign(context.Context, string, string, string, time.Duration) (string, error) {
 	return "", attachments.ErrStorage
 }
-func (s *simStorage) Delete(context.Context, string, string) error { return nil }
+func (s *simStorage) Delete(_ context.Context, key, version string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if version == "" {
+		delete(s.objects, key+"@v1")
+	} else {
+		delete(s.objects, key+"@"+version)
+	}
+	return nil
+}

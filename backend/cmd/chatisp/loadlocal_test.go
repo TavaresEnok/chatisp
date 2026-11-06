@@ -20,6 +20,11 @@ func TestSyntheticLocalLoad(t *testing.T) {
 	if err := loadlocal.RefuseExternal(os.Environ()); err != nil {
 		t.Fatal(err)
 	}
+	profile, err := loadlocal.ProfileFromEnv(os.Getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("perfil sintético: clientes=%d pedidos_por_cliente=%d", profile.Clients, profile.RequestsPerClient)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
@@ -123,17 +128,17 @@ func TestSyntheticLocalLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	total := loadlocal.Clients * loadlocal.RequestsPerClient
+	total := profile.Clients * profile.RequestsPerClient
 	latencies := make([]time.Duration, total)
 	failures := make([]error, total)
 	var wg sync.WaitGroup
-	for clientID := 0; clientID < loadlocal.Clients; clientID++ {
+	for clientID := 0; clientID < profile.Clients; clientID++ {
 		wg.Add(1)
 		go func(clientID int) {
 			defer wg.Done()
 			local := &http.Client{Timeout: 2 * time.Second}
-			for n := 0; n < loadlocal.RequestsPerClient; n++ {
-				index := clientID*loadlocal.RequestsPerClient + n
+			for n := 0; n < profile.RequestsPerClient; n++ {
+				index := clientID*profile.RequestsPerClient + n
 				route := loadlocal.Routes[index%len(loadlocal.Routes)]
 				started := time.Now()
 				call, callErr := http.NewRequestWithContext(ctx, http.MethodGet, base+route, nil)

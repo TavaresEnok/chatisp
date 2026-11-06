@@ -256,7 +256,10 @@ func originAllowed(trusted []string, origin string) bool {
 func decodePanel(r *http.Request, dest any) error {
 	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 8192))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(dest); err != nil && !errors.Is(err, io.EOF) {
+	if err := dec.Decode(dest); err != nil {
+		return ErrEvent
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
 		return ErrEvent
 	}
 	return nil

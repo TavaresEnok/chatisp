@@ -98,6 +98,13 @@ func TestIdentityTablesStayOnTheAuthPath(t *testing.T) {
 	if _, err := testPools.Platform.Exec(ctx, `SELECT token_hash FROM sessions`); !isPermission(err) {
 		t.Fatalf("plataforma leu sessões: %v", err)
 	}
+	var platformOnly bool
+	if err := admin.QueryRow(ctx, `SELECT has_function_privilege('chatisp_platform', 'platform_revoke_tenant_sessions(uuid,timestamp with time zone)', 'EXECUTE') AND NOT has_function_privilege('chatisp_app', 'platform_revoke_tenant_sessions(uuid,timestamp with time zone)', 'EXECUTE') AND NOT has_function_privilege('chatisp_ingress', 'platform_revoke_tenant_sessions(uuid,timestamp with time zone)', 'EXECUTE')`).Scan(&platformOnly); err != nil || !platformOnly {
+		t.Fatalf("privilégios da revogação de provedor: %v", err)
+	}
+	if _, err := testPools.Platform.Exec(ctx, `SELECT platform_revoke_tenant_sessions(gen_random_uuid(), now())`); !isPermission(err) {
+		t.Fatalf("revogação sem escopo: %v", err)
+	}
 }
 
 func isAuthDenied(err error) bool {

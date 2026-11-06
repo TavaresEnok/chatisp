@@ -191,6 +191,10 @@ func (r Repo) AcceptInbound(ctx context.Context, tx pgx.Tx, in InboundInput) (In
 	return InboundResult{Conversation: conv, MessageID: messageID, CreatedConversation: opened.Created}, nil
 }
 
+// maxCanonicalPayload bounds the serialized idempotency envelope. A 16,000-byte
+// body can expand sixfold through JSON escaping, besides its metadata.
+const maxCanonicalPayload = 256 << 10
+
 // EnqueueText writes one idempotency row, one message and one outbox attempt.
 // A replay of the same bytes returns that pair. Different bytes conflict.
 func (Repo) EnqueueText(ctx context.Context, tx pgx.Tx, in OutboundInput) (OutboundResult, error) {
@@ -202,7 +206,7 @@ func (Repo) EnqueueText(ctx context.Context, tx pgx.Tx, in OutboundInput) (Outbo
 		return OutboundResult{}, ErrInvalid
 	}
 	requestID, ok := text(in.ClientRequestID, 200)
-	if !ok || len(in.Payload) == 0 || len(in.Payload) > 8192 || in.PrincipalID == uuid.Nil || in.At.IsZero() {
+	if !ok || len(in.Payload) == 0 || len(in.Payload) > maxCanonicalPayload || in.PrincipalID == uuid.Nil || in.At.IsZero() {
 		return OutboundResult{}, ErrInvalid
 	}
 	body, ok := text(in.Body, 16000)

@@ -204,6 +204,18 @@ func (s *Store) InsertSession(ctx context.Context, in NewSession) error {
 	return mapAuthErr(err)
 }
 
+// VerifiedPasswordCurrent keeps the user's credential row locked until this
+// auth transaction ends, so reset cannot race a session created from it.
+func (s *Store) VerifiedPasswordCurrent(ctx context.Context, userID uuid.UUID, verifiedHash string, mfa MFARecord) (bool, error) {
+	scope, err := authFrom(ctx)
+	if err != nil {
+		return false, err
+	}
+	var current bool
+	err = scope.tx.QueryRow(ctx, `SELECT auth_verified_password_current($1, $2, $3, $4, $5)`, userID, verifiedHash, mfa.Ciphertext, mfa.Confirmed, mfa.IsSuperadmin).Scan(&current)
+	return current, mapAuthErr(err)
+}
+
 // LoadSession reads a session by the hash of its cookie value. It requires WithAuth.
 func (s *Store) LoadSession(ctx context.Context, tokenHash []byte, now time.Time) (SessionRecord, error) {
 	scope, err := authFrom(ctx)

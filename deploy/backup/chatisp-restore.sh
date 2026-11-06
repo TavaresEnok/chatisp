@@ -21,9 +21,6 @@ here=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=common.sh
 . "$here/common.sh"
 backup_setup
-: "${BACKUP_KEYS_PASSPHRASE_FILE:?defina BACKUP_KEYS_PASSPHRASE_FILE}"
-: "${RESTORE_KEYS_OUT:?defina RESTORE_KEYS_OUT}"
-validate_keys_passphrase
 restore_complete=0
 restore_started=0
 restore_cleanup() {
@@ -41,24 +38,39 @@ restore_cleanup() {
 trap restore_cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+: "${BACKUP_KEYS_PASSPHRASE_FILE:?defina BACKUP_KEYS_PASSPHRASE_FILE}"
+: "${RESTORE_KEYS_OUT:?defina RESTORE_KEYS_OUT}"
+validate_keys_passphrase
 restore_args=${RESTORE_ARGS:---type=immediate --target-action=promote}
 uuid_re='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 
 env_file=${RESTORE_ENV_FILE:-}
-if [ -z "$env_file" ]; then
+compose_env_file=''
+
 	for ((i = 0; i < ${#compose[@]}; i++)); do
 		if [ "${compose[$i]}" = "--env-file" ] && [ $((i + 1)) -lt ${#compose[@]} ]; then
-			env_file=${compose[$((i + 1))]}
-			break
+			[ -z "$compose_env_file" ] || { echo 'múltiplos --env-file não são suportados no restore' >&2; exit 1; }
+			compose_env_file=${compose[$((i + 1))]}
+			((i += 1))
+			continue
 		fi
 		case "${compose[$i]}" in
 		--env-file=*)
-			env_file=${compose[$i]#--env-file=}
-			break
+			[ -z "$compose_env_file" ] || { echo 'múltiplos --env-file não são suportados no restore' >&2; exit 1; }
+			compose_env_file=${compose[$i]#--env-file=}
 			;;
 		esac
 	done
-fi
+[ -n "$compose_env_file" ] || { echo 'COMPOSE_CMD deve indicar um único --env-file para o restore' >&2; exit 1; }
+env_file=${env_file:-$compose_env_file}
+python3 - "$env_file" "$compose_env_file" "$RESTORE_KEYS_OUT" <<'PY'
+import os, sys
+env, compose_env, output = sys.argv[1:]
+if os.path.realpath(env) != os.path.realpath(compose_env):
+    sys.exit('RESTORE_ENV_FILE deve corresponder ao --env-file do Compose')
+if os.path.realpath(env) == os.path.realpath(output) or (os.path.exists(env) and os.path.exists(output) and os.path.samefile(env, output)):
+    sys.exit('RESTORE_KEYS_OUT deve ser distinto do arquivo de ambiente')
+PY
 
 [ -n "$env_file" ] && [ -f "$env_file" ] && [ ! -L "$env_file" ] || { echo "RESTORE_ENV_FILE ou --env-file deve indicar arquivo regular para persistir as chaves recuperadas" >&2; exit 1; }
 [ "$RESTORE_KEYS_OUT" != "$env_file" ] && [ ! -L "$RESTORE_KEYS_OUT" ] || { echo "RESTORE_KEYS_OUT deve ser distinto do ambiente e sem symlink" >&2; exit 1; }

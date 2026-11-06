@@ -3,6 +3,7 @@ package embed
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	attendanceStore "chatisp/internal/attendance/store"
@@ -51,6 +52,10 @@ func (h handler) put(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&draft); err != nil {
+		problem(w, http.StatusUnprocessableEntity, "configuração inválida")
+		return
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
 		problem(w, http.StatusUnprocessableEntity, "configuração inválida")
 		return
 	}

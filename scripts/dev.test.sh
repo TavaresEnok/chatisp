@@ -345,6 +345,19 @@ PY
 
 install_doubles
 
+# Um valor incorreto não deve desligar TLS silenciosamente nem iniciar serviços.
+scenario=$work/invalid-tls
+mkdir -p "$scenario/run"
+CHATISP_DEV_TLS=invalid run_launcher "$scenario/log" "$scenario/run" "$scenario/pg" "127.0.0.1:18080" "127.0.0.1:19090" "55432" "5173" "fail" "5"
+launcher=$launcher_pid
+set +e
+wait_exit "$launcher" 10
+run_status=$?
+set -e
+[ "$run_status" -ne 0 ] || fail "valor TLS inválido foi aceito"
+grep -q "CHATISP_DEV_TLS deve ser" "$scenario/log" || fail "erro TLS inválido não foi explicado"
+[ ! -e "$scenario/run/pg.pid" ] || fail "PostgreSQL iniciou com TLS inválido"
+
 bystander_py=$work/bystander.py
 cat >"$bystander_py" <<'PY'
 import time
@@ -418,11 +431,11 @@ if ! grep -q "não altera o processo" "$scenario/log"; then
 	fail "falta aviso de que a porta ocupada não é alterada"
 fi
 
-# Modo HTTPS: origem https, certificado descartável existe durante a subida e some ao sair.
+# Padrão HTTPS: origem https, certificado descartável existe durante a subida e some ao sair.
 read -r tls_api tls_metrics tls_pg tls_vite <<<"$(free_ports 4)"
 scenario=$work/tls
 mkdir -p "$scenario/run"
-CHATISP_DEV_TLS=1 run_launcher "$scenario/log" "$scenario/run" "$scenario/pg" "127.0.0.1:${tls_api}" "127.0.0.1:${tls_metrics}" "$tls_pg" "$tls_vite" "fail" "15"
+CHATISP_DEV_TLS= run_launcher "$scenario/log" "$scenario/run" "$scenario/pg" "127.0.0.1:${tls_api}" "127.0.0.1:${tls_metrics}" "$tls_pg" "$tls_vite" "fail" "15"
 launcher=$launcher_pid
 set +e
 wait_exit "$launcher" 20
@@ -437,7 +450,7 @@ case "$tls_cert" in /tmp/chatisp-dev-tls-*/cert.pem) ;; *) fail "certificado des
 read -r fail_api fail_metrics fail_pg fail_vite <<<"$(free_ports 4)"
 scenario=$work/fail
 mkdir -p "$scenario/run"
-run_launcher "$scenario/log" "$scenario/run" "$scenario/pg" "127.0.0.1:${fail_api}" "127.0.0.1:${fail_metrics}" "$fail_pg" "$fail_vite" "fail" "15"
+CHATISP_DEV_TLS=0 run_launcher "$scenario/log" "$scenario/run" "$scenario/pg" "127.0.0.1:${fail_api}" "127.0.0.1:${fail_metrics}" "$fail_pg" "$fail_vite" "fail" "15"
 launcher=$launcher_pid
 set +e
 wait_exit "$launcher" 20
@@ -470,7 +483,7 @@ fi
 read -r ok_api ok_metrics ok_pg ok_vite <<<"$(free_ports 4)"
 scenario=$work/signal
 mkdir -p "$scenario/run"
-run_launcher "$scenario/log" "$scenario/run" "$scenario/pg" "127.0.0.1:${ok_api}" "127.0.0.1:${ok_metrics}" "$ok_pg" "$ok_vite" "serve" "15"
+CHATISP_DEV_TLS=0 run_launcher "$scenario/log" "$scenario/run" "$scenario/pg" "127.0.0.1:${ok_api}" "127.0.0.1:${ok_metrics}" "$ok_pg" "$ok_vite" "serve" "15"
 launcher=$launcher_pid
 ready=0
 for _ in $(seq 1 150); do

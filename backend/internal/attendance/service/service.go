@@ -258,11 +258,18 @@ func (s Service) Assume(ctx context.Context, p Principal, inboxID, conversationI
 		}); err != nil {
 			return mapModel(err)
 		}
+		cleared, err := clearManualSnooze(ctx, tx, p.TenantID, conversationID, at, "assigned")
+		if err != nil {
+			return err
+		}
 		out, err = s.Repo.Assume(ctx, tx, store.AssumeInput{
 			TenantID: p.TenantID, ConversationID: conversationID, MembershipID: p.MembershipID,
 			ExpectedVersion: expectedVersion, At: at,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		return recordManualSnoozeClear(ctx, tx, p.TenantID, p.UserID, out, at, cleared)
 	})
 	return out, err
 }
@@ -425,12 +432,19 @@ func (s Service) Close(ctx context.Context, p Principal, in CloseInput) (CloseRe
 				}
 			}
 		}
+		cleared, err := clearManualSnooze(ctx, tx, p.TenantID, in.ConversationID, in.At, "closed")
+		if err != nil {
+			return err
+		}
 		closed, closure, err := s.Repo.Close(ctx, tx, store.CloseInput{
 			TenantID: p.TenantID, ConversationID: in.ConversationID, MembershipID: p.MembershipID,
 			ExpectedVersion: in.ExpectedVersion, Reason: in.Reason, Result: in.Result, Summary: in.Summary,
 			AuthorKind: store.ControllerHuman, At: in.At,
 		})
 		if err != nil {
+			return err
+		}
+		if err := recordManualSnoozeClear(ctx, tx, p.TenantID, p.UserID, closed, in.At, cleared); err != nil {
 			return err
 		}
 		out.Conversation = closed

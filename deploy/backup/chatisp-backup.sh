@@ -61,6 +61,9 @@ record_success() { # tipo
 export_ledger() {
 	local ts
 	ts=$(stamp)
+	# Persist intent before any query: interrupted exports must not look like a
+	# complete history merely because no artifact was published yet.
+	in_mirror --entrypoint sh chatisp-migrate -c 'set -eu -C; [ ! -L /mirror ] && [ ! -L /mirror/ledgers ]; mkdir -p /mirror/ledgers; : > "/mirror/ledgers/.export-$1.inflight"' export "$ts"
 	# Read deletions first: their object maps and guards commit with them and must
 	# therefore be visible in the subsequent snapshots, even under concurrent writes.
 	sql -c "\\copy (select tenant_id, subject, subject_id from deletion_records union select tenant_id, case when ingress_guarded then 'contact_privacy_guarded' else 'contact_privacy' end, target_id from retention_deletion_records where class = 'content' and target_type = 'contact' and target_id is not null order by tenant_id, subject, subject_id) to stdout" >"$work_tmp/deletions.rows"
@@ -72,6 +75,7 @@ export_ledger() {
 	publish_artifact "$work_tmp/guards.tsv" "ledgers/guards-$ts.tsv"
 	{ echo '# chatisp-deletions-ledger-2'; cat "$work_tmp/deletions.rows"; echo '# end-chatisp-deletions-ledger-2'; } >"$work_tmp/deletions.tsv"
 	publish_artifact "$work_tmp/deletions.tsv" "ledgers/deletions-$ts.tsv"
+	in_mirror --entrypoint rm chatisp-migrate -- "$mirror/ledgers/.export-$ts.inflight"
 	echo "ledger: mapa e exclusões completos, com SHA-256 ($ts)"
 }
 
@@ -128,14 +132,14 @@ info)
 check)
 	: "${BACKUP_STATUS_FILE:?defina BACKUP_STATUS_FILE}"
 	: "${BACKUP_MAX_AGE_SECONDS:?defina BACKUP_MAX_AGE_SECONDS (defasagem máxima tolerada, D2-07; não há padrão)}"
-	[[ "$BACKUP_MAX_AGE_SECONDS" =~ ^[1-9][0-9]*$ ]] && [[ "${BACKUP_MAX_LEDGER_AGE_SECONDS:-$BACKUP_MAX_AGE_SECONDS}" =~ ^[1-9][0-9]*$ ]] || { echo "limites de atraso devem ser inteiros positivos" >&2; exit 2; }
+	[[ "$BACKUP_MAX_AGE_SECONDS" =~ ^[1-9][0-9]{0,9}$ ]] && [[ "${BACKUP_MAX_LEDGER_AGE_SECONDS:-$BACKUP_MAX_AGE_SECONDS}" =~ ^[1-9][0-9]{0,9}$ ]] || { echo "limites de atraso devem ser inteiros positivos de até 10 dígitos" >&2; exit 2; }
 	[ -f "$BACKUP_STATUS_FILE" ] || { echo "backup atrasado: nenhum sucesso registrado" >&2; exit 1; }
 	late=0
 	for kind in postgres attachments keys ledger; do
 		last=$(awk -v label="chatisp_backup_last_success_timestamp_seconds{installation=\"$installation\",kind=\"$kind\"}" '$1 == label {print $2}' "$BACKUP_STATUS_FILE" | tail -1)
 		limit=$BACKUP_MAX_AGE_SECONDS
 		[ "$kind" = ledger ] && limit=${BACKUP_MAX_LEDGER_AGE_SECONDS:-$limit}
-		if [[ ! "$last" =~ ^[0-9]+$ ]] || [ "$last" -gt "$(now)" ] || [ $(($(now) - last)) -gt "$limit" ]; then
+		if [[ ! "$last" =~ ^(0|[1-9][0-9]{0,9})$ ]] || [ "$last" -gt "$(now)" ] || [ $(($(now) - last)) -gt "$limit" ]; then
 			echo "backup atrasado ($installation): $kind (último sucesso: ${last:-nunca})" >&2
 			late=1
 		fi

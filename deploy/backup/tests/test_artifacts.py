@@ -106,7 +106,7 @@ class ArtifactsTest(unittest.TestCase):
             artifacts.verify_ledgers(self.root)
 
     def test_tar_rejects_symlinks_and_traversal(self):
-        for name, kind in [('ledgers/../../outside', tarfile.REGTYPE), ('ledgers/evil', tarfile.SYMTYPE)]:
+        for name, kind in [('ledgers/../../outside', tarfile.REGTYPE), ('ledgers/evil', tarfile.SYMTYPE), ('ledgers/.export-ab.inflight', tarfile.REGTYPE)]:
             archive = self.root / 'bad.tar'
             with tarfile.open(archive, 'w') as out:
                 member = tarfile.TarInfo(name)

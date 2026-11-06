@@ -34,9 +34,14 @@ func Register(api huma.API, deps Dependencies) {
 	huma.Register(api, op("attendance-history", http.MethodGet, item+"/history", 200), h.history)
 	huma.Register(api, op("attendance-events", http.MethodGet, "/api/panel/inboxes/{inbox_id}/events", 200), h.events)
 	registerBody(api, op("attendance-assume", http.MethodPost, item+"/assume", 200), versionBody{}, h.assume)
-	registerBody(api, op("attendance-send", http.MethodPost, item+"/messages", 201), sendBody{}, h.send)
+	sendOp := op("attendance-send", http.MethodPost, item+"/messages", 201)
+	// A 16000-byte text can grow substantially when encoded as JSON.
+	sendOp.MaxBodyBytes = 128 << 10
+	registerBody(api, sendOp, sendBody{}, h.send)
 	registerBody(api, op("attendance-send-template", http.MethodPost, item+"/template-messages", 201), templateBody{}, h.sendTemplate)
-	registerBody(api, op("attendance-close", http.MethodPost, item+"/close", 200), closeBody{}, h.close)
+	closeOp := op("attendance-close", http.MethodPost, item+"/close", 200)
+	closeOp.MaxBodyBytes = 128 << 10 // Optional farewell uses the same text limit.
+	registerBody(api, closeOp, closeBody{}, h.close)
 	registerBody(api, op("attendance-reopen", http.MethodPost, item+"/reopen", 200), reopenBody{}, h.reopen)
 	RegisterAssignment(api, deps)
 	// candidatesOutput carries an interface at runtime; publish its concrete wire type.

@@ -14,14 +14,45 @@ import (
 )
 
 const (
-	// Clients is the fixed concurrency of the local drill.
-	Clients = 8
-	// RequestsPerClient is the fixed number of calls each client makes.
-	RequestsPerClient = 25
+	// Clients and RequestsPerClient are defaults for the local drill.
+	Clients              = 8
+	RequestsPerClient    = 25
+	MaxClients           = 32
+	MaxRequestsPerClient = 100
 	// Acceptance marks this envelope as a local synthetic drill.
 	// It is not the D2-07 pilot profile and it does not authorize a capacity number.
 	Acceptance = "local-sintetico"
 )
+
+// Profile bounds the cost of a synthetic local run. These limits are safety
+// limits for the tool, not capacity claims.
+type Profile struct {
+	Clients           int
+	RequestsPerClient int
+}
+
+func ProfileFromEnv(getenv func(string) string) (Profile, error) {
+	p := Profile{Clients: Clients, RequestsPerClient: RequestsPerClient}
+	for _, item := range []struct {
+		key    string
+		target *int
+		max    int
+	}{
+		{"CHATISP_LOAD_CLIENTS", &p.Clients, MaxClients},
+		{"CHATISP_LOAD_REQUESTS_PER_CLIENT", &p.RequestsPerClient, MaxRequestsPerClient},
+	} {
+		value := getenv(item.key)
+		if value == "" {
+			continue
+		}
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 1 || n > item.max {
+			return Profile{}, fmt.Errorf("%s deve ser inteiro entre 1 e %d", item.key, item.max)
+		}
+		*item.target = n
+	}
+	return p, nil
+}
 
 // Routes are the only paths the drill calls, on the listener it started.
 var Routes = []string{"/healthz", "/readyz"}
@@ -136,11 +167,15 @@ func ioBytes(text string) (int64, int64, error) {
 		if !ok {
 			continue
 		}
+		key = strings.TrimSpace(key)
+		if key != "read_bytes" && key != "write_bytes" {
+			continue
+		}
 		number, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 		if err != nil || number < 0 {
 			return 0, 0, errors.New("contador de E/S ilegível")
 		}
-		switch strings.TrimSpace(key) {
+		switch key {
 		case "read_bytes":
 			readBytes = number
 			sawRead = true

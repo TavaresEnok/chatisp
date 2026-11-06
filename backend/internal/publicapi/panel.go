@@ -57,9 +57,7 @@ func (h tokenPanel) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body tokenBody
-	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 8192))
-	dec.DisallowUnknownFields()
-	if err = dec.Decode(&body); err != nil {
+	if err = decodeJSON(r, &body); err != nil {
 		writeTokenProblem(w, http.StatusUnprocessableEntity, "token inválido")
 		return
 	}
