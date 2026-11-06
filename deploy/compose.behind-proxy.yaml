@@ -1,0 +1,24 @@
+# Add AFTER compose.yaml and the installation's runtime/network overrides.
+# Reuses all existing volumes and local HTTPS; binds the new listener only
+# to loopback. The host proxy must preserve the original Host header.
+x-public-origin: &public-origin
+  # First origin is used for invitation/recovery URLs. Local HTTPS is kept
+  # explicitly for recovery; it is not published on a public interface.
+  CHATISP_PANEL_ORIGINS: https://${CHATISP_PROXY_SITE_HOST:?defina CHATISP_PROXY_SITE_HOST},https://localhost:${CHATISP_PUBLIC_PORT:-8443}
+  CHATISP_ATTACHMENTS_S3_PUBLIC_ENDPOINT: https://${CHATISP_PROXY_SITE_HOST}
+
+services:
+  chatisp-api:
+    environment: *public-origin
+  chatisp-worker:
+    environment: *public-origin
+  caddy:
+    environment:
+      CHATISP_PROXY_SITE_HOST: ${CHATISP_PROXY_SITE_HOST}
+      CHATISP_ATTACHMENTS_S3_BUCKET: ${CHATISP_ATTACHMENTS_S3_BUCKET:-chatisp-anexos}
+    ports: !override
+      - "127.0.0.1:${CHATISP_PUBLIC_PORT:-8443}:443"
+      - "127.0.0.1:${CHATISP_PROXY_PORT:-8480}:8082"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile.local:ro
+      - ./Caddyfile.behind-proxy:/etc/caddy/Caddyfile:ro

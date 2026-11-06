@@ -1,13 +1,16 @@
 # Implantação: endereço público, certificado, origens, cookies, CSRF e WebSocket
 
-Revisado na retomada de 05/11/2026. Evidências atuais: [relatório](medicoes/retomada-20261105/relatorio.md). Dois arquivos de borda, os dois com o mesmo desenho:
+Revisado em 06/11/2026. A instalação existente `chatisp-pronto-hoje` ganhou encaminhamento pelo nome **https://chatisp.tokstiloesporte.com**. A cadeia identificada é Nginx `10.10.0.10:443` (certificado público) → Apache `10.10.0.26:443` (vhost exclusivo do ChatISP) → Caddy `127.0.0.1:8480` → aplicação/Garage. O acesso pelo nome conectado diretamente ao proxy interno foi validado; o DNS normal aponta para `177.104.156.25`, cujas portas 80/443 recusaram conexão nesta execução. **A acessibilidade pela Internet continua sem comprovação**, dependendo do encaminhamento externo desse IP. Consulte [evidências da publicação](medicoes/publicacao-20261106/relatorio.md).
+
+Perfis disponíveis:
 
 | Arquivo | Para quê | Certificado | Portas publicadas |
 | --- | --- | --- | --- |
 | `deploy/Caddyfile` (com `deploy/compose.yaml`) | laboratório e validação | CA interna do Caddy (`tls internal`) | só `127.0.0.1:${CHATISP_PUBLIC_PORT:-8443}` → 443 |
 | `deploy/Caddyfile.production` (com `deploy/compose.production.yaml`) | domínio próprio | público, emitido por ACME | 80 e 443 (`CHATISP_PUBLIC_BIND`, padrão `0.0.0.0`) |
+| `deploy/Caddyfile.behind-proxy` (com `deploy/compose.behind-proxy.yaml`) | instalação existente atrás de outro proxy TLS | certificado público no proxy existente; CA local para storage interno/recuperação | somente loopback: 8443 TLS e 8480 HTTP |
 
-**Nada de produção foi ativado**: nenhum domínio, DNS ou porta pública neste servidor. Os arquivos de produção não têm domínio nem contato escritos; `CHATISP_SITE_HOST`, `CHATISP_STORAGE_HOST` e `CHATISP_ACME_EMAIL` são obrigatórios e o Compose recusa a subida sem eles (`TestProductionDeployFilesStayInactiveAndCoherent` guarda isso).
+O perfil direto `compose.production.yaml` não foi ativado: Apache já ocupa 80/443, e substituir esses listeners interromperia o PNETLab. Seus campos `CHATISP_SITE_HOST`, `CHATISP_STORAGE_HOST` e `CHATISP_ACME_EMAIL` continuam obrigatórios. A instalação existente reutiliza as imagens e volumes, acrescentando o perfil `behind-proxy`, sem habilitar fornecedores externos.
 
 ## A regra de coerência
 
@@ -59,7 +62,23 @@ No laboratório os dois nomes são `localhost` e `storage.localhost` com a porta
 
 A borda de produção tem sonda interna em `:8081/edge-health`, sem porta publicada. O serviço `trust-export` apenas prepara o diretório: o runtime usa a trust store pública do sistema (`CA_FILE` vazio). Assim a subida de produção não depende do arquivo da CA interna do laboratório, que não existe em ACME.
 
-Configuração de produção preparada e validada em sintaxe não significa certificado público emitido nem implantação autorizada. A prova integrada usa laboratório local; domínio, DNS, ACME e passagem de operador continuam na [tabela única de dependências](dependencias-externas.md).
+No perfil direto, configuração validada em sintaxe não comprova emissão pública. Na instalação atrás do proxy existente foi conferido o certificado público já emitido para o nome; conectividade externa e passagem do operador têm os limites registrados na [tabela única de dependências](dependencias-externas.md).
+
+## Instalação existente atrás do proxy TLS
+
+Não execute um novo bootstrap nem troque o projeto Compose. O controlador privado em `/home/enok/.local/share/chatisp/pronto-hoje-20261106/controle.py` usa, nesta ordem, `compose.yaml`, `compose.local-alpine.yaml`, a rede privada original e `compose.behind-proxy.yaml`, com o mesmo `ambiente.env`. Banco, chaves, credenciais e volumes originais são reutilizados. O nome adicional é `CHATISP_PROXY_SITE_HOST=chatisp.tokstiloesporte.com`.
+
+A primeira origem permitida é `https://chatisp.tokstiloesporte.com`, usada para links de convite e recuperação. A segunda é `https://localhost:8443`, mantida para recuperação no servidor. Cookies continuam `__Host-*`, `Secure`, sem `Domain`, caminho `/`. SMTP permanece desligado: a formação correta de URLs não significa envio de e-mail disponível.
+
+O endpoint S3 interno continua `https://storage.chatisp.internal`, com validação da CA original. O endpoint de assinatura público é `https://chatisp.tokstiloesporte.com`: o SDK acrescenta o bucket e a chave à URL. O Caddy encaminha **somente GET/HEAD** em `/chatisp-anexos/*` ao Garage S3, sem reescrever Host, caminho ou query. Não é necessário DNS adicional de storage. Acesso sem assinatura é recusado pelo Garage; escrita por essa rota pública responde 404. A API administrativa do Garage e as portas de métricas não são publicadas.
+
+O arquivo instalado `/etc/apache2/sites-available/zz-chatisp.conf`, ligado em `sites-enabled`, corresponde a `deploy/apache-behind-proxy.conf.example`. São vhosts nomeados 80/443, com `ProxyPreserveHost On`, rota WebSocket específica e permissão apenas para o proxy `10.10.0.10` e loopback. O vhost padrão do PNETLab, seus certificados e os listeners 80/443/18080 foram preservados. O Nginx encaminha por HTTPS para o Apache, cujo certificado de transporte preexistente é autoassinado; não foi comprovada a configuração de validação desse certificado no Nginx. O navegador valida o certificado público do Nginx.
+
+Antes de alterar o arquivo Apache, execute `sudo apache2ctl configtest`; aplique com `sudo systemctl reload apache2`, sem reiniciar outros serviços. Um nome de projeto novo, `down -v`, publicação do listener 8480 em outra interface ou substituição do vhost padrão não fazem parte deste procedimento.
+
+O proxy público não foi administrado nesta execução. Logs locais do vhost omitiram a query, mas a política de logs do Nginx deve ser conferida pelo seu administrador: URLs assinadas são credenciais temporárias. A aplicação usa o endereço do proxy nos controles por IP; não foi habilitada confiança indiscriminada em `X-Forwarded-For`.
+
+Backup anterior, configuração privada e recuperação: [procedimento específico](medicoes/publicacao-20261106/backup.md). A recuperação deve preservar as decisões de exclusão posteriores ao snapshot antes de reabrir atendimento.
 
 ## Atualização com migrações de privacidade
 

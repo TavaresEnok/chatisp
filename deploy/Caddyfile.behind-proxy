@@ -1,0 +1,43 @@
+# Keep local HTTPS and the private storage endpoint available for recovery.
+import /etc/caddy/Caddyfile.local
+
+# TLS terminates at the existing upstream proxy. This listener is published
+# on loopback only; the host's name-based vhost is its sole ingress.
+http://{$CHATISP_PROXY_SITE_HOST}:8082 {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+	handle /metrics* {
+		respond 404
+	}
+	# Path-style S3 URLs use the panel host, avoiding an extra DNS name.
+	# Keep Host, path and query intact: all participate in SigV4 validation.
+	@attachment {
+		path /{$CHATISP_ATTACHMENTS_S3_BUCKET}/*
+		method GET HEAD
+	}
+	handle @attachment {
+		reverse_proxy garage:3900
+	}
+	handle /{$CHATISP_ATTACHMENTS_S3_BUCKET}* {
+		respond 404
+	}
+	handle /api/* {
+		reverse_proxy chatisp-api:8080
+	}
+	handle /healthz {
+		reverse_proxy chatisp-api:8080
+	}
+	handle /readyz {
+		reverse_proxy chatisp-api:8080
+	}
+	handle {
+		root * /srv/panel
+		try_files {path} /index.html
+		file_server
+	}
+}

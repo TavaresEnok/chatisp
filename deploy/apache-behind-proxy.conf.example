@@ -1,0 +1,38 @@
+# Install as a NEW named vhost, preserving the existing default PNETLab vhost.
+# Upstream TLS proxy -> this host:443 -> ChatISP loopback listener.
+# The upstream proxy must preserve Host and terminate valid public TLS.
+<VirtualHost *:80>
+    ServerName chatisp.tokstiloesporte.com
+    ProxyRequests Off
+    ProxyPreserveHost On
+    ProxyPass /api/panel/ws ws://127.0.0.1:8480/api/panel/ws
+    ProxyPassReverse /api/panel/ws ws://127.0.0.1:8480/api/panel/ws
+    ProxyPass / http://127.0.0.1:8480/ nocanon
+    ProxyPassReverse / http://127.0.0.1:8480/
+    <Location />
+        Require ip 10.10.0.10 127.0.0.1 ::1
+    </Location>
+    # Do not record signed URL query strings (temporary bearer credentials).
+    ErrorLog ${APACHE_LOG_DIR}/chatisp-error.log
+    CustomLog ${APACHE_LOG_DIR}/chatisp-access.log "%a %t %m %U %>s %b"
+</VirtualHost>
+
+# Existing edge uses HTTPS to this host. Reuse the host's existing transport
+# certificate; the browser sees the upstream proxy's public certificate.
+<VirtualHost *:443>
+    ServerName chatisp.tokstiloesporte.com
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/certs/apache-selfsigned.crt
+    SSLCertificateKeyFile /etc/ssl/private/apache-selfsigned.key
+    ProxyRequests Off
+    ProxyPreserveHost On
+    ProxyPass /api/panel/ws ws://127.0.0.1:8480/api/panel/ws
+    ProxyPassReverse /api/panel/ws ws://127.0.0.1:8480/api/panel/ws
+    ProxyPass / http://127.0.0.1:8480/ nocanon
+    ProxyPassReverse / http://127.0.0.1:8480/
+    <Location />
+        Require ip 10.10.0.10 127.0.0.1 ::1
+    </Location>
+    ErrorLog ${APACHE_LOG_DIR}/chatisp-error.log
+    CustomLog ${APACHE_LOG_DIR}/chatisp-access.log "%a %t %m %U %>s %b"
+</VirtualHost>
