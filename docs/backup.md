@@ -28,6 +28,8 @@ O lock compartilhado em `/mirror/.operation-lock` impede backup/restore concorre
 
 O espelho verifica SHA-256, tamanho e identidade antes de reutilizar um objeto. Mudança inesperada de versão é recusada explicitamente, preservando a cópia anterior. Manifesto tem contagem e hash de fechamento. Symlinks, operações concorrentes e objetos órfãos são recusados. Este formato ainda não lançado recusa os manifestos incompletos da implementação interrompida. Bucket versionado exige procedimento próprio de replicação/remapeamento; este comando o recusa.
 
+Novas mídias recebidas usam `<namespace UUID>/<mensagem UUID>`, como exige o espelho. Uma intenção `attachments.state=upload`, com tamanho e orçamento reais, confirma antes de `Create`; a gravação revalida propriedade e contato sob locks limitados pelo timeout. Interrupções deixam a intenção para retry ou exclusão. A exclusão também enfileira chaves determinísticas de reservas antigas `in/<tenant>/<mensagem>` antes de redigir o contexto; tamanho desconhecido não é inventado no livro. Mídias antigas já publicadas nesse prefixo e órfãos sem vínculo recuperável não são migrados automaticamente: o espelho os recusa, e o operador precisa inventariar e definir tratamento antes do aceite de backup. Não houve reparação de armazenamento real nesta missão.
+
 ## Restore fechado até consistência
 
 Somente numa instalação parada, com volumes de dados perdidos/vazios, repositório e espelho preservados e configuração recuperada do cofre:
@@ -43,6 +45,10 @@ Depois restaura o PostgreSQL no ponto consistente do backup (`--type=immediate -
 Antes da abertura, o gate autentica os campos cifrados com AES-GCM/AAD e o anel recuperado; IDs de versão sozinhos não bastam. Também cruza os anexos sobreviventes do banco com o manifesto. Só então sobe Garage/Caddy, exporta a CA local quando aplicável, provisiona o bucket e restaura os objetos com leitura de conferência. API e worker abrem após esses passos; falha mantém o atendimento fechado.
 
 A cópia imutável de backup continua contendo dados anteriores. O livro externo reaplica decisões na recuperação; ele precisa sobreviver ao desastre e ser atualizado após exclusões. Conteúdo bruto restrito de ingresso/backups segue a política por classe, sem promessa de apagamento de toda cópia.
+
+Desde as migrações `00053`–`00055`, a decisão de exclusão e a fila de limpeza física confirmam juntas. A API pode responder 503 depois da anonimização: repetir a solicitação retoma a fila, sem reabrir referências. Exporte o livro mesmo quando houver limpeza pendente. Marcadores HMAC de ingresso e seus cutoffs integram uma terceira cópia pareada com o livro novo; preservar as versões correspondentes do anel de chaves é obrigatório. A recuperação aplica as migrações com API/ingresso/worker fechados antes de reaplicar o livro.
+
+O formato novo distingue `contact_privacy_guarded`, cuja proteção foi confirmada na mesma transação, de `contact_privacy` histórico sem prova. Um livro antigo vazio ou somente com anexos continua válido; qualquer exclusão de contato sem cobertura comprovada impede a abertura do restore, inclusive em snapshot local e em registros contraditórios. A simples presença de um arquivo de marcadores não comprova uma exclusão histórica. Não existe autorização para editar flags e presumir identidades/cutoffs perdidos. A conciliação do legado precisa de procedimento do operador antes do aceite; a instalação ainda não foi homologada. O requisito de atualização sem binários antigos simultâneos está em [implantação](implantacao.md#atualização-com-migrações-de-privacidade).
 
 ## Sinais, alertas e limites
 

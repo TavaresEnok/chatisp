@@ -60,3 +60,13 @@ No laboratório os dois nomes são `localhost` e `storage.localhost` com a porta
 A borda de produção tem sonda interna em `:8081/edge-health`, sem porta publicada. O serviço `trust-export` apenas prepara o diretório: o runtime usa a trust store pública do sistema (`CA_FILE` vazio). Assim a subida de produção não depende do arquivo da CA interna do laboratório, que não existe em ACME.
 
 Configuração de produção preparada e validada em sintaxe não significa certificado público emitido nem implantação autorizada. A prova integrada usa laboratório local; domínio, DNS, ACME e passagem de operador continuam na [tabela única de dependências](dependencias-externas.md).
+
+## Atualização com migrações de privacidade
+
+As migrações `00053`–`00055` exigem uma janela sem API, ingresso nem workers antigos. Não há suporte a atualização gradual com versões misturadas nem a executar binário antigo depois da migração. Prepare as imagens e o backup antes da janela; use os mesmos arquivos Compose, nome do projeto e arquivo de ambiente da instalação em todos os comandos.
+
+1. Fechar o acesso operacional e parar `chatisp-api` e `chatisp-worker`. A API também é o ingresso de webhook. Confirmar a saída dos processos e o término das conexões/transações desses serviços no PostgreSQL; contêiner parado sozinho não comprova ausência de outro executor.
+2. Executar `docker compose <argumentos-da-instalação> run --rm --no-deps chatisp-migrate` com a imagem nova. Qualquer erro mantém aplicação e ingresso fechados.
+3. Recriar API e worker com as imagens novas, conferir readiness e validar acesso antes de liberar atendimento. Não reutilizar contêiner/binário antigo. Os rollbacks das novas migrações recusam descartar a fila e a proveniência de exclusões.
+
+O corte `privacy_legacy_cutoff` representa a ativação conservadora dessa proteção para contatos historicamente apagados; não é uma reconstrução do instante de exclusão. Entradas anteriores sem prova ficam em quarentena com payload restrito preservado para conciliação autorizada. A recuperação recusa livros ou snapshots com exclusões históricas sem cobertura comprovada. Antes de atualizar uma instalação com esse histórico, planejar a conciliação e o procedimento de recuperação com o operador; não transformar registros antigos em comprovados por edição manual de flags. Nenhuma conciliação ou instalação de produção foi executada nesta missão.

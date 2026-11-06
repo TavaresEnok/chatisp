@@ -1,0 +1,22 @@
+Recursos temporários da missão 06/11/2026. Conferência após as provas.
+
+chatisp-validate-1827821
+containers: 0
+volumes: 0
+networks: 0
+
+chatisp-validate-2014525
+containers: 0
+volumes: 0
+networks: 0
+
+chatisp-validate-2282618
+containers: 0
+volumes: 0
+networks: 0
+
+Etiquetas de imagens dos três projetos: 0.
+Diretórios temporários de Compose identificados nos logs: removidos (3).
+A tentativa interrompida deixou dois volumes (backup-mirror e trust), uma rede e uma etiqueta runtime. Remoção individual por nome exato, após conferir etiquetas do projeto e ausência de contêiner usuário; nenhum recurso de outro projeto foi removido.
+Artefatos privados de diagnóstico em .tmp/mission-20261106 preservados; não são serviço em execução.
+Cache de build e ferramentas reutilizáveis preservados. Nenhum prune global nem reinício do Docker.

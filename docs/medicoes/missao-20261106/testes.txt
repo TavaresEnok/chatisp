@@ -1,0 +1,113 @@
+Missão 06/11/2026 — verificações locais (America/Fortaleza)
+Fontes integradas idênticas ao commit local 6647f7e, criado após as provas.
+Go 1.27.3; Node 24.11.0; npm 11.6.1; Docker 20.10.9; Compose 2.24.7.
+Dados sintéticos e serviços locais; não é homologação ou capacidade.
+
+go -C backend test -p 2 -count=1 -timeout 240s ./... — saída 0, 66 pacotes com testes aprovados:
+ok  	chatisp/cmd/chatisp	32.079s
+?   	chatisp/cmd/devdb	[no test files]
+ok  	chatisp/cmd/m2demo	9.172s
+ok  	chatisp/cmd/restoredrill	4.740s
+ok  	chatisp/cmd/smtpsink	0.252s
+ok  	chatisp/internal/acceptance	9.875s
+ok  	chatisp/internal/attachments	0.025s
+ok  	chatisp/internal/attachments/httpapi	2.854s
+ok  	chatisp/internal/attendance/httpapi	3.499s
+ok  	chatisp/internal/attendance/pipeline	12.702s
+ok  	chatisp/internal/attendance/service	11.501s
+ok  	chatisp/internal/attendance/store	5.337s
+ok  	chatisp/internal/auditview	3.287s
+ok  	chatisp/internal/bothook	2.326s
+?   	chatisp/internal/bothook/httpapi	[no test files]
+ok  	chatisp/internal/branding	2.024s
+ok  	chatisp/internal/businesshours	2.231s
+?   	chatisp/internal/businesshours/httpapi	[no test files]
+ok  	chatisp/internal/cannedreplies	2.185s
+ok  	chatisp/internal/channel/catalog	1.946s
+ok  	chatisp/internal/channel/configuration	5.400s
+ok  	chatisp/internal/channel/httpapi	2.269s
+ok  	chatisp/internal/channel/whatsapp	0.019s
+ok  	chatisp/internal/channel/whatsapp/evolution	0.004s
+ok  	chatisp/internal/channel/whatsapp/metacloud	0.261s
+ok  	chatisp/internal/channelpolicy	2.766s
+?   	chatisp/internal/channelpolicy/httpapi	[no test files]
+?   	chatisp/internal/collision	[no test files]
+ok  	chatisp/internal/collision/httpapi	2.165s
+?   	chatisp/internal/contactdirectory	[no test files]
+ok  	chatisp/internal/contactdirectory/httpapi	3.976s
+ok  	chatisp/internal/contactdocs	0.009s
+ok  	chatisp/internal/contactdocs/httpapi	2.284s
+ok  	chatisp/internal/conversation	0.005s
+ok  	chatisp/internal/distribution	2.316s
+ok  	chatisp/internal/embed	0.010s
+ok  	chatisp/internal/erp	3.908s
+ok  	chatisp/internal/ingress/authmeta	0.009s
+ok  	chatisp/internal/lifecycle	2.691s
+?   	chatisp/internal/lifecycle/httpapi	[no test files]
+ok  	chatisp/internal/loadlocal	0.005s
+ok  	chatisp/internal/media	7.299s
+?   	chatisp/internal/media/httpapi	[no test files]
+?   	chatisp/internal/notifications	[no test files]
+ok  	chatisp/internal/notifications/httpapi	1.858s
+ok  	chatisp/internal/opsalert	0.011s
+ok  	chatisp/internal/outwebhook	45.750s
+ok  	chatisp/internal/platform/auth	5.908s
+ok  	chatisp/internal/platform/config	0.009s
+ok  	chatisp/internal/platform/crypto	0.008s
+ok  	chatisp/internal/platform/db	3.573s
+?   	chatisp/internal/platform/db/dbgen	[no test files]
+ok  	chatisp/internal/platform/httpapi	8.303s
+ok  	chatisp/internal/platform/jobs	3.768s
+ok  	chatisp/internal/platform/logging	0.010s
+ok  	chatisp/internal/platform/mail	0.261s
+ok  	chatisp/internal/platform/metrics	0.037s
+ok  	chatisp/internal/platform/migrate	0.014s
+ok  	chatisp/internal/platform/opsignals	1.906s
+ok  	chatisp/internal/platform/runtime	4.846s
+ok  	chatisp/internal/platform/tenantcache	0.142s
+ok  	chatisp/internal/platform/testdb	15.968s
+ok  	chatisp/internal/platform/urlguard	0.225s
+?   	chatisp/internal/platform/version	[no test files]
+ok  	chatisp/internal/platformusage	2.495s
+ok  	chatisp/internal/presence	2.093s
+?   	chatisp/internal/presence/httpapi	[no test files]
+?   	chatisp/internal/privacyguard	[no test files]
+ok  	chatisp/internal/publicapi	2.496s
+ok  	chatisp/internal/realtime	9.834s
+ok  	chatisp/internal/reports	1.965s
+ok  	chatisp/internal/restoredrill	4.051s
+ok  	chatisp/internal/retention	2.306s
+ok  	chatisp/internal/retention/httpapi	2.070s
+ok  	chatisp/internal/searchplan	3.573s
+ok  	chatisp/internal/sectors	2.255s
+ok  	chatisp/internal/sectors/httpapi	0.029s
+ok  	chatisp/internal/triage	2.631s
+?   	chatisp/internal/triage/httpapi	[no test files]
+ok  	chatisp/internal/upgradetest	3.817s
+
+go -C backend vet ./... — saída 0, sem diagnóstico.
+./scripts/lint.sh com Node 24 — saída 0: golangci-lint, govulncheck, ESLint, tsc, OpenAPI/sqlc.
+Govulncheck: zero alcançáveis; 1 achado em módulo requerido sem chamada pelo produto.
+
+go -C backend test -race -p 1 -count=1 -timeout 240s ./internal/attendance/pipeline ./internal/retention/... — saída 0:
+ok  	chatisp/internal/attendance/pipeline	16.472s
+ok  	chatisp/internal/retention	5.073s
+ok  	chatisp/internal/retention/httpapi	4.480s
+
+Race adicional: ERP, Evolution, crypto, mail, cmd/smtpsink — saída 0.
+Vitest completo: 61 arquivos, 295 testes — saída 0 após correção do teste de carregamento da identidade.
+python3 -m unittest discover -s deploy/backup/tests -p test_*.py — saída 0:
+.....................
+----------------------------------------------------------------------
+Ran 21 tests in 6.520s
+
+OK
+
+E2E m7-ops — saída 0, simulação local sem skip.
+E2E m4b-m6 — saída 0, simulação local sem skip, após correção de mídia.
+E2E ux — saída 0, 52 visões, 0 falhas, após correção de SPKI/porta do runner.
+bash scripts/dev.test.sh — saída 0.
+./scripts/ops-security-check.sh — saída 0.
+./scripts/ops-load-local.sh — 200 chamadas, zero falhas, ensaio sintético; não é capacidade.
+git diff --check — sem diagnóstico.
+Alertas: regras não modificadas; provas históricas Prometheus/Alertmanager não foram repetidas.

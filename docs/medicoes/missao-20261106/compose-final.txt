@@ -1,0 +1,69 @@
+Comando: PATH=/tmp/chatisp-node24/bin:$PATH CHATISP_VALIDATE_ALPINE=1 CHATISP_VALIDATE_BACKUP=1 ./scripts/compose-validate.sh
+Saída: 0. Data local: 06/11/2026 (America/Fortaleza); timestamps das ferramentas em UTC.
+Código testado idêntico ao commit 6647f7eaf45dc2d8c7c2b566164b62c1920bd55d; commit criado após as provas, sem mudança das fontes.
+Docker 20.10.9, Compose 2.24.7, imagens Alpine; isto não valida imagens Debian nem serviços externos.
+SHA-256 do log bruto privado: 94e6c9e343d058f81e500ff9a9270eb7b83ac34909f7cc3950e26bd3e4fe8f70
+Resumo filtrado sem credenciais, parâmetros de assinatura ou tokens.
+
+subida ok: postgres, garage (bucket e chave provisionados), migrações, api, worker, caddy e SMTP descartável (https://localhost:35421)
+storage-setup idempotente: segunda execução só conferiu o que já existia
+jornada[before] ok: primeiro acesso: login do bootstrap, cadastro do MFA e painel autenticado
+jornada[before] ok: convite do admin de outro provedor: e-mail com link da origem do painel, token fora da resposta da API, aceite pelo link, MFA, token de uso único
+jornada[before] ok: recuperação de senha: e-mail com link, nova senha, login com MFA
+jornada[before] ok: falha de entrega do SMTP: 503 sem token, nada entregue; entrega volta ao normal
+jornada[before] ok: CSRF ausente e Origin estrangeiro recusados com sessão válida (HTTP e WebSocket)
+jornada[before] ok: atendimento: webhook assinado vira conversa pelo worker e a nova mensagem chega ao painel por WebSocket, sem recarregar
+jornada[before] ok: anexo: gravado e lido no Garage por TLS, URL assinada de 60 s, bytes idênticos, sem acesso sem assinatura, sem sessão e de outro provedor
+jornada[before] ok: envio com anexo aceito na fila (despacho Meta desabilitado será conferido no banco)
+jornada[before] ok: /metrics não é servido pelo acesso público
+JORNADA before OK (9 verificações)
+envio Meta desabilitado: tentativa falhou com driver_indisponivel, sem chamada externa
+jornada[suspension] ok: suspensão bloqueia operação, retém dentro do limite, recusa excesso sem ACK e permite reativação explícita
+JORNADA suspension OK (1 verificações)
+suspensão: um envelope retido, segundo recusado e alerta persistido; reativação mantém quarentena sem job de atendimento
+métricas ok: coletáveis dentro da rede do Compose, fora do acesso público; portas publicadas: loopback 35421 (HTTPS) e 45857 (SMTP descartável)
+jornada[storage-down] ok: storage indisponível: gravação falha com erro 5xx sem credencial, painel e /readyz seguem no ar
+JORNADA storage-down OK (1 verificações)
+jornada[storage-up] ok: storage de volta: leitura e nova gravação funcionam
+JORNADA storage-up OK (1 verificações)
+jornada[after] ok: depois do reinício: superadmin e administrador do provedor entram com a mesma senha e o mesmo MFA
+jornada[after] ok: depois do reinício: anexos com os mesmos bytes e mensagens persistidos
+jornada[after] ok: depois do reinício: webhook, worker e WebSocket voltaram a funcionar
+JORNADA after OK (3 verificações)
+reinício ok: dados, anexo, sessões de login e fluxos voltaram; o bootstrap não recria nada
+stanza chatisp criado; arquivamento de WAL conferido
+backup atrasado é sinalizado: sem nenhum sucesso registrado, 'check' falha
+attachments-backup: 3 objeto(s) copiado(s) (209 bytes), 0 já espelhado(s), 0 chave(s) fora do padrão recusada(s), 3 no manifesto, em 56ms
+ledger: mapa e exclusões completos, com SHA-256 (20261106T035056.947436325Z-ae4c1f6b)
+chaves: cópia cifrada e SHA-256 gravados (20261106T035103.462030867Z-ab7f0651)
+backup full concluído
+backups (chatisp-validate-2282618) dentro do limite de 3600s
+monitor: ausência de cada um dos quatro componentes é detectada separadamente
+artefatos reais: ledger íntegro aceito; corrupção e checksum ausente recusados pelo validador usado no restore
+backup completo: banco (pgBackRest com WAL), anexos (espelho), livro de exclusões, chaves cifradas e sinal de sucesso
+jornada[exclude-pending] ok: exclusão com storage indisponível: API informa anonimização e limpeza pendente
+JORNADA exclude-pending OK (1 verificações)
+ledger: mapa e exclusões completos, com SHA-256 (20261106T035131.341250855Z-39cd7cc2)
+jornada[exclude] ok: exclusão do titular 1: anexo some, o do titular 2 permanece
+JORNADA exclude OK (1 verificações)
+exclusão pendente: anonimização e livro preservados durante queda; limpeza concluída após retorno
+backup atrasado é sinalizado: sucesso mais velho que o limite faz 'check' falhar
+restore recusa chaves divergentes e mantém atendimento fechado
+1/7 chaves: recuperando e aplicando a cópia cifrada mais recente
+2/7 banco: pgbackrest restore (--type=immediate --target-action=promote)
+3/7 banco: subindo o PostgreSQL restaurado (aplicação permanece fechada)
+4/7 exclusões: validando livros, conferindo vínculo provedor/anexo/objeto e reaplicando
+verify-data-keys: 5 material(is) cifrado(s) autenticado(s) com o anel recuperado
+5/7 anexos: subindo o armazenamento TLS e provisionando o bucket (aplicação permanece fechada)
+6/7 anexos: restaurando o espelho
+attachments-restore: 1 objeto(s) restaurado(s), 0 já presente(s), 2 excluído(s) pela política (não restaurados)
+7/7 serviço: subindo a aplicação
+restauração concluída; confira o painel, os anexos mantidos e a ausência dos excluídos antes de liberar o acesso
+jornada[restored] ok: restauração: os administradores de dois provedores entram com senha e MFA (cifrado com as chaves recuperadas)
+jornada[restored] ok: restauração: anexo mantido volta com os mesmos bytes; anexo excluído continua excluído; conversas presentes
+jornada[restored] ok: restauração: o webhook assinado é aceito, então o segredo do app abriu com a chave recuperada
+JORNADA restored OK (3 verificações)
+proteções de ingresso restauradas com fingerprints e cutoffs originais
+privacidade após restore: titular permanece anonimizado e corpos não ressuscitam
+restauração ok: banco (ponto consistente do backup) + exclusões reaplicadas; anexo mantido íntegro no storage novo; anexo excluído ausente da base e do storage, exclusão preservada no livro; chaves recuperadas de cópia cifrada e aplicadas ao ambiente perdido; webhook assinado aceito
+compose ok: build, healthchecks, migrações, jornada integrada, storage, SMTP, métricas privadas, reinício e encerramento sem sobras (chatisp-validate-2282618)
