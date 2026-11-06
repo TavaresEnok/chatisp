@@ -2,6 +2,8 @@
 
 Estado em 06/11/2026 (America/Fortaleza). Esta tabela concentra as dependências externas. A coluna de implementação distingue código faltante de homologação; as limitações locais remanescentes constam explicitamente abaixo. Nada abaixo foi inventado: fornecedor de ERP, endpoints, autorização do cliente, licença da Evolution, metas de carga, retenção e versão da Graph API continuam em aberto.
 
+Na continuação solicitada para hoje, o usuário autorizou decisões técnicas e o adiamento de domínio/serviços indisponíveis. O núcleo ganhou uma instalação local persistente em `https://localhost:8443/entrar`, com os controles ativos e conexões externas desligadas. Essa escolha de escopo não converte contrato ausente, expurgo não implementado ou homologação pendente em recurso entregue. Evidências e acesso: [prontidão local](medicoes/pronto-hoje-20261106/relatorio.md).
+
 Leitura da tabela:
 
 Na missão de 06/11/2026, o usuário confirmou que ainda não dispõe de contrato ERP/mecanismo de verificação, release/licença Evolution, regras de retenção por classe nem perfil/metas do piloto e RPO/RTO. Esses itens seguem sem definição; a confirmação não autoriza escolher valores ou acionar serviços externos.
@@ -32,7 +34,7 @@ Não há declaração de produto completo. ERP real e Evolution não têm transp
 
 As correções da missão de 06/11 cobrem novas mídias recebidas e reservas antigas identificáveis. Mídias antigas já publicadas em `in/<tenant>/<mensagem>` ou órfãos sem vínculo não são remapeados automaticamente, e o espelho continua recusando esse formato. O inventário e o procedimento de tratamento desse legado integram o aceite operacional do item 11; não houve acesso corretivo a storage real. Exclusões históricas sem prova de proteção de ingresso também impedem a abertura do restore. Atualização exige API, ingresso e workers antigos parados, conforme `docs/implantacao.md`.
 
-A instalação local, os gates de recuperação e as provas efetivamente executadas em 05/11 estão no [relatório daquela retomada](medicoes/retomada-20261105/relatorio.md). A rodada de 06/11 está descrita em [relatório próprio](medicoes/missao-20261106/relatorio.md); os resultados finais devem ser consultados ali após o término das verificações. Configuração de produção preparada, laboratório validado, homologação externa e produção implantada são estados distintos. Nenhuma produção foi autorizada/implantada e nenhum serviço real Meta/ERP/Evolution foi chamado.
+A instalação local, os gates de recuperação e as provas efetivamente executadas em 05/11 estão no [relatório daquela retomada](medicoes/retomada-20261105/relatorio.md). A primeira rodada de 06/11 está em [relatório próprio](medicoes/missao-20261106/relatorio.md); a continuação, os novos gates e a instalação local persistente estão no [relatório de prontidão](medicoes/pronto-hoje-20261106/relatorio.md). Configuração de produção preparada, instalação local ativa, homologação externa e produção implantada são estados distintos. Nenhuma produção pública foi implantada e nenhum serviço real Meta/ERP/Evolution foi chamado.
 
 ## Versões de Docker
 

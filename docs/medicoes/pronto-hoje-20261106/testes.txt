@@ -1,0 +1,114 @@
+Fontes idênticas ao commit 0002570b6a15f1a0101e28768588a0292751897f; código criado após provas, sem alteração comportamental posterior.
+
+go -C backend test -p 2 -count=1 -timeout 240s ./... — saída 0, 66 pacotes:
+ok  	chatisp/cmd/chatisp	27.220s
+?   	chatisp/cmd/devdb	[no test files]
+ok  	chatisp/cmd/m2demo	7.820s
+ok  	chatisp/cmd/restoredrill	3.722s
+ok  	chatisp/cmd/smtpsink	0.157s
+ok  	chatisp/internal/acceptance	9.542s
+ok  	chatisp/internal/attachments	0.021s
+ok  	chatisp/internal/attachments/httpapi	2.817s
+ok  	chatisp/internal/attendance/httpapi	2.576s
+ok  	chatisp/internal/attendance/pipeline	9.417s
+ok  	chatisp/internal/attendance/service	10.422s
+ok  	chatisp/internal/attendance/store	5.215s
+ok  	chatisp/internal/auditview	3.048s
+ok  	chatisp/internal/bothook	2.059s
+?   	chatisp/internal/bothook/httpapi	[no test files]
+ok  	chatisp/internal/branding	1.952s
+ok  	chatisp/internal/businesshours	2.159s
+?   	chatisp/internal/businesshours/httpapi	[no test files]
+ok  	chatisp/internal/cannedreplies	2.145s
+ok  	chatisp/internal/channel/catalog	1.848s
+ok  	chatisp/internal/channel/configuration	5.139s
+ok  	chatisp/internal/channel/httpapi	2.192s
+ok  	chatisp/internal/channel/whatsapp	0.020s
+ok  	chatisp/internal/channel/whatsapp/evolution	0.006s
+ok  	chatisp/internal/channel/whatsapp/metacloud	0.254s
+ok  	chatisp/internal/channelpolicy	2.695s
+?   	chatisp/internal/channelpolicy/httpapi	[no test files]
+?   	chatisp/internal/collision	[no test files]
+ok  	chatisp/internal/collision/httpapi	2.012s
+?   	chatisp/internal/contactdirectory	[no test files]
+ok  	chatisp/internal/contactdirectory/httpapi	3.778s
+ok  	chatisp/internal/contactdocs	0.010s
+ok  	chatisp/internal/contactdocs/httpapi	2.183s
+ok  	chatisp/internal/conversation	0.011s
+ok  	chatisp/internal/distribution	2.405s
+ok  	chatisp/internal/embed	0.014s
+ok  	chatisp/internal/erp	3.671s
+ok  	chatisp/internal/ingress/authmeta	0.010s
+ok  	chatisp/internal/lifecycle	2.626s
+?   	chatisp/internal/lifecycle/httpapi	[no test files]
+ok  	chatisp/internal/loadlocal	0.006s
+ok  	chatisp/internal/media	7.097s
+?   	chatisp/internal/media/httpapi	[no test files]
+?   	chatisp/internal/notifications	[no test files]
+ok  	chatisp/internal/notifications/httpapi	1.901s
+ok  	chatisp/internal/opsalert	0.006s
+ok  	chatisp/internal/outwebhook	45.856s
+ok  	chatisp/internal/platform/auth	6.661s
+ok  	chatisp/internal/platform/config	0.010s
+ok  	chatisp/internal/platform/crypto	0.004s
+ok  	chatisp/internal/platform/db	4.101s
+?   	chatisp/internal/platform/db/dbgen	[no test files]
+ok  	chatisp/internal/platform/httpapi	8.857s
+ok  	chatisp/internal/platform/jobs	3.973s
+ok  	chatisp/internal/platform/logging	0.020s
+ok  	chatisp/internal/platform/mail	0.277s
+ok  	chatisp/internal/platform/metrics	0.039s
+ok  	chatisp/internal/platform/migrate	0.014s
+ok  	chatisp/internal/platform/opsignals	2.055s
+ok  	chatisp/internal/platform/runtime	4.940s
+ok  	chatisp/internal/platform/tenantcache	0.136s
+ok  	chatisp/internal/platform/testdb	15.963s
+ok  	chatisp/internal/platform/urlguard	0.227s
+?   	chatisp/internal/platform/version	[no test files]
+ok  	chatisp/internal/platformusage	2.625s
+ok  	chatisp/internal/presence	2.259s
+?   	chatisp/internal/presence/httpapi	[no test files]
+?   	chatisp/internal/privacyguard	[no test files]
+ok  	chatisp/internal/publicapi	2.665s
+ok  	chatisp/internal/realtime	9.896s
+ok  	chatisp/internal/reports	1.894s
+ok  	chatisp/internal/restoredrill	4.226s
+ok  	chatisp/internal/retention	2.345s
+ok  	chatisp/internal/retention/httpapi	2.051s
+ok  	chatisp/internal/searchplan	3.893s
+ok  	chatisp/internal/sectors	2.285s
+ok  	chatisp/internal/sectors/httpapi	0.011s
+ok  	chatisp/internal/triage	2.819s
+?   	chatisp/internal/triage/httpapi	[no test files]
+ok  	chatisp/internal/upgradetest	3.992s
+
+Vet — saída 0.
+Lint completo — saída 0 após remover helper sem uso; golangci-lint, govulncheck, ESLint, tsc e gerados.
+Govulncheck: 0 alcançáveis; 1 achado em módulo requerido sem chamada pelo produto.
+
+Race auth/attachments/media/attendance-service/pipeline — saída 0:
+ok  	chatisp/internal/platform/auth	15.161s
+ok  	chatisp/internal/attachments	1.055s
+ok  	chatisp/internal/media	9.672s
+ok  	chatisp/internal/attendance/service	15.322s
+ok  	chatisp/internal/attendance/pipeline	16.948s
+
+Vitest — 61 arquivos, 297 testes, saída 0.
+
+Python — saída 0:
+........................
+----------------------------------------------------------------------
+Ran 24 tests in 7.359s
+
+OK
+
+E2E m3b, m4b-m6, m7-ops e ux — saída 0, sem skip, serviços sintéticos/locais.
+UX: 52 visões, 0 falhas.
+scripts/dev.test.sh — saída 0, HTTPS padrão e opt-out diagnóstico.
+scripts/compose-validate.test.sh — saída 0, interrupção aguarda filhos antes do cleanup.
+init-local-env.sh — arquivo 0600, segunda criação recusada sem alteração, compose config -q saída 0.
+ops-security-check.sh — saída 0.
+Carga 2×3 — seis pedidos, zero falhas, ensaio sintético. DSN externo, valores ilegíveis e 33 clientes recusados. Sem alegação de capacidade.
+
+Instalação persistente: build, config -q e up --wait — saída 0. Bootstrap de admin sem superadmin — saída 0.
+Instalação local: HTTPS confiável pela CA local, health/ready 200, painel servido, métricas públicas 404, login admin com cookie seguro e MFA obrigatório, logout 204. Sem integrações externas.

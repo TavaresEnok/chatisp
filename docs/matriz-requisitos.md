@@ -2,6 +2,8 @@
 
 Contagem: Implementado e verificado: 206; Implementado, aguardando homologação externa: 32; Parcial, com lacuna concreta: 19; Não implementado: 0. Total: 257.
 
+Continuação de 06/11/2026 para uso local hoje: código `0002570`, 66 pacotes Go, race de autenticação/mídia/atendimento, Vitest 61/297, Python 24, E2E e Compose/backup aprovados. Corridas de sessão, conversão, adiamento e limites de texto foram corrigidas; instalação local persistente disponível para primeiro acesso. Os contratos e serviços ausentes foram adiados pelo usuário, preservando os estados e a contagem. Escopo, evidência por alteração e limites em `docs/medicoes/pronto-hoje-20261106/relatorio.md`.
+
 Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1 a M8 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
 
 Revisão de 05/11/2026 na retomada: recusa de expurgo não prova executor; alertas no painel não provam entrega externa. Evidências atuais e limites em `docs/medicoes/retomada-20261105/relatorio.md`; afirmações históricas são mantidas como histórico, não como conclusão desta rodada.

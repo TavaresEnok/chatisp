@@ -18,27 +18,27 @@ Na primeira subida o terminal imprime `dev.local@example.com` e uma senha gerada
 | Saúde | `http://127.0.0.1:8080/healthz` e `http://127.0.0.1:8080/readyz` |
 | Métricas | `http://127.0.0.1:9090/metrics` |
 | PostgreSQL embutido | `127.0.0.1:55432` |
-| Painel Vite | `http://127.0.0.1:5173` |
+| Painel Vite | `https://127.0.0.1:5173` |
 
-O Vite deste script usa `scripts/vite.dev.mjs` e encaminha `/api`, `/healthz` e `/readyz` para `CHATISP_DEV_API_ORIGIN`, que o script define com a mesma origem da API. No padrão, o painel em `http://127.0.0.1:5173` fala com `http://127.0.0.1:8080`.
+O Vite deste script usa `scripts/vite.dev.mjs` e encaminha `/api`, `/healthz` e `/readyz` para `CHATISP_DEV_API_ORIGIN`, que o script define com a mesma origem da API. No padrão, o painel em `https://127.0.0.1:5173` fala com `http://127.0.0.1:8080`.
 
 Rotas do painel, nesse host:
 
-- `http://127.0.0.1:5173/entrar`
-- `http://127.0.0.1:5173/painel`
-- `http://127.0.0.1:5173/conversas`
-- `http://127.0.0.1:5173/relatorios`
-- `http://127.0.0.1:5173/configuracoes` (alertas operacionais do admin)
+- `https://127.0.0.1:5173/entrar`
+- `https://127.0.0.1:5173/painel`
+- `https://127.0.0.1:5173/conversas`
+- `https://127.0.0.1:5173/relatorios`
+- `https://127.0.0.1:5173/configuracoes` (alertas operacionais do admin)
 
-O cookie de sessão é `__Host-session` com `Secure`. Em HTTP o navegador não guarda essa sessão, então o painel aberto em `http://127.0.0.1:5173` não permanece autenticado. O script não desliga `Secure`.
+O launcher usa HTTPS por padrão e mantém o cookie `__Host-session` com `Secure`. `CHATISP_DEV_TLS=0` é uma opção explícita de diagnóstico HTTP; nesse modo o navegador não guarda a sessão segura.
 
-Para entrar no navegador sem Docker, suba com HTTPS local:
+Para entrar no navegador sem Docker, use o padrão HTTPS local:
 
 ```
-CHATISP_DEV_TLS=1 ./scripts/dev.sh
+./scripts/dev.sh
 ```
 
-O painel passa a ser `https://127.0.0.1:5173` (ou a porta de `CHATISP_DEV_VITE_PORT`) com certificado autoassinado descartável, apagado ao encerrar. Conferido em 04/11/2026: login `POST /api/panel/session` pelo proxy HTTPS retornou 200 com `__Host-session` (`HttpOnly; Secure; SameSite=Lax`) e `__Host-csrf`. Para encerrar, Ctrl+C no terminal do script; ele para só o PostgreSQL, a API e o Vite que iniciou.
+O painel fica em `https://127.0.0.1:5173` (ou a porta de `CHATISP_DEV_VITE_PORT`) com certificado autoassinado descartável, apagado ao encerrar. Conferido em 04/11/2026: login `POST /api/panel/session` pelo proxy HTTPS retornou 200 com `__Host-session` (`HttpOnly; Secure; SameSite=Lax`) e `__Host-csrf`. Para encerrar, Ctrl+C no terminal do script; ele para só o PostgreSQL, a API e o Vite que iniciou.
 
 Se a porta 8080 estiver ocupada, o próprio `scripts/dev.sh` documenta o conjunto:
 
@@ -50,7 +50,7 @@ CHATISP_DEV_VITE_PORT=5174 \
 ./scripts/dev.sh
 ```
 
-Nesse caso a API fica em `http://127.0.0.1:18080`, as métricas em `http://127.0.0.1:19090/metrics`, o PostgreSQL em `127.0.0.1:55433` e o painel em `http://127.0.0.1:5174`. As quatro portas precisam ser distintas.
+Nesse caso a API fica em `http://127.0.0.1:18080`, as métricas em `http://127.0.0.1:19090/metrics`, o PostgreSQL em `127.0.0.1:55433` e o painel em `https://127.0.0.1:5174`. As quatro portas precisam ser distintas.
 
 Conferir a saúde:
 
@@ -77,15 +77,17 @@ O que sobe: PostgreSQL 18.6, Garage 2.5 (nó único, sem redundância de produç
 
 Padrões do Compose: `CHATISP_ENV=production` (a aplicação então recusa simulação da Meta); Meta **desabilitada** (`CHATISP_META_OFFICIAL_DISPATCH=false`: o envio falha antes da rede com `driver_indisponivel`, o painel avisa, o recebimento e o resto seguem); métricas só na rede interna (porta 9090 sem publicação, `/metrics` responde 404 no acesso público); HTTPS só em `127.0.0.1`. Para o envio oficial, `CHATISP_META_OFFICIAL_DISPATCH=true` exige `CHATISP_META_GRAPH_VERSION` e `CHATISP_META_PRIMARY_DOC_URL` (decisão D2-03: o repositório não escolhe versão). Para domínio próprio com certificado público, `docs/implantacao.md`.
 
-Primeiro acesso, uma vez, numa instalação vazia (a senha vai pela entrada padrão e não aparece em argumento, variável nem log):
+Primeiro acesso, uma vez, numa instalação vazia: para operar um provedor sem depender de convite por SMTP, crie o administrador sem `-superadmin`. A senha entra pela entrada padrão; o valor de armazenamento abaixo é apenas exemplo e deve ser escolhido para a instalação.
 
 ```
-printf '%s\n' "$SENHA_DO_ADMIN" | docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm -T chatisp-migrate bootstrap -email admin@provedor.example -superadmin -storage-bytes 10737418240
+printf '%s\n' "$SENHA_DO_ADMIN" | docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm -T chatisp-migrate bootstrap -email admin@provedor.example -storage-bytes 10737418240
 ```
 
 `-storage-bytes` grava `max_storage_bytes` do plano: **sem limite de armazenamento no plano os anexos são recusados** (409), porque não há padrão comercial. O comando cria o primeiro provedor e o administrador; com `-superadmin` a mesma conta também opera a plataforma, mas **superadmin não opera atendimento por desenho** (sem acesso livre às conversas): para atender, convide um administrador de provedor. Repetido com o mesmo e-mail não altera nada; com outro e-mail numa instalação povoada, recusa. O MFA é exigido no primeiro acesso. Provedores seguintes: o superadmin cria em Configurações › Provedores e usa "Convidar administrador" (exige SMTP em `CHATISP_SMTP_*`; o e-mail leva o link do painel e o token vai só por e-mail). Recuperação de senha também usa o SMTP. `chatisp dev-prepare` é do ambiente de desenvolvimento e não deve ser apontado para o banco do Compose.
 
 Backup e restauração: `docs/backup.md`.
+
+Para gerar os segredos locais sem sobrescrever uma instalação, use `./deploy/init-local-env.sh`. O arquivo gerado é privado e não vai para o Git. Em Docker 20.10.9 deste host, a alternativa local é combinar `deploy/compose.yaml` e `deploy/compose.local-alpine.yaml`, definindo `CHATISP_LOCAL_IMAGE_PREFIX` exclusivo e usando sempre o mesmo nome de projeto e arquivo de ambiente. Esse perfil mantém bind loopback, storage TLS, métricas privadas e integrações externas desligadas; não equivale a homologação de produção. O README contém os comandos completos.
 
 ## O que a operação local não faz
 

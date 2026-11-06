@@ -26,6 +26,8 @@ BACKUP_MAX_AGE_SECONDS=<limite-definido-pelo-operador> deploy/backup/chatisp-bac
 
 O lock compartilhado em `/mirror/.operation-lock` impede backup/restore concorrentes. Uma interrupção não tratável pode deixar o lock: o operador precisa comprovar que a execução anterior terminou antes de removê-lo. Nomes incluem fração de segundo e aleatoriedade. Livros e chaves são publicados com checksum, sem sobrescrita; artefatos parciais, órfãos ou corrompidos impedem a recuperação.
 
+A exportação marca sua geração como em curso antes da primeira consulta. A marca só sai após os três pares de artefatos completos; interrupção mantém a evidência e impede restore silencioso de livros anteriores. O operador deve conferir a execução interrompida, preservar os artefatos, reconciliar ou renovar a exportação e só então remover a marca daquela geração. Não apagar marcas ou livros de outras execuções para forçar uma recuperação.
+
 O espelho verifica SHA-256, tamanho e identidade antes de reutilizar um objeto. Mudança inesperada de versão é recusada explicitamente, preservando a cópia anterior. Manifesto tem contagem e hash de fechamento. Symlinks, operações concorrentes e objetos órfãos são recusados. Este formato ainda não lançado recusa os manifestos incompletos da implementação interrompida. Bucket versionado exige procedimento próprio de replicação/remapeamento; este comando o recusa.
 
 Novas mídias recebidas usam `<namespace UUID>/<mensagem UUID>`, como exige o espelho. Uma intenção `attachments.state=upload`, com tamanho e orçamento reais, confirma antes de `Create`; a gravação revalida propriedade e contato sob locks limitados pelo timeout. Interrupções deixam a intenção para retry ou exclusão. A exclusão também enfileira chaves determinísticas de reservas antigas `in/<tenant>/<mensagem>` antes de redigir o contexto; tamanho desconhecido não é inventado no livro. Mídias antigas já publicadas nesse prefixo e órfãos sem vínculo recuperável não são migrados automaticamente: o espelho os recusa, e o operador precisa inventariar e definir tratamento antes do aceite de backup. Não houve reparação de armazenamento real nesta missão.
@@ -39,6 +41,8 @@ RESTORE_KEYS_OUT=/diretorio-privado/chaves-recuperadas.env deploy/backup/chatisp
 ```
 
 O script adquire exclusividade, fecha API/worker, verifica e decifra a cópia das chaves, valida o anel e o aplica atomicamente ao arquivo `--env-file` (ou `RESTORE_ENV_FILE`). Chaves existentes divergentes recusam recuperação. O arquivo recuperado é 0600; os valores nunca são avaliados como shell. O anel efetivamente recebido pelo contêiner é conferido.
+
+O Compose deve indicar um único `--env-file` explícito. Se `RESTORE_ENV_FILE` também for informado, precisa designar o mesmo arquivo. `RESTORE_KEYS_OUT` deve ser distinto, sem aliases por symlink ou hardlink ao ambiente; a validação ocorre antes de parar os serviços.
 
 Depois restaura o PostgreSQL no ponto consistente do backup (`--type=immediate --target-action=promote`), valida os livros completos e a associação provedor/anexo/chave, reaplica exclusões com deduplicação e orçamento idempotente. A exclusão do titular também reaplica anonimização e redação do conteúdo acessível pelo painel, preservando protocolos/ciclos e trilha mínima. O mapa de objetos excluídos é guardado no momento da exclusão.
 

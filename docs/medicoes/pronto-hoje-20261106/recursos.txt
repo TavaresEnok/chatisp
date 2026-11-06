@@ -1,0 +1,25 @@
+Pronto hoje — recursos após provas; instalação local é intencional e persistente.
+
+chatisp-validate-2797501
+contêineres: 0
+volumes: 0
+redes: 0
+
+chatisp-validate-3000114
+contêineres: 0
+volumes: 0
+redes: 0
+Etiquetas de imagens das duas provas: 0. Caches reutilizáveis preservados.
+Instalação local chatisp-api: healthy
+Instalação local chatisp-worker: healthy
+Instalação local postgres: healthy
+Instalação local garage: healthy
+Instalação local caddy: healthy
+
+Projeto persistente: chatisp-pronto-hoje
+Endereço local: https://localhost:8443/entrar
+Porta publicada somente em 127.0.0.1: 8443
+PostgreSQL, Garage e métricas sem portas publicadas.
+Configuração e credenciais fora do Git, arquivos 0600 e diretório 0700.
+Não removidos: contêineres, volumes, rede e imagens chatisp-pronto-hoje, pois são a instalação entregue.
+Nenhum prune global, reinício do Docker ou remoção de recursos de outro projeto.
