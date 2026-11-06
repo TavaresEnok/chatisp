@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"chatisp/internal/platform/crypto"
 	"chatisp/internal/platform/db"
 )
 
@@ -29,6 +30,8 @@ var (
 	ErrPurgeDisabled = errors.New("expurgo automático desligado")
 	// ErrUnavailable means the database cannot answer.
 	ErrUnavailable = errors.New("serviço indisponível")
+	// ErrCleanupPending means erasure committed, but object cleanup needs retry.
+	ErrCleanupPending = errors.New("limpeza de objetos pendente")
 )
 
 // Classes are the retention buckets. They do not share one duration.
@@ -44,11 +47,12 @@ type Principal struct {
 }
 
 // Service reads and writes retention for one provider.
-// Objects, when set, deletes the private file of each removed attachment
-// in the same transaction attempt. A failure rolls the database change back.
+// Objects deletes private files after the erasure transaction commits.
+// Failed object deletions remain queued for an idempotent retry.
 type Service struct {
 	DB      *db.Store
 	Objects ObjectDeleter
+	Keys    *crypto.Ring
 }
 
 // Policy is the provider retention profile. Nil days are still undefined.
@@ -110,8 +114,8 @@ const (
 	NoteTombstone = "conteúdo removido a pedido do titular"
 )
 
-// ObjectDeleter removes one private object version after the row is ready
-// to leave the database. A nil deleter still removes the database reference.
+// ObjectDeleter removes one private object version. Delete must be idempotent.
+// A deleter is required when attachments exist.
 type ObjectDeleter interface {
 	Delete(ctx context.Context, key, version string) error
 }

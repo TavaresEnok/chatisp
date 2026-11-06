@@ -2,19 +2,34 @@ package retention
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"chatisp/internal/platform/crypto"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
+func privacyTestKeys(t *testing.T) *crypto.Ring {
+	t.Helper()
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i + 1)
+	}
+	ring, err := crypto.Parse("v1:"+base64.StdEncoding.EncodeToString(key), "v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ring
+}
+
 func TestPrivacyExportAndDeleteKeepsProtocol(t *testing.T) {
 	s := seedTenant(t)
-	svc := Service{DB: testStore, Objects: &memObjects{}}
+	svc := Service{DB: testStore, Objects: &memObjects{}, Keys: privacyTestKeys(t)}
 	ctx := context.Background()
 	opened := time.Date(2026, 11, 4, 15, 0, 0, 0, time.UTC)
 	conv := uuid.New()
@@ -249,9 +264,9 @@ func TestPrivacyExportAndDeleteKeepsProtocol(t *testing.T) {
 	}
 }
 
-func TestPrivacyDeleteRollsBackWhenObjectRemains(t *testing.T) {
+func TestPrivacyDeleteRetriesObjectAfterCommittedErasure(t *testing.T) {
 	s := seedTenant(t)
-	svc := Service{DB: testStore, Objects: &memObjects{fail: true}}
+	svc := Service{DB: testStore, Objects: &memObjects{fail: true}, Keys: privacyTestKeys(t)}
 	ctx := context.Background()
 	opened := time.Date(2026, 11, 4, 16, 0, 0, 0, time.UTC)
 	conv := uuid.New()
@@ -279,18 +294,182 @@ func TestPrivacyDeleteRollsBackWhenObjectRemains(t *testing.T) {
 		t.Fatal("exclusão confirmou com objeto preso")
 	}
 	var name string
-	var left int
+	var left, pending, ledger int
 	if err := testStore.WithTenantTx(ctx, s.tenant, func(ctx context.Context, tx pgx.Tx) error {
 		if err := tx.QueryRow(ctx, `SELECT name FROM contacts WHERE tenant_id=$1 AND id=$2`, s.tenant, s.contact).Scan(&name); err != nil {
 			return err
 		}
-		return tx.QueryRow(ctx, `SELECT count(*) FROM attachments WHERE tenant_id=$1`, s.tenant).Scan(&left)
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM attachments WHERE tenant_id=$1`, s.tenant).Scan(&left); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM privacy_object_cleanup WHERE tenant_id=$1 AND contact_id=$2`, s.tenant, s.contact).Scan(&pending); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, `SELECT count(*) FROM deletion_records WHERE tenant_id=$1 AND subject='attachment'`, s.tenant).Scan(&ledger)
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if name != "Cliente" || left != 1 {
-		t.Fatalf("rollback: %s anexos=%d", name, left)
+	if name != TombstoneName || left != 0 || pending != 1 || ledger != 1 {
+		t.Fatalf("exclusão comprometida: %s anexos=%d pendentes=%d ledger=%d", name, left, pending, ledger)
 	}
+	svc.Objects = &memObjects{}
+	result, err := svc.DeletePrivacy(ctx, s.admin, s.contact)
+	if err != nil || !result.AlreadyErased || result.ObjectsRemoved != 1 {
+		t.Fatalf("retry: %+v %v", result, err)
+	}
+	if err := testStore.WithTenantTx(ctx, s.tenant, func(ctx context.Context, tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT count(*) FROM privacy_object_cleanup WHERE tenant_id=$1`, s.tenant).Scan(&pending)
+	}); err != nil || pending != 0 {
+		t.Fatalf("fila após retry=%d: %v", pending, err)
+	}
+}
+
+func TestPrivacyDeleteRequiresObjectStoreForAttachments(t *testing.T) {
+	s := seedTenant(t)
+	seedPreview(t, s, "private body", 40)
+	ctx := context.Background()
+	_, err := (Service{DB: testStore, Keys: privacyTestKeys(t)}).DeletePrivacy(ctx, s.admin, s.contact)
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("exclusão sem armazenamento: %v", err)
+	}
+	if err := testStore.WithTenantTx(ctx, s.tenant, func(ctx context.Context, tx pgx.Tx) error {
+		var body string
+		var attachments, tombstones int
+		if err := tx.QueryRow(ctx, `SELECT body FROM messages WHERE tenant_id=$1`, s.tenant).Scan(&body); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM attachments WHERE tenant_id=$1`, s.tenant).Scan(&attachments); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM deletion_records WHERE tenant_id=$1`, s.tenant).Scan(&tombstones); err != nil {
+			return err
+		}
+		if body != "private body" || attachments != 1 || tombstones != 0 {
+			t.Fatalf("exclusão parcial: body=%q anexos=%d registros=%d", body, attachments, tombstones)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPrivacyDeleteRequiresKeysForIdentities(t *testing.T) {
+	s := seedTenant(t)
+	ctx := context.Background()
+	_, err := (Service{DB: testStore, Objects: &memObjects{}}).DeletePrivacy(ctx, s.admin, s.contact)
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("exclusão sem chaves: %v", err)
+	}
+	if err := testStore.WithTenantTx(ctx, s.tenant, func(ctx context.Context, tx pgx.Tx) error {
+		var name string
+		var erased *time.Time
+		var identities, records int
+		if err := tx.QueryRow(ctx, `SELECT name,privacy_erased_at FROM contacts WHERE tenant_id=$1 AND id=$2`, s.tenant, s.contact).Scan(&name, &erased); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM contact_channel_identities WHERE tenant_id=$1 AND contact_id=$2 AND external_id LIKE 'wa-%'`, s.tenant, s.contact).Scan(&identities); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM retention_deletion_records WHERE tenant_id=$1`, s.tenant).Scan(&records); err != nil {
+			return err
+		}
+		if name != "Cliente" || erased != nil || identities != 2 || records != 0 {
+			t.Fatalf("exclusão parcial: nome=%s apagado=%v identidades=%d registros=%d", name, erased, identities, records)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPrivacyDeleteQueuesLegacyReservedInboundObject(t *testing.T) {
+	s := seedTenant(t)
+	seedPreview(t, s, "legacy", 40)
+	ctx := context.Background()
+	var message uuid.UUID
+	if err := testStore.WithTenantTx(ctx, s.tenant, func(ctx context.Context, tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM attachments WHERE tenant_id=$1`, s.tenant); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, `UPDATE messages SET content_context='{"media_status":"reserved"}' WHERE tenant_id=$1 RETURNING id`, s.tenant).Scan(&message)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	keys := privacyTestKeys(t)
+	if _, err := (Service{DB: testStore, Keys: keys}).DeletePrivacy(ctx, s.admin, s.contact); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("sem storage: %v", err)
+	}
+	svc := Service{DB: testStore, Keys: keys, Objects: &memObjects{fail: true}}
+	if _, err := svc.DeletePrivacy(ctx, s.admin, s.contact); !errors.Is(err, ErrCleanupPending) {
+		t.Fatalf("falha física: %v", err)
+	}
+	key := "in/" + s.tenant.String() + "/" + message.String()
+	if err := testStore.WithTenantTx(ctx, s.tenant, func(ctx context.Context, tx pgx.Tx) error {
+		var queued int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM privacy_object_cleanup WHERE tenant_id=$1 AND contact_id=$2 AND attachment_id=$3 AND object_key=$4 AND object_version=''`, s.tenant, s.contact, message, key).Scan(&queued); err != nil {
+			return err
+		}
+		if queued != 1 {
+			t.Fatalf("chave legada pendente=%d", queued)
+		}
+		var tombstones int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM deletion_records WHERE tenant_id=$1 AND subject_id=$2`, s.tenant, message).Scan(&tombstones); err != nil {
+			return err
+		}
+		if tombstones != 0 {
+			t.Fatal("tamanho desconhecido gerou tombstone inventado")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	objects := &memObjects{}
+	svc.Objects = objects
+	result, err := svc.DeletePrivacy(ctx, s.admin, s.contact)
+	if err != nil || !result.AlreadyErased || result.ObjectsRemoved != 1 || len(objects.keys) != 1 || objects.keys[0] != key+"@" {
+		t.Fatalf("retry legado: %+v keys=%v err=%v", result, objects.keys, err)
+	}
+}
+
+func TestPrivacyDeleteKeepsOnlyFailedObjectsPending(t *testing.T) {
+	s := seedTenant(t)
+	seedPreview(t, s, "first", 40)
+	seedPreview(t, s, "second", 40)
+	ctx := context.Background()
+	objects := &failSecondObject{}
+	svc := Service{DB: testStore, Objects: objects, Keys: privacyTestKeys(t)}
+	if _, err := svc.DeletePrivacy(ctx, s.admin, s.contact); err == nil {
+		t.Fatal("falha parcial não foi informada")
+	}
+	var pending, ledger, attachments int
+	if err := testStore.WithTenantTx(ctx, s.tenant, func(ctx context.Context, tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM privacy_object_cleanup WHERE tenant_id=$1`, s.tenant).Scan(&pending); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM deletion_records WHERE tenant_id=$1 AND subject='attachment'`, s.tenant).Scan(&ledger); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, `SELECT count(*) FROM attachments WHERE tenant_id=$1`, s.tenant).Scan(&attachments)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if pending != 1 || ledger != 2 || attachments != 0 {
+		t.Fatalf("pendentes=%d ledger=%d anexos=%d", pending, ledger, attachments)
+	}
+	result, err := svc.DeletePrivacy(ctx, s.admin, s.contact)
+	if err != nil || !result.AlreadyErased || result.ObjectsRemoved != 1 || objects.calls != 3 {
+		t.Fatalf("retry: %+v err=%v chamadas=%d", result, err, objects.calls)
+	}
+}
+
+type failSecondObject struct{ calls int }
+
+func (m *failSecondObject) Delete(_ context.Context, _, _ string) error {
+	m.calls++
+	if m.calls == 2 {
+		return errors.New("falha sintética")
+	}
+	return nil
 }
 
 type memObjects struct {

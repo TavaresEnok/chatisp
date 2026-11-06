@@ -8,7 +8,8 @@ if [ -n "${CHATISP_DATABASE_URL:-}" ] || [ -n "${CHATISP_TEST_DATABASE_URL:-}" ]
 	exit 2
 fi
 if [ ! -d backend/tools/pg/node_modules/@embedded-postgres/linux-x64 ]; then
-	npm ci --prefix backend/tools/pg --no-audit --no-fund
+	echo "ensaio recusado: instale previamente as dependências de backend/tools/pg (npm ci --prefix backend/tools/pg)" >&2
+	exit 2
 fi
-go -C backend test -count=1 -timeout 360s -run 'TestSyntheticLocalLoad$' ./cmd/chatisp/
+go -C backend test -v -count=1 -timeout 360s -run 'TestSyntheticLocalLoad$' ./cmd/chatisp/
 echo "Resultado sintético. Não é capacidade de piloto. A D2-07 continua aberta. k6 não rodou."

@@ -32,6 +32,8 @@ stamp() {
 record_success() { # tipo
 	local kind=$1 ts
 	ts=$(now)
+	# Do not advertise success locally until the independent audit write succeeds.
+	printf '%s %s %s\n' "$installation" "$kind" "$ts" | in_mirror --entrypoint sh chatisp-migrate -c "set -eu; [ ! -L $mirror/status ] && [ ! -L $mirror/status/successes.log ]; mkdir -p $mirror/status; cat >> $mirror/status/successes.log"
 	if [ -n "${BACKUP_STATUS_FILE:-}" ]; then
 		local dir tmp
 		dir=$(dirname "$BACKUP_STATUS_FILE")
@@ -54,32 +56,38 @@ record_success() { # tipo
 		flock -u 9
 		exec 9>&-
 	fi
-	# Cópia do sinal junto ao destino, para auditoria independente do servidor.
-	printf '%s %s %s\n' "$installation" "$kind" "$ts" | in_mirror --entrypoint sh chatisp-migrate -c "set -eu; [ ! -L $mirror/status ] && [ ! -L $mirror/status/successes.log ]; mkdir -p $mirror/status; cat >> $mirror/status/successes.log"
 }
 
 export_ledger() {
 	local ts
 	ts=$(stamp)
-	# SQL must finish successfully before a complete artifact can be published.
+	# Read deletions first: their object maps and guards commit with them and must
+	# therefore be visible in the subsequent snapshots, even under concurrent writes.
+	sql -c "\\copy (select tenant_id, subject, subject_id from deletion_records union select tenant_id, case when ingress_guarded then 'contact_privacy_guarded' else 'contact_privacy' end, target_id from retention_deletion_records where class = 'content' and target_type = 'contact' and target_id is not null order by tenant_id, subject, subject_id) to stdout" >"$work_tmp/deletions.rows"
 	sql -c "\\copy (select id, tenant_id, object_key, coalesce(object_version, ''), expected_bytes from attachments where object_key <> '' union select subject_id, tenant_id, object_key, coalesce(object_version, ''), object_bytes from deletion_records d where subject = 'attachment' and object_key is not null and not exists (select 1 from attachments a where a.tenant_id = d.tenant_id and a.id = d.subject_id) order by id) to stdout" >"$work_tmp/attachments.rows"
 	{ echo '# chatisp-attachments-ledger-1'; cat "$work_tmp/attachments.rows"; echo '# end-chatisp-attachments-ledger-1'; } >"$work_tmp/attachments.tsv"
 	publish_artifact "$work_tmp/attachments.tsv" "ledgers/attachments-$ts.tsv"
-	sql -c "\\copy (select tenant_id, subject, subject_id from deletion_records union select tenant_id, 'contact_privacy', target_id from retention_deletion_records where class = 'content' and target_type = 'contact' and target_id is not null order by tenant_id, subject, subject_id) to stdout" >"$work_tmp/deletions.rows"
-	{ echo '# chatisp-deletions-ledger-1'; cat "$work_tmp/deletions.rows"; echo '# end-chatisp-deletions-ledger-1'; } >"$work_tmp/deletions.tsv"
+	sql -c "\\copy (select tenant_id, connector_id, key_version, encode(identity_mac, 'hex'), to_char(cutoff at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') from privacy_ingress_guards order by tenant_id, connector_id, key_version, identity_mac) to stdout" >"$work_tmp/guards.rows"
+	{ echo '# chatisp-guards-ledger-1'; cat "$work_tmp/guards.rows"; echo '# end-chatisp-guards-ledger-1'; } >"$work_tmp/guards.tsv"
+	publish_artifact "$work_tmp/guards.tsv" "ledgers/guards-$ts.tsv"
+	{ echo '# chatisp-deletions-ledger-2'; cat "$work_tmp/deletions.rows"; echo '# end-chatisp-deletions-ledger-2'; } >"$work_tmp/deletions.tsv"
 	publish_artifact "$work_tmp/deletions.tsv" "ledgers/deletions-$ts.tsv"
 	echo "ledger: mapa e exclusões completos, com SHA-256 ($ts)"
 }
 
 backup_keys() {
 	local pass=${BACKUP_KEYS_PASSPHRASE_FILE:-} ts
-	[ -n "$pass" ] && [ -r "$pass" ] || { echo "defina BACKUP_KEYS_PASSPHRASE_FILE (arquivo legível com a frase das chaves)" >&2; return 1; }
+	validate_keys_passphrase
 	ts=$(stamp)
 	"${compose[@]}" run --rm -T --no-deps --entrypoint sh chatisp-migrate -c 'test -n "$CHATISP_DATA_KEYS" && test -n "$CHATISP_DATA_KEY_VERSION" && printf "CHATISP_DATA_KEYS=%s\nCHATISP_DATA_KEY_VERSION=%s\n" "$CHATISP_DATA_KEYS" "$CHATISP_DATA_KEY_VERSION"' \
 		| openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -pass "file:$pass" >"$work_tmp/keys.enc"
 	publish_artifact "$work_tmp/keys.enc" "keys/data-keys-$ts.enc"
 	echo "chaves: cópia cifrada e SHA-256 gravados ($ts)"
 }
+
+case "${1:-}" in
+backup | full | diff | incr) validate_keys_passphrase ;;
+esac
 
 case "${1:-}" in
 backup | full | diff | incr | ledger | init) acquire_operation_lock ;;

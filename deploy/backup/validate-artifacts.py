@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fail-closed validation of backup artifacts; no shell evaluation of recovered data."""
 import base64
+import datetime
 import hashlib
 import pathlib
 import re
@@ -32,7 +33,7 @@ def extract_ledgers(archive, destination):
             if member.isdir() and parts == ("ledgers",):
                 continue
             if (not member.isfile() or len(parts) != 2 or parts[0] != "ledgers"
-                    or not re.fullmatch(r"(?:attachments|deletions)-[A-Za-z0-9.\-]+\.tsv(?:\.sha256)?", parts[1])
+                    or not re.fullmatch(r"(?:attachments|deletions|guards)-[A-Za-z0-9.\-]+\.tsv(?:\.sha256)?", parts[1])
                     or member.size > 512 * 1024 * 1024):
                 raise ValueError("arquivo de livros contém caminho, tipo ou arquivo parcial inesperado")
             target = destination / "ledgers" / parts[1]
@@ -43,30 +44,49 @@ def extract_ledgers(archive, destination):
 
 def verify_ledgers(directory):
     names = set()
-    for kind in ("attachments", "deletions"):
+    guarded = set()
+    for kind in ("attachments", "deletions", "guards"):
         files = sorted(directory.glob(f"{kind}-*.tsv"))
-        if not files:
+        if not files and kind != "guards":
             raise ValueError(f"livro obrigatório ausente: {kind}")
         for path in files:
             content = checked_file(path)
             names.add(path.name)
             names.add(path.name + ".sha256")
             lines = content.decode("utf-8").splitlines()
+            version = '2' if kind == 'deletions' and lines and lines[0] == '# chatisp-deletions-ledger-2' else '1'
             if (not content.endswith(b"\n") or len(lines) < 2
-                    or lines[0] != f"# chatisp-{kind}-ledger-1"
-                    or lines[-1] != f"# end-chatisp-{kind}-ledger-1"):
+                    or lines[0] != f"# chatisp-{kind}-ledger-{version}"
+                    or lines[-1] != f"# end-chatisp-{kind}-ledger-{version}"):
                 raise ValueError(f"livro truncado: {path.name}")
+            if kind == 'deletions' and version == '2':
+                guarded.add(path.name[len('deletions-'):])
+                guarded.add(path.name[len('deletions-'):] + '.sha256')
             for row in lines[1:-1]:
                 fields = row.split("\t")
                 if kind == "deletions":
+                    if len(fields) == 3 and fields[1] == 'contact_privacy':
+                        raise ValueError('exclusão histórica sem prova de proteção de ingresso; concilie historicamente antes da restauração')
                     valid = (len(fields) == 3 and re.fullmatch(UUID, fields[0])
-                             and fields[1] in ("attachment", "credential_secret", "contact_privacy")
+                             and (fields[1] in ("attachment", "credential_secret")
+                                  or (version == '2' and fields[1] == 'contact_privacy_guarded'))
                              and re.fullmatch(UUID, fields[2]))
-                else:
+                elif kind == "attachments":
                     valid = (len(fields) == 5 and re.fullmatch(UUID, fields[0])
                              and re.fullmatch(UUID, fields[1])
                              and re.fullmatch(f"{UUID}/{UUID}", fields[2])
                              and re.fullmatch(r"[0-9]+", fields[4]))
+                else:
+                    valid = (len(fields) == 5 and re.fullmatch(UUID, fields[0])
+                             and re.fullmatch(UUID, fields[1])
+                             and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,31}", fields[2])
+                             and re.fullmatch(r"[0-9a-f]{64}", fields[3])
+                             and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z", fields[4]))
+                    if valid:
+                        try:
+                            datetime.datetime.strptime(fields[4], '%Y-%m-%dT%H:%M:%S.%fZ')
+                        except ValueError:
+                            valid = False
                 if not valid:
                     raise ValueError(f"linha malformada em {path.name}")
     if {p.name for p in directory.iterdir()} != names:
@@ -75,6 +95,9 @@ def verify_ledgers(directory):
     deletions = {n[len("deletions-"):] for n in names if n.startswith("deletions-")}
     if attachments != deletions:
         raise ValueError("exportação de livros incompleta: mapa e exclusões não formam pares")
+    guards = {n[len("guards-"):] for n in names if n.startswith("guards-")}
+    if guards != guarded:
+        raise ValueError("exportação de livros incompleta: guards não formam pares")
 
 
 def verify_keys(path):

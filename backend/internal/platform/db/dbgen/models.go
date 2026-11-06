@@ -270,6 +270,7 @@ type Contact struct {
 	AvatarReference       *string
 	ExternalRef           *string
 	PrivacyErasedAt       pgtype.Timestamptz
+	PrivacyLegacyCutoff   pgtype.Timestamptz
 }
 
 type ContactChannelIdentity struct {
@@ -920,6 +921,22 @@ type PresenceSetting struct {
 	Version                 int64
 }
 
+type PrivacyIngressGuard struct {
+	TenantID    uuid.UUID
+	ConnectorID uuid.UUID
+	KeyVersion  string
+	IdentityMac []byte
+	Cutoff      pgtype.Timestamptz
+}
+
+type PrivacyObjectCleanup struct {
+	TenantID      uuid.UUID
+	ContactID     uuid.UUID
+	AttachmentID  uuid.UUID
+	ObjectKey     string
+	ObjectVersion string
+}
+
 type ProtocolCounter struct {
 	TenantID  uuid.UUID
 	Period    string
@@ -963,13 +980,14 @@ type RealtimeTenantCursor struct {
 }
 
 type RetentionDeletionRecord struct {
-	TenantID   uuid.UUID
-	ID         uuid.UUID
-	Class      string
-	TargetType string
-	TargetID   *uuid.UUID
-	Note       string
-	RecordedAt pgtype.Timestamptz
+	TenantID       uuid.UUID
+	ID             uuid.UUID
+	Class          string
+	TargetType     string
+	TargetID       *uuid.UUID
+	Note           string
+	RecordedAt     pgtype.Timestamptz
+	IngressGuarded bool
 }
 
 type RetentionTask struct {
@@ -1190,17 +1208,18 @@ type WebhookEventSource struct {
 }
 
 type WebhookItem struct {
-	TenantID      uuid.UUID
-	ID            uuid.UUID
-	DeliveryID    uuid.UUID
-	InboxID       uuid.UUID
-	ConnectorID   uuid.UUID
-	PhoneNumberID string
-	ExternalKey   string
-	Kind          string
-	State         string
-	Payload       json.RawMessage
-	CreatedAt     pgtype.Timestamptz
+	TenantID          uuid.UUID
+	ID                uuid.UUID
+	DeliveryID        uuid.UUID
+	InboxID           uuid.UUID
+	ConnectorID       uuid.UUID
+	PhoneNumberID     string
+	ExternalKey       string
+	Kind              string
+	State             string
+	Payload           json.RawMessage
+	CreatedAt         pgtype.Timestamptz
+	IngressReceivedAt pgtype.Timestamptz
 }
 
 type WebhookSubscription struct {

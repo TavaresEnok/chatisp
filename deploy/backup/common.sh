@@ -16,6 +16,14 @@ backup_setup() {
 in_mirror() { "${compose[@]}" run --rm -T --no-deps -u 0 "$@"; }
 sql() { "${compose[@]}" exec -T postgres psql -U chatisp -d chatisp -v ON_ERROR_STOP=1 -At "$@"; }
 
+validate_keys_passphrase() {
+	local pass=${BACKUP_KEYS_PASSPHRASE_FILE:-} first_line
+	[ -n "$pass" ] && [ -f "$pass" ] && [ -r "$pass" ] || { echo "defina BACKUP_KEYS_PASSPHRASE_FILE (arquivo legível com a frase das chaves)" >&2; return 1; }
+	# OpenSSL reads only the first line of a passphrase file.
+	IFS= read -r first_line <"$pass" || true
+	[ -n "$first_line" ] || { echo "frase de recuperação vazia recusada" >&2; return 1; }
+}
+
 acquire_operation_lock() {
 	# Shared destination lock, including between hosts. A SIGKILL may leave it behind; refuse
 	# subsequent operations until an operator establishes that no operation is still running.

@@ -261,7 +261,7 @@ func New(deps Dependencies) *API {
 	if deps.Attachments != nil && deps.Attachments.Storage != nil {
 		privacyObjects = deps.Attachments.Storage
 	}
-	retentionHTTP.Register(router, retentionHTTP.Dependencies{Auth: retentionAuth, Store: deps.Store, Objects: privacyObjects, TrustedOrigins: deps.TrustedOrigins})
+	retentionHTTP.Register(router, retentionHTTP.Dependencies{Auth: retentionAuth, Store: deps.Store, Keys: deps.KeyRing, Objects: privacyObjects, TrustedOrigins: deps.TrustedOrigins})
 	var brandingAuth branding.Authenticator
 	if deps.Auth != nil {
 		brandingAuth = deps.Auth

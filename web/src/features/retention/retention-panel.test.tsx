@@ -104,3 +104,82 @@ it("exporta o dossiê do titular e só exclui depois da confirmação", async ()
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 }
+
+it("não permite sobrescrever a política quando a leitura falha", async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo) => {
+    const url = typeof input === "string" ? input : input.url;
+    return url.endsWith("/api/panel/retention") ? json({}, 503) : json(usage);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  render(<QueryClientProvider client={new QueryClient()}><RetentionPanel /></QueryClientProvider>);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível ler a política");
+  expect(screen.getByRole("button", { name: "Guardar política" })).toBeDisabled();
+  expect(screen.getByLabelText("Nome do provedor")).toBeDisabled();
+  expect(fetchMock.mock.calls).toHaveLength(2);
+});
+
+it("descarta resultado tardio e confirmação ao trocar de contato", async () => {
+  let resolveExport!: (response: Response) => void;
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (url.endsWith("/api/panel/retention")) return Promise.resolve(json(policy));
+    if (url.endsWith("/api/panel/plan-limits")) return Promise.resolve(json(usage));
+    return new Promise<Response>((resolve) => { resolveExport = resolve; });
+  }));
+  const user = userEvent.setup();
+  render(<QueryClientProvider client={new QueryClient()}><RetentionPanel /></QueryClientProvider>);
+  await screen.findByDisplayValue("Nexo Fibra");
+  const contact = screen.getByLabelText("Contato para exportar");
+  await user.type(contact, "c1");
+  await user.type(screen.getByLabelText("Confirmação da exclusão"), "excluir titular");
+  await user.click(screen.getByRole("button", { name: "Exportar dados do titular" }));
+  await user.clear(contact);
+  await user.type(contact, "c2");
+  expect(screen.getByRole("button", { name: "Excluir dados do titular" })).toBeDisabled();
+  expect(screen.getByLabelText("Confirmação da exclusão")).toHaveValue("");
+  resolveExport(json({ label: "Dossiê antigo", profile: { name: "Titular antigo" }, messages: [] }));
+  await vi.waitFor(() => expect(screen.queryByText("Dossiê antigo")).not.toBeInTheDocument());
+});
+
+it("descarta exportação iniciada antes da exclusão", async () => {
+  let resolveExport!: (response: Response) => void;
+  let resolveErase!: (response: Response) => void;
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (url.endsWith("/api/panel/retention")) return Promise.resolve(json(policy));
+    if (url.endsWith("/api/panel/plan-limits")) return Promise.resolve(json(usage));
+    if (url.includes("privacy-export")) return new Promise<Response>((resolve) => { resolveExport = resolve; });
+    return new Promise<Response>((resolve) => { resolveErase = resolve; });
+  }));
+  const user = userEvent.setup();
+  render(<QueryClientProvider client={new QueryClient()}><RetentionPanel /></QueryClientProvider>);
+  await screen.findByDisplayValue("Nexo Fibra");
+  await user.type(screen.getByLabelText("Contato para exportar"), "c1");
+  await user.click(screen.getByRole("button", { name: "Exportar dados do titular" }));
+  await user.type(screen.getByLabelText("Confirmação da exclusão"), "excluir titular");
+  await user.click(screen.getByRole("button", { name: "Excluir dados do titular" }));
+  expect(screen.getByRole("button", { name: "Exportar dados do titular" })).toBeDisabled();
+  resolveErase(json({ already_erased: false, protocols: [], note: "Excluído" }));
+  expect(await screen.findByText(/Excluído Protocolos preservados/)).toBeInTheDocument();
+  resolveExport(json({ label: "Dossiê anterior", profile: { name: "Titular antigo" }, messages: [] }));
+  await vi.waitFor(() => expect(screen.queryByText("Dossiê anterior")).not.toBeInTheDocument());
+});
+
+it.each([
+  { status: 503, result: {}, expected: /A anonimização pode ter sido aplicada; tente novamente/ },
+  { status: 200, result: { already_erased: true, objects_removed: 2, protocols: [], note: "Exclusão retomada." }, expected: /remoção dos anexos pendentes foi retomada e concluída/ },
+])("informa o estado da exclusão após resposta $status", async ({ status, result, expected }) => {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (url.endsWith("/api/panel/retention")) return json(policy);
+    if (url.endsWith("/api/panel/plan-limits")) return json(usage);
+    return json(result, status);
+  }));
+  const user = userEvent.setup();
+  render(<QueryClientProvider client={new QueryClient()}><RetentionPanel /></QueryClientProvider>);
+  await screen.findByDisplayValue("Nexo Fibra");
+  await user.type(screen.getByLabelText("Contato para exportar"), "c1");
+  await user.type(screen.getByLabelText("Confirmação da exclusão"), "excluir titular");
+  await user.click(screen.getByRole("button", { name: "Excluir dados do titular" }));
+  expect(await screen.findByRole("status")).toHaveTextContent(expected);
+});

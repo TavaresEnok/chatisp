@@ -5,6 +5,9 @@ import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import path from "node:path";
 import { chromium } from "@playwright/test";
+import { createServer } from "node:net";
+import { connect } from "node:tls";
+import { createHash, X509Certificate } from "node:crypto";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 // Same thread budget as the reviewed M3B runner: Vite, PostgreSQL, the fixture
@@ -93,6 +96,17 @@ try {
   const browser = await chromium.launch({ executablePath });
   console.log(`UX browser real: ${browser.version()}`);
   await browser.close();
+  // The fixture binds only loopback; choose a free API port independently of Compose.
+  const apiPort = await new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const port = server.address().port;
+      server.close((error) => error ? reject(error) : resolve(port));
+    });
+  });
+  env.CHATISP_E2E_API_PORT = String(apiPort);
+  process.env.CHATISP_E2E_API_PORT = String(apiPort);
   fixtureDir = await mkdtemp(path.join(env.GOTMPDIR, "ux-"));
   const binary = path.join(fixtureDir, "demo");
   const build = start("go", ["-C", "backend", "build", "-mod=vendor", "-o", binary, "./cmd/m2demo"]);
@@ -152,7 +166,20 @@ try {
   const config = (await import("../playwright.config.ts")).default;
   expect.configure({ timeout: config.expect?.timeout ?? 15_000 });
   const launch = config.use?.launchOptions ?? {};
-  const scenarioBrowser = await runner.launch({ ...launch, executablePath });
+  // Chromium dynamic imports may bypass the context's ignoreHTTPSErrors setting.
+  // Pin only this disposable proxy certificate's public key for this browser.
+  const spki = await new Promise((resolve, reject) => {
+    const socket = connect({ host: "127.0.0.1", port: 5174, servername: "localhost", rejectUnauthorized: false }, () => {
+      try {
+        const cert = new X509Certificate(socket.getPeerCertificate().raw);
+        if (!cert.checkHost("localhost") || !cert.verify(cert.publicKey)) throw new Error("certificado local inesperado");
+        resolve(createHash("sha256").update(cert.publicKey.export({ type: "spki", format: "der" })).digest("base64"));
+      } catch (error) { reject(error); }
+      finally { socket.destroy(); }
+    });
+    socket.once("error", reject);
+  });
+  const scenarioBrowser = await runner.launch({ ...launch, executablePath, args: [...(launch.args ?? []), `--ignore-certificate-errors-spki-list=${spki}`] });
   try {
     const { runUx } = await import("../e2e/ux.spec.ts");
     await runUx(scenarioBrowser, {

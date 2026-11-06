@@ -7,7 +7,8 @@
 # link, recuperação de senha, falha de entrega do SMTP, canal e conversa pelo worker, tempo real
 # por WebSocket, anexo no Garage por TLS com URL assinada e isolamento entre provedores, /metrics
 # fora do acesso público); despacho Meta desabilitado de forma explícita; storage parado e de
-# volta; reinício de todos os serviços com persistência; encerramento sem sobras do projeto.
+# volta; reinício de todos os serviços com persistência; com backup habilitado,
+# exclusão pendente durante queda do storage, retomada e recuperação do livro.
 #
 # Doubles identificados: SMTP descartável (backend/cmd/smtpsink) e o remetente do webhook da Meta
 # (a própria jornada). Os demais componentes são os serviços reais do Compose. Nenhuma chamada
@@ -21,6 +22,14 @@ backup=${CHATISP_VALIDATE_BACKUP:-0}
 root=$(cd "$(dirname "$0")/.." && pwd)
 project="chatisp-validate-$$"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/chatisp-compose-XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+# CA e certificado descartáveis apenas para o SMTP do laboratório. O nome SAN
+# corresponde ao serviço na rede Compose; a chave nunca sai do diretório temporário.
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=ChatISP validation CA' -keyout "$tmp/smtp-ca.key" -out "$tmp/smtp-ca.crt" >/dev/null 2>&1
+openssl req -newkey rsa:2048 -nodes -subj '/CN=smtp-sink' -keyout "$tmp/smtp.key" -out "$tmp/smtp.csr" >/dev/null 2>&1
+printf '%s\n' 'subjectAltName=DNS:smtp-sink' 'extendedKeyUsage=serverAuth' >"$tmp/smtp.ext"
+openssl x509 -req -in "$tmp/smtp.csr" -CA "$tmp/smtp-ca.crt" -CAkey "$tmp/smtp-ca.key" -CAcreateserial -days 1 -extfile "$tmp/smtp.ext" -out "$tmp/smtp.crt" >/dev/null 2>&1
+chmod 644 "$tmp/smtp-ca.crt" "$tmp/smtp.crt" "$tmp/smtp.key"
 free_port() { python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])'; }
 port=$(free_port)
 sink_port=$(free_port)
@@ -109,6 +118,10 @@ services:${postgres_extra}
   chatisp-api:
     image: ${runtime_image}${build_extra:+${build_extra}
       target: runtime}
+    environment:
+      SSL_CERT_FILE: /smtp-ca/ca.crt
+    volumes:
+      - ${tmp}/smtp-ca.crt:/smtp-ca/ca.crt:ro
   chatisp-worker:
     image: ${runtime_image}${build_extra:+${build_extra}
       target: runtime}
@@ -126,6 +139,10 @@ services:${postgres_extra}
       dockerfile: deploy/validacao/Dockerfile.smtpsink${sink_network}
     ports:
       - "127.0.0.1:${sink_port}:8025"
+    command: ["-cert", "/tls/smtp.crt", "-key", "/tls/smtp.key"]
+    volumes:
+      - ${tmp}/smtp.crt:/tls/smtp.crt:ro
+      - ${tmp}/smtp.key:/tls/smtp.key:ro
     restart: "no"
 YAML
 # Sub-rede própria: hosts cujo default-address-pools já está esgotado não criam a rede padrão.
@@ -366,10 +383,25 @@ if [ "$backup" = 1 ]; then
 	test -n "$excluded_key" && test -n "$kept_key"
 	echo "backup completo: banco (pgBackRest com WAL), anexos (espelho), livro de exclusões, chaves cifradas e sinal de sucesso"
 
-	# Exclusão de privacidade DEPOIS do backup; o livro externo é exportado em seguida.
-	journey exclude
+	# A anonimização e os tombstones são confirmados mesmo sem remoção física;
+	# exporte o livro ainda pendente, antes de disponibilizar novamente o Garage.
+	excluded_contact=$(state_get "d['operation']['contact']")
+	"${compose[@]}" stop garage >/dev/null
+	journey exclude-pending
+	[ "$(sqlq "select count(*) from contacts where id='${excluded_contact}' and name='titular excluído' and privacy_erased_at is not null and phone is null")" = 1 ]
+	[ "$(sqlq "select count(*) from messages m join conversations c on c.tenant_id=m.tenant_id and c.id=m.conversation_id where c.contact_id='${excluded_contact}' and m.body<>''")" = 0 ]
+	[ "$(sqlq "select count(*) from privacy_object_cleanup where contact_id='${excluded_contact}' and attachment_id='${excluded_id}'")" = 1 ]
+	[ "$(sqlq "select count(*) from deletion_records where subject='attachment' and subject_id='${excluded_id}'")" = 1 ]
+	[ "$(sqlq "select count(*) from retention_deletion_records where class='content' and target_type='contact' and target_id='${excluded_contact}'")" -ge 1 ]
+	guard_query="select tenant_id, connector_id, key_version, encode(identity_mac, 'hex'), to_char(cutoff at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') from privacy_ingress_guards order by tenant_id, connector_id, key_version, identity_mac"
+	sqlq "$guard_query" >"$tmp/guards-before.txt"
+	test -s "$tmp/guards-before.txt"
 	"$bk" ledger
+	"${compose[@]}" up -d --wait --wait-timeout 120 garage >/dev/null
+	journey exclude
+	[ "$(sqlq "select count(*) from privacy_object_cleanup where contact_id='${excluded_contact}'")" = 0 ]
 	[ "$(sqlq "select count(*) from deletion_records where subject = 'attachment' and subject_id = '${excluded_id}'")" = 1 ]
+	echo "exclusão pendente: anonimização e livro preservados durante queda; limpeza concluída após retorno"
 	sleep 2
 	if BACKUP_MAX_AGE_SECONDS=1 "$bk" check 2>/dev/null; then
 		echo "o monitor de atraso não detectou um backup velho" >&2
@@ -403,9 +435,11 @@ CHATISP_DATA_KEY_VERSION=%s
 	[ "$(sqlq "select count(*) from attachments where id = '${excluded_id}'")" = 0 ]
 	[ "$(sqlq "select count(*) from attachments where id = '${kept_id}'")" = 1 ]
 	[ "$(sqlq "select count(*) from deletion_records where subject = 'attachment' and subject_id = '${excluded_id}'")" = 1 ]
-	excluded_contact=$(state_get "d['operation']['contact']")
 	[ "$(sqlq "select count(*) from contacts where id='${excluded_contact}' and name='titular excluído' and privacy_erased_at is not null and phone is null")" = 1 ]
 	[ "$(sqlq "select count(*) from messages m join conversations c on c.tenant_id=m.tenant_id and c.id=m.conversation_id where c.contact_id='${excluded_contact}' and m.body<>''")" = 0 ]
+	sqlq "$guard_query" >"$tmp/guards-after.txt"
+	cmp "$tmp/guards-before.txt" "$tmp/guards-after.txt"
+	echo "proteções de ingresso restauradas com fingerprints e cutoffs originais"
 	echo "privacidade após restore: titular permanece anonimizado e corpos não ressuscitam"
 	"${compose[@]}" run --rm -T --no-deps --entrypoint sh chatisp-migrate -c 'chatisp attachments-backup -dest /tmp/verify >/dev/null && cut -f1 /tmp/verify/objects.manifest' >"$tmp/restored-keys.txt"
 	grep -q "^${kept_key}\$" "$tmp/restored-keys.txt"

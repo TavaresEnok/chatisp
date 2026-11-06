@@ -45,7 +45,7 @@ func (a Automation) ApplyTriage(ctx context.Context, tenant, item uuid.UUID) err
 		var text string
 		var source uuid.UUID
 		var at time.Time
-		err := tx.QueryRow(ctx, `SELECT c.id,c.inbox_id,m.id,m.body,m.trusted_at FROM webhook_items w JOIN messages m ON m.tenant_id=w.tenant_id AND m.connector_id=w.connector_id AND m.external_message_id=w.payload->>'external_id' JOIN conversations c ON c.tenant_id=m.tenant_id AND c.id=m.conversation_id WHERE w.tenant_id=$1 AND w.id=$2 AND w.kind='message' AND w.state='processed' AND NOT m.historical AND m.trusted_at>=c.last_customer_message_at`, tenant, item).Scan(&conv, &inbox, &source, &text, &at)
+		err := tx.QueryRow(ctx, `SELECT c.id,c.inbox_id,m.id,m.body,m.trusted_at FROM webhook_items w JOIN messages m ON m.tenant_id=w.tenant_id AND m.connector_id=w.connector_id AND m.external_message_id=w.payload->>'external_id' JOIN conversations c ON c.tenant_id=m.tenant_id AND c.id=m.conversation_id JOIN contacts subject ON subject.tenant_id=c.tenant_id AND subject.id=c.contact_id AND subject.privacy_erased_at IS NULL WHERE w.tenant_id=$1 AND w.id=$2 AND w.kind='message' AND w.state='processed' AND NOT m.historical AND m.trusted_at>=c.last_customer_message_at`, tenant, item).Scan(&conv, &inbox, &source, &text, &at)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}

@@ -38,6 +38,17 @@ func TestDisconnectIsolatesOneConnection(t *testing.T) {
 	}
 }
 
+func TestZeroValueFakeIsolatesConnections(t *testing.T) {
+	var fake Fake
+	fake.Disconnect("ausente")
+	fake.MarkUp("caixa-1")
+	fake.MarkUp("caixa-2")
+	fake.Disconnect("caixa-1")
+	if fake.Up("caixa-1") || !fake.Up("caixa-2") {
+		t.Fatal("queda não isolada no fake de valor zero")
+	}
+}
+
 func TestEchoAndHistoryDoNotAutomate(t *testing.T) {
 	const body = "texto-que-nao-volta"
 	cases := []Event{

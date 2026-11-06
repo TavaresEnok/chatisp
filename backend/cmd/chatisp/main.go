@@ -445,6 +445,7 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		}
 		handlers, err := pipeline.NewWorkers(pipeline.WorkersConfig{
 			DB:                 store,
+			Keys:               cfg.KeyRing,
 			TriageInboxes:      triageInboxes,
 			IngressPool:        pools.Ingress,
 			JobsClient:         insertJobsClient,

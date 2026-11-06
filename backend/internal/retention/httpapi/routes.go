@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"chatisp/internal/platform/auth"
+	"chatisp/internal/platform/crypto"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/retention"
 )
@@ -29,6 +30,7 @@ type Authenticator interface {
 type Dependencies struct {
 	Auth           Authenticator
 	Store          *db.Store
+	Keys           *crypto.Ring
 	Objects        retention.ObjectDeleter
 	TrustedOrigins []string
 }
@@ -40,7 +42,7 @@ type handler struct {
 
 // Register mounts the panel routes. It does not change the OpenAPI document.
 func Register(r chi.Router, d Dependencies) {
-	h := handler{d: d, s: retention.Service{DB: d.Store, Objects: d.Objects}}
+	h := handler{d: d, s: retention.Service{DB: d.Store, Objects: d.Objects, Keys: d.Keys}}
 	r.Get("/api/panel/retention", h.getPolicy)
 	r.Put("/api/panel/retention", h.putPolicy)
 	r.Post("/api/panel/retention/purge", h.purge)
@@ -282,6 +284,8 @@ func writeErr(w http.ResponseWriter, err error) {
 		writeProblem(w, http.StatusUnprocessableEntity, "dados inválidos")
 	case errors.Is(err, retention.ErrPurgeDisabled):
 		writeProblem(w, http.StatusConflict, "expurgo automático desligado")
+	case errors.Is(err, retention.ErrCleanupPending):
+		writeProblem(w, http.StatusServiceUnavailable, "dados anonimizados; limpeza de objetos pendente. Repita a exclusão para concluí-la")
 	default:
 		writeProblem(w, http.StatusServiceUnavailable, "serviço indisponível")
 	}

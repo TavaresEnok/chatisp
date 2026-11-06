@@ -75,11 +75,14 @@ func TestReapplyPrivacyRedactsStructuredContentAndPreservesOtherTenant(t *testin
 		}
 		return f
 	}
-	a, b := seed(), seed()
+	a, b, legacy := seed(), seed(), seed()
 	if _, err := conn.Exec(ctx, `CREATE TEMP TABLE ledger_external(tenant_id uuid,subject text,subject_id uuid)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(ctx, `INSERT INTO ledger_external VALUES($1,'contact_privacy',$2),($1,'contact_privacy',$2),($1,'contact_privacy',$3)`, a.tenant, a.contact, b.contact); err != nil {
+	if _, err := conn.Exec(ctx, `CREATE TEMP TABLE guards_external(tenant_id uuid,connector_id uuid,key_version text,identity_mac bytea,cutoff timestamptz)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(ctx, `INSERT INTO ledger_external VALUES($1,'contact_privacy_guarded',$2),($1,'contact_privacy_guarded',$2),($1,'contact_privacy_guarded',$3),($4,'contact_privacy',$5)`, a.tenant, a.contact, b.contact, legacy.tenant, legacy.contact); err != nil {
 		t.Fatal(err)
 	}
 	script, err := os.ReadFile(filepath.Join(repoRoot(t), "deploy", "backup", "reapply-deletions.sql"))
@@ -124,6 +127,55 @@ func TestReapplyPrivacyRedactsStructuredContentAndPreservesOtherTenant(t *testin
 		if reserved != 0 || cycles != 1 || objects != 1 || !strings.HasPrefix(identity, "excluido-") {
 			t.Fatalf("restore not idempotent reserved=%d cycles=%d objects=%d identity=%s", reserved, cycles, objects, identity)
 		}
+		var proved, legacyProved int
+		if err := conn.QueryRow(ctx, `SELECT count(*) FROM retention_deletion_records WHERE tenant_id=$1 AND target_id=$2 AND ingress_guarded`, a.tenant, a.contact).Scan(&proved); err != nil {
+			t.Fatal(err)
+		}
+		if err := conn.QueryRow(ctx, `SELECT count(*) FROM retention_deletion_records WHERE tenant_id=$1 AND target_id=$2 AND ingress_guarded`, legacy.tenant, legacy.contact).Scan(&legacyProved); err != nil {
+			t.Fatal(err)
+		}
+		if proved != 1 || legacyProved != 0 {
+			t.Fatalf("proveniência: novo=%d legado=%d", proved, legacyProved)
+		}
+		var legacyErased *time.Time
+		if err := conn.QueryRow(ctx, `SELECT privacy_erased_at FROM contacts WHERE tenant_id=$1 AND id=$2`, legacy.tenant, legacy.contact).Scan(&legacyErased); err != nil {
+			t.Fatal(err)
+		}
+		if legacyErased == nil {
+			t.Fatal("exclusão legada não reaplicada")
+		}
+	}
+	gateQuery := `SELECT count(*) FROM contacts c WHERE c.privacy_erased_at IS NOT NULL AND (EXISTS (SELECT 1 FROM retention_deletion_records r WHERE r.tenant_id=c.tenant_id AND r.class='content' AND r.target_type='contact' AND r.target_id=c.id AND NOT r.ingress_guarded) OR NOT EXISTS (SELECT 1 FROM retention_deletion_records r WHERE r.tenant_id=c.tenant_id AND r.class='content' AND r.target_type='contact' AND r.target_id=c.id AND r.ingress_guarded))`
+	var unprotected int
+	if _, err := conn.Exec(ctx, `INSERT INTO retention_deletion_records(tenant_id,id,class,target_type,target_id,note,ingress_guarded) VALUES($1,$2,'content','contact',$3,'registro histórico',false)`, legacy.tenant, uuid.New(), legacy.contact); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(ctx, `INSERT INTO retention_deletion_records(tenant_id,id,class,target_type,target_id,note,ingress_guarded) VALUES($1,$2,'content','contact',$3,'tenant incorreto',true)`, a.tenant, uuid.New(), legacy.contact); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.QueryRow(ctx, gateQuery).Scan(&unprotected); err != nil {
+		t.Fatal(err)
+	}
+	if unprotected != 1 {
+		t.Fatalf("gate aceitou exclusão legada sem prova do tenant correto: %d", unprotected)
+	}
+	if _, err := conn.Exec(ctx, `INSERT INTO retention_deletion_records(tenant_id,id,class,target_type,target_id,note,ingress_guarded) VALUES($1,$2,'content','contact',$3,'prova sintética',true)`, legacy.tenant, uuid.New(), legacy.contact); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.QueryRow(ctx, gateQuery).Scan(&unprotected); err != nil {
+		t.Fatal(err)
+	}
+	if unprotected != 1 {
+		t.Fatalf("gate aceitou registro legado ao lado de prova nova: %d", unprotected)
+	}
+	if _, err := conn.Exec(ctx, `DELETE FROM retention_deletion_records WHERE tenant_id=$1 AND target_id=$2 AND NOT ingress_guarded`, legacy.tenant, legacy.contact); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.QueryRow(ctx, gateQuery).Scan(&unprotected); err != nil {
+		t.Fatal(err)
+	}
+	if unprotected != 0 {
+		t.Fatalf("gate recusou prova do tenant correto: %d", unprotected)
 	}
 	var body string
 	var count int

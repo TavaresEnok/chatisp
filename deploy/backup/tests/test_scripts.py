@@ -21,6 +21,7 @@ import json,os,sys
 with open(os.environ['CALLS'], 'a') as out: out.write(json.dumps(sys.argv[1:])+'\\n')
 source=' '.join(sys.argv[1:])
 if os.environ.get('DENY_LOCK') and 'mkdir /mirror/.operation-lock' in source: sys.exit(1)
+if os.environ.get('DENY_AUDIT') and 'successes.log' in source: sys.exit(1)
 if 'printf' in source and '$CHATISP_DATA_KEYS' in source:
  print('CHATISP_DATA_KEYS='+os.environ['SYNTHETIC_KEY'])
  print('CHATISP_DATA_KEY_VERSION=1')
@@ -61,6 +62,30 @@ if 'cat >' in source: sys.stdin.buffer.read()
         self.assertIn('kind="ledger"', self.status.read_text())
         self.assertFalse(any('pgbackrest' in call for call in self.call_list()))
         self.assertIn('Unit=chatisp-backup@ledger.service', (HERE / 'systemd/chatisp-backup-ledger.timer').read_text())
+
+    def test_ledger_reads_deletions_before_maps_and_guards(self):
+        result = self.run_script('chatisp-backup.sh', 'ledger')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        queries = [' '.join(call) for call in self.call_list() if any('\\copy' in arg for arg in call)]
+        self.assertEqual(len(queries), 3)
+        self.assertIn("select tenant_id, subject, subject_id from deletion_records", queries[0])
+        self.assertIn("select id, tenant_id, object_key", queries[1])
+        self.assertIn("from privacy_ingress_guards", queries[2])
+
+    def test_failed_audit_does_not_report_new_success(self):
+        result = self.run_script('chatisp-backup.sh', 'ledger', DENY_AUDIT='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.status.exists())
+
+    def test_empty_first_passphrase_line_is_rejected(self):
+        self.pass_file.write_text('\nnot-used-by-openssl\n')
+        for script, args, extra in (
+            ('chatisp-backup.sh', ('full',), {}),
+            ('chatisp-restore.sh', (), {'RESTORE_KEYS_OUT': str(self.root / 'recovered')}),
+        ):
+            result = self.run_script(script, *args, **extra)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('frase de recuperação vazia', result.stderr)
 
     def test_check_each_missing_or_late_component_and_installation(self):
         for kind in ('postgres', 'attachments', 'keys', 'ledger'):

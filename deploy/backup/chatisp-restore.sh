@@ -23,7 +23,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 backup_setup
 : "${BACKUP_KEYS_PASSPHRASE_FILE:?defina BACKUP_KEYS_PASSPHRASE_FILE}"
 : "${RESTORE_KEYS_OUT:?defina RESTORE_KEYS_OUT}"
-[ -r "$BACKUP_KEYS_PASSPHRASE_FILE" ] || { echo "arquivo BACKUP_KEYS_PASSPHRASE_FILE ilegível" >&2; exit 1; }
+validate_keys_passphrase
 restore_complete=0
 restore_started=0
 restore_cleanup() {
@@ -166,6 +166,8 @@ echo "2/7 banco: pgbackrest restore ($restore_args)"
 
 echo "3/7 banco: subindo o PostgreSQL restaurado (aplicação permanece fechada)"
 "${compose[@]}" up -d --wait --wait-timeout 300 postgres
+# A base backup may predate the guard table; migrate while API and worker are closed.
+"${compose[@]}" run --rm -T --no-deps chatisp-migrate
 
 echo "4/7 exclusões: validando livros, conferindo vínculo provedor/anexo/objeto e reaplicando"
 in_mirror --entrypoint sh chatisp-migrate -c "
@@ -185,7 +187,7 @@ for del_file in "$work_tmp"/ledgers/deletions-*.tsv; do
 	[ -r "$del_file" ] && [ -s "$del_file" ] || { echo "livro de exclusões ilegível ou vazio: $del_file" >&2; exit 1; }
 	first_line=$(head -n 1 "$del_file")
 	last_line=$(tail -n 1 "$del_file")
-	if [ "$first_line" != "# chatisp-deletions-ledger-1" ] || [ "$last_line" != "# end-chatisp-deletions-ledger-1" ]; then
+	if ! { [ "$first_line" = "# chatisp-deletions-ledger-1" ] && [ "$last_line" = "# end-chatisp-deletions-ledger-1" ]; } && ! { [ "$first_line" = "# chatisp-deletions-ledger-2" ] && [ "$last_line" = "# end-chatisp-deletions-ledger-2" ]; }; then
 		echo "livro de exclusões truncado ou sem delimitadores íntegros: $(basename "$del_file")" >&2
 		exit 1
 	fi
@@ -197,12 +199,21 @@ done
 	while IFS= read -r line; do
 		[ -n "$line" ] || { echo "linha vazia inesperada no livro de exclusões" >&2; exit 1; }
 		IFS=$'\t' read -r tenant subject id extra <<<"$line"
-		if [ -n "${extra:-}" ] || [[ ! "$tenant" =~ $uuid_re ]] || [[ ! "$id" =~ $uuid_re ]] || [[ "$subject" != "attachment" && "$subject" != "credential_secret" && "$subject" != "contact_privacy" ]]; then
+		if [ -n "${extra:-}" ] || [[ ! "$tenant" =~ $uuid_re ]] || [[ ! "$id" =~ $uuid_re ]] || [[ "$subject" != "attachment" && "$subject" != "credential_secret" && "$subject" != "contact_privacy_guarded" ]]; then
 			echo "livro de exclusões corrompido: $line" >&2
 			exit 1
 		fi
 		echo "INSERT INTO ledger_external VALUES ('$tenant', '$subject', '$id');"
 	done <"$work_tmp/deletions-rows.tsv"
+	echo "CREATE TEMP TABLE guards_external (tenant_id uuid, connector_id uuid, key_version text, identity_mac bytea, cutoff timestamptz);"
+	shopt -s nullglob
+	for guard_file in "$work_tmp"/ledgers/guards-*.tsv; do
+		while IFS=$'\t' read -r tenant connector version mac cutoff; do
+			# All fields were strictly validated by verify-ledgers above.
+			printf "INSERT INTO guards_external VALUES ('%s','%s','%s',decode('%s','hex'),'%s');\n" "$tenant" "$connector" "$version" "$mac" "$cutoff"
+		done < <(sed '1d;$d' "$guard_file")
+	done
+	shopt -u nullglob
 	cat "$here/reapply-deletions.sql"
 } >"$work_tmp/reapply.sql"
 
@@ -287,6 +298,11 @@ END {
 
 "${compose[@]}" exec -T postgres psql -U chatisp -d chatisp -v ON_ERROR_STOP=1 -At <"$work_tmp/reapply.sql" | tail -1
 
+# A database snapshot may itself predate provenance tracking. Do not reopen
+# unless every erased contact has a verified record, including imported ones.
+unprotected=$(sql -c "select count(*) from contacts c where c.privacy_erased_at is not null and (exists (select 1 from retention_deletion_records r where r.tenant_id=c.tenant_id and r.class='content' and r.target_type='contact' and r.target_id=c.id and not r.ingress_guarded) or not exists (select 1 from retention_deletion_records r where r.tenant_id=c.tenant_id and r.class='content' and r.target_type='contact' and r.target_id=c.id and r.ingress_guarded))")
+[ "$unprotected" = 0 ] || { echo "exclusões históricas sem prova de proteção de ingresso; concilie historicamente antes da restauração" >&2; exit 1; }
+
 sql -c "\\copy (select tenant_id, subject_id from deletion_records where subject = 'attachment' order by tenant_id, subject_id) to stdout" >"$work_tmp/deleted-attachments.tsv"
 
 awk -F'\t' '
@@ -323,6 +339,7 @@ sql -c "select distinct key_version from (
   union select key_version from contact_document_peppers
   union select key_version from contact_documents where key_version is not null
   union select secret_key_version from webhook_subscriptions
+  union select key_version from privacy_ingress_guards
 ) versions" >"$work_tmp/required-keys.txt"
 while IFS= read -r required; do
 	case ",$rec_keys," in

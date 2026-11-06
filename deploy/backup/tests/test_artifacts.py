@@ -22,9 +22,9 @@ class ArtifactsTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = pathlib.Path(self.temp.name)
 
-    def ledger(self, kind, rows='', stamp='20261106T000000.000Z-1234'):
+    def ledger(self, kind, rows='', stamp='20261106T000000.000Z-1234', version=1):
         path = self.root / f'{kind}-{stamp}.tsv'
-        body = f'# chatisp-{kind}-ledger-1\n{rows}# end-chatisp-{kind}-ledger-1\n'.encode()
+        body = f'# chatisp-{kind}-ledger-{version}\n{rows}# end-chatisp-{kind}-ledger-{version}\n'.encode()
         path.write_bytes(body)
         pathlib.Path(str(path) + '.sha256').write_text(hashlib.sha256(body).hexdigest() + '\n')
         return path
@@ -65,6 +65,39 @@ class ArtifactsTest(unittest.TestCase):
         self.ledger('attachments', stamp='later')
         with self.assertRaisesRegex(ValueError, 'não formam pares'):
             artifacts.verify_ledgers(self.root)
+
+    def test_guarded_export_requires_valid_guard_and_original_cutoff(self):
+        self.ledger('attachments')
+        self.ledger('deletions', version=2)
+        with self.assertRaisesRegex(ValueError, 'guards não formam pares'):
+            artifacts.verify_ledgers(self.root)
+        tenant = '11111111-1111-1111-1111-111111111111'
+        connector = '22222222-2222-2222-2222-222222222222'
+        row = f'{tenant}\t{connector}\told-2\t{"ab" * 32}\t2026-11-06T02:50:00.123456Z\n'
+        guard = self.ledger('guards', row)
+        artifacts.verify_ledgers(self.root)
+        guard.unlink()
+        pathlib.Path(str(guard) + '.sha256').unlink()
+        self.ledger('guards', row.replace('2026-11-06', '2026-99-06'))
+        with self.assertRaisesRegex(ValueError, 'malformada'):
+            artifacts.verify_ledgers(self.root)
+
+    def test_legacy_contact_fails_closed_and_guarded_requires_v2(self):
+        tenant = '11111111-1111-1111-1111-111111111111'
+        contact = '22222222-2222-2222-2222-222222222222'
+        self.ledger('attachments')
+        row = f'{tenant}\tcontact_privacy\t{contact}\n'
+        path = self.ledger('deletions', row)
+        with self.assertRaisesRegex(ValueError, 'exclusão histórica sem prova'):
+            artifacts.verify_ledgers(self.root)
+        path.unlink()
+        pathlib.Path(str(path) + '.sha256').unlink()
+        self.ledger('deletions', row.replace('contact_privacy', 'contact_privacy_guarded'))
+        with self.assertRaisesRegex(ValueError, 'malformada'):
+            artifacts.verify_ledgers(self.root)
+        self.ledger('deletions', row.replace('contact_privacy', 'contact_privacy_guarded'), version=2)
+        self.ledger('guards')
+        artifacts.verify_ledgers(self.root)
 
     def test_bad_uuid_is_refused_even_with_valid_checksum(self):
         self.ledger('attachments')

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -23,13 +24,57 @@ import (
 	"chatisp/internal/channel/whatsapp/metacloud"
 	"chatisp/internal/platform/auth"
 	"chatisp/internal/platform/db"
+	"chatisp/internal/retention"
 )
 
 type memStorage struct {
-	mu   sync.Mutex
-	body map[string][]byte
-	ver  map[string]string
-	seq  int
+	mu        sync.Mutex
+	body      map[string][]byte
+	ver       map[string]string
+	seq       int
+	deleteErr error
+}
+
+func TestInboundMediaPrivacyDuringCreate(t *testing.T) {
+	ctx := context.Background()
+	st := seedTenantWithMeta(t, "app-media-privacy", "waba-media-privacy", "5511999990141", "token-media-privacy", "secret-media-privacy")
+	files := &memStorage{}
+	fetcher := &whatsapp.FakeFetcher{Objects: map[string]whatsapp.MediaBlob{"901": {MIME: "image/jpeg", Body: []byte{0xff, 0xd8, 0xff, 0}}}}
+	inbound := NewInboundHandler(testStore, testAttendanceSvc).(*inboundHandler)
+	inbound.jobs = testJobs
+	body, err := metacloud.MarshalMessageEnvelope(metacloud.MessageFixture{WABAID: st.wabaID, PhoneNumberID: st.phoneID, MessageID: "wamid.privacy.media", From: "551198887741", Timestamp: "1700000700", Type: "image", Object: map[string]any{"id": "901", "mime_type": "image/jpeg"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	delivery := storeDelivery(t, st.appID, body)
+	if err := NewIngressHandler(testPools.Ingress, testJobs, testConfigServer).ExpandIngress(ctx, delivery); err != nil {
+		t.Fatal(err)
+	}
+	applyDelivery(t, inbound, st.tenantID, delivery)
+	var message, contact uuid.UUID
+	if err := testStore.WithTenantTx(ctx, st.tenantID, func(ctx context.Context, tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT m.id,c.contact_id FROM messages m JOIN conversations c ON c.tenant_id=m.tenant_id AND c.id=m.conversation_id WHERE m.tenant_id=$1 AND m.external_message_id='wamid.privacy.media'`, st.tenantID).Scan(&message, &contact)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	downloader := mediaWorkers(t, files, fetcher)
+	erased := make(chan error, 1)
+	downloader.afterCreate = func() error {
+		go func() {
+			_, err := (retention.Service{DB: testStore, Objects: files, Keys: testRing}).DeletePrivacy(ctx, retention.Principal{TenantID: st.tenantID, UserID: st.userID, MembershipID: st.memberID, Role: "admin"}, contact)
+			erased <- err
+		}()
+		return nil
+	}
+	if err := downloader.DownloadInboundMedia(ctx, st.tenantID, message); err != nil {
+		t.Fatalf("download after erasure: %v", err)
+	}
+	if err := <-erased; err != nil {
+		t.Fatal(err)
+	}
+	if files.objects() != 0 {
+		t.Fatalf("erased media remains in storage: %d", files.objects())
+	}
 }
 
 func (m *memStorage) Create(_ context.Context, key string, r io.ReadSeeker, n int64) (string, error) {
@@ -61,6 +106,9 @@ func (m *memStorage) Sign(context.Context, string, string, string, time.Duration
 func (m *memStorage) Delete(_ context.Context, key, version string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.deleteErr != nil {
+		return m.deleteErr
+	}
 	if version != "" && m.ver[key] != version {
 		return nil
 	}
@@ -185,6 +233,16 @@ func TestInboundImageWebhookDownloadIdempotent(t *testing.T) {
 	})
 	if err != nil || attachments != 1 || mediaRows != 1 || mediaType != "image/jpeg" || files.body[objectKey] == nil {
 		t.Fatalf("anexo: att=%d media=%d type=%s key=%s err=%v", attachments, mediaRows, mediaType, objectKey, err)
+	}
+	parts := strings.Split(objectKey, "/")
+	if len(parts) != 2 {
+		t.Fatalf("object key not namespace/object: %q", objectKey)
+	}
+	if _, err := uuid.Parse(parts[0]); err != nil {
+		t.Fatalf("invalid namespace: %q", objectKey)
+	}
+	if _, err := uuid.Parse(parts[1]); err != nil {
+		t.Fatalf("invalid object id: %q", objectKey)
 	}
 
 	history, err := testAttendanceSvc.History(ctx, service.Principal{UserID: st.userID, MembershipID: st.memberID, TenantID: st.tenantID, Role: "admin"}, st.inboxID, conversationID)
@@ -585,11 +643,29 @@ func TestInboundMediaCreateIsRecoverable(t *testing.T) {
 		}
 		return tx.QueryRow(ctx, `SELECT count(*) FROM attachments WHERE tenant_id=$1 AND request_id=$2`, st.tenantID, messageID).Scan(&attachments)
 	})
-	if err != nil || status != "reserved" || attachments != 0 || files.objects() != 1 {
+	if err != nil || status != "reserved" || attachments != 1 || files.objects() != 1 {
 		t.Fatalf("reserva após queda: status=%s attachments=%d objects=%d err=%v", status, attachments, files.objects(), err)
 	}
 	downloader.afterCreate = nil
 	downloader.reserveFor = -1
+	legacyKey := "in/" + st.tenantID.String() + "/" + messageID.String()
+	if _, err := files.Create(ctx, legacyKey, bytes.NewReader(jpeg), int64(len(jpeg))); err != nil {
+		t.Fatal(err)
+	}
+	files.deleteErr = errors.New("limpeza indisponível")
+	if err := downloader.DownloadInboundMedia(ctx, st.tenantID, messageID); err == nil || files.objects() != 2 {
+		t.Fatalf("falha de limpeza deve preservar objeto e reserva: %v", err)
+	}
+	files.deleteErr = nil
+	delete(fake.Objects, "401")
+	if err := downloader.DownloadInboundMedia(ctx, st.tenantID, messageID); err == nil || files.objects() != 1 {
+		t.Fatalf("failed retry must preserve tracked object: %v", err)
+	}
+	fake.Objects["401"] = whatsapp.MediaBlob{MIME: "image/jpeg", Body: append(append([]byte{}, jpeg...), 1)}
+	if err := downloader.DownloadInboundMedia(ctx, st.tenantID, messageID); err == nil || files.objects() != 1 {
+		t.Fatalf("changed size must preserve tracked object: %v", err)
+	}
+	fake.Objects["401"] = whatsapp.MediaBlob{MIME: "image/jpeg", Body: jpeg}
 	if err := downloader.DownloadInboundMedia(ctx, st.tenantID, messageID); err != nil {
 		t.Fatalf("retry: %v", err)
 	}

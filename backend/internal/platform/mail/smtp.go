@@ -3,6 +3,7 @@ package mail
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -25,6 +26,8 @@ type SMTP struct {
 	// timeout overrides smtpExchangeTimeout. Zero keeps the default.
 	// Tests use a short value so a silent peer cannot stall the suite.
 	timeout time.Duration
+	// roots is supplied only by local TLS tests; nil uses system roots.
+	roots *x509.CertPool
 }
 
 // NewSender returns an SMTP sender when addr is set, otherwise Unavailable.
@@ -69,10 +72,11 @@ func (s SMTP) Send(ctx context.Context, msg Message) error {
 		return errors.New("falha ao enviar e-mail")
 	}
 	defer client.Close()
-	if ok, _ := client.Extension("STARTTLS"); ok {
-		if err := client.StartTLS(&tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}); err != nil {
-			return errors.New("falha ao enviar e-mail")
-		}
+	if ok, _ := client.Extension("STARTTLS"); !ok {
+		return errors.New("servidor de e-mail não oferece STARTTLS")
+	}
+	if err := client.StartTLS(&tls.Config{ServerName: host, MinVersion: tls.VersionTLS12, RootCAs: s.roots}); err != nil {
+		return errors.New("falha ao enviar e-mail")
 	}
 	if auth != nil {
 		if err := client.Auth(auth); err != nil {

@@ -315,6 +315,10 @@ func TestReapplyDeletionsSQLDeduplicationAndIsolation(t *testing.T) {
 
 	convA := seedTenant(tenantA, nsA, 3000)
 	convB := seedTenant(tenantB, nsB, 5000)
+	var connectorA string
+	if err := conn.QueryRow(ctx, `SELECT connector_id FROM inboxes WHERE tenant_id=$1`, tenantA).Scan(&connectorA); err != nil {
+		t.Fatal(err)
+	}
 
 	setupSQL := `
 		INSERT INTO attachments (tenant_id, id, conversation_id, request_id, direction, name, expected_bytes, object_key, object_version, state, media_type, sha256, expires_at) VALUES
@@ -333,7 +337,12 @@ func TestReapplyDeletionsSQLDeduplicationAndIsolation(t *testing.T) {
 	// attA2 está apenas em ledger_external; e há uma entrada forjada tentando excluir attB1 sob tenantA.
 	reapplyScript := `
 		DROP TABLE IF EXISTS ledger_external;
+		DROP TABLE IF EXISTS guards_external;
 		CREATE TEMP TABLE ledger_external (tenant_id uuid, subject text, subject_id uuid);
+		CREATE TEMP TABLE guards_external (tenant_id uuid, connector_id uuid, key_version text, identity_mac bytea, cutoff timestamptz);
+		INSERT INTO guards_external VALUES
+			('` + tenantA + `', '` + connectorA + `', 'v1', decode('` + strings.Repeat("ab", 32) + `','hex'), '2026-11-05 12:00:00+00'),
+			('` + tenantA + `', '` + connectorA + `', 'v1', decode('` + strings.Repeat("ab", 32) + `','hex'), '2026-11-06 12:00:00+00');
 		INSERT INTO ledger_external VALUES
 			('` + tenantA + `', 'attachment', '` + attA1 + `'),
 			('` + tenantA + `', 'attachment', '` + attA1 + `'),
@@ -343,6 +352,14 @@ func TestReapplyDeletionsSQLDeduplicationAndIsolation(t *testing.T) {
 
 	if _, err := conn.Exec(ctx, reapplyScript); err != nil {
 		t.Fatalf("primeira execução de reapply-deletions.sql: %v", err)
+	}
+	var cutoff time.Time
+	var guardCount int
+	if err := conn.QueryRow(ctx, `SELECT count(*),max(cutoff) FROM privacy_ingress_guards WHERE tenant_id=$1 AND connector_id=$2`, tenantA, connectorA).Scan(&guardCount, &cutoff); err != nil {
+		t.Fatal(err)
+	}
+	if guardCount != 1 || !cutoff.Equal(time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)) {
+		t.Fatalf("marcador restaurado: quantidade=%d corte=%v", guardCount, cutoff)
 	}
 
 	var resA, resB int64
@@ -371,6 +388,30 @@ func TestReapplyDeletionsSQLDeduplicationAndIsolation(t *testing.T) {
 	}
 	if resA != 1500 {
 		t.Fatalf("reaplicação não foi idempotente: reserved_bytes de tenantA mudou para %d", resA)
+	}
+	if err := conn.QueryRow(ctx, `SELECT count(*),max(cutoff) FROM privacy_ingress_guards WHERE tenant_id=$1 AND connector_id=$2`, tenantA, connectorA).Scan(&guardCount, &cutoff); err != nil {
+		t.Fatal(err)
+	}
+	if guardCount != 1 || !cutoff.Equal(time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)) {
+		t.Fatalf("reaplicação alterou corte: quantidade=%d corte=%v", guardCount, cutoff)
+	}
+	var connectorB string
+	if err := conn.QueryRow(ctx, `SELECT connector_id FROM inboxes WHERE tenant_id=$1`, tenantB).Scan(&connectorB); err != nil {
+		t.Fatal(err)
+	}
+	for _, invalidConnector := range []string{uuid.NewString(), connectorB} {
+		if _, err := conn.Exec(ctx, `TRUNCATE guards_external`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := conn.Exec(ctx, `INSERT INTO guards_external VALUES ($1,$2,'v1',$3,'2026-11-06 12:00:00+00')`, tenantA, invalidConnector, bytes.Repeat([]byte{0xcd}, 32)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := conn.Exec(ctx, string(sqlBytes)); err == nil {
+			t.Fatalf("restauração aceitou conector ausente ou de outro tenant: %s", invalidConnector)
+		}
+		if _, err := conn.Exec(ctx, `ROLLBACK`); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

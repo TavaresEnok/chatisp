@@ -6,7 +6,9 @@ package crypto
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -83,6 +85,31 @@ func (r *Ring) Current() string {
 		return ""
 	}
 	return r.current
+}
+
+// Fingerprint computes a stable, domain-separated identity marker for a key
+// version. Store the version alongside the marker so it can be recomputed
+// after rotation. Context binds the marker to its tenant and intended use.
+func (r *Ring) Fingerprint(version string, plaintext []byte, aad Context) ([]byte, error) {
+	invalid := func() ([]byte, error) { return nil, errors.New("não foi possível calcular a impressão") }
+	if r == nil || len(plaintext) == 0 || len(plaintext) > 4096 {
+		return invalid()
+	}
+	key, ok := r.keys[version]
+	if !ok {
+		return invalid()
+	}
+	associated, err := aad.bytes()
+	if err != nil {
+		return invalid()
+	}
+	derive := hmac.New(sha256.New, key)
+	_, _ = derive.Write([]byte("chatisp/privacy-identity/v1"))
+	mac := hmac.New(sha256.New, derive.Sum(nil))
+	_, _ = mac.Write(associated)
+	_, _ = mac.Write([]byte{0}) // Context parts cannot contain NUL.
+	_, _ = mac.Write(plaintext)
+	return mac.Sum(nil), nil
 }
 
 // Encrypt seals plaintext under the current key and the supplied context.

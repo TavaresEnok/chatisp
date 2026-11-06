@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"chatisp/internal/privacyguard"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -90,6 +91,13 @@ func (s Service) DeletePrivacy(ctx context.Context, p Principal, contact uuid.UU
 		if err != nil {
 			return err
 		}
+		legacy, err := lockLegacyMedia(ctx, tx, p.TenantID, contact)
+		if err != nil {
+			return err
+		}
+		if (len(files) > 0 || len(legacy) > 0) && s.Objects == nil {
+			return ErrUnavailable
+		}
 		for _, file := range files {
 			if _, err := tx.Exec(ctx, `
 				INSERT INTO deletion_records (id, tenant_id, subject, subject_id, object_key, object_version, object_bytes)
@@ -102,6 +110,18 @@ func (s Service) DeletePrivacy(ctx context.Context, p Principal, contact uuid.UU
 			// new association. Keep them unchanged and refuse the erasure.
 			var matches bool
 			if err := tx.QueryRow(ctx, `SELECT object_key=$3 AND object_version=$4 AND object_bytes=$5 FROM deletion_records WHERE tenant_id=$1 AND subject='attachment' AND subject_id=$2 AND object_key IS NOT NULL`, p.TenantID, file.id, file.key, file.version, file.bytes).Scan(&matches); err != nil || !matches {
+				return ErrUnavailable
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO privacy_object_cleanup (tenant_id, contact_id, attachment_id, object_key, object_version) VALUES ($1,$2,$3,$4,$5)`, p.TenantID, contact, file.id, file.key, file.version); err != nil {
+				return err
+			}
+		}
+		for _, file := range legacy {
+			if _, err := tx.Exec(ctx, `INSERT INTO privacy_object_cleanup (tenant_id,contact_id,attachment_id,object_key,object_version) VALUES ($1,$2,$3,$4,'') ON CONFLICT (tenant_id,contact_id,attachment_id) DO NOTHING`, p.TenantID, contact, file.id, file.key); err != nil {
+				return err
+			}
+			var matches bool
+			if err := tx.QueryRow(ctx, `SELECT object_key=$4 AND object_version='' FROM privacy_object_cleanup WHERE tenant_id=$1 AND contact_id=$2 AND attachment_id=$3`, p.TenantID, contact, file.id, file.key).Scan(&matches); err != nil || !matches {
 				return ErrUnavailable
 			}
 		}
@@ -172,6 +192,9 @@ func (s Service) DeletePrivacy(ctx context.Context, p Principal, contact uuid.UU
 		`, p.TenantID, contact); err != nil {
 			return err
 		}
+		if err := s.guardIngress(ctx, tx, p.TenantID, contact); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `
 			UPDATE contact_channel_identities
 			SET external_id = 'excluido-' || replace(id::text, '-', '')
@@ -212,8 +235,8 @@ func (s Service) DeletePrivacy(ctx context.Context, p Principal, contact uuid.UU
 			return err
 		}
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO retention_deletion_records (tenant_id, id, class, target_type, target_id, note)
-			VALUES ($1, $2, 'content', 'contact', $3, $4)
+			INSERT INTO retention_deletion_records (tenant_id, id, class, target_type, target_id, note, ingress_guarded)
+			VALUES ($1, $2, 'content', 'contact', $3, $4, true)
 		`, p.TenantID, uuid.New(), contact, "identificadores e corpos removidos; ciclos e protocolos preservados"); err != nil {
 			return err
 		}
@@ -239,27 +262,120 @@ func (s Service) DeletePrivacy(ctx context.Context, p Principal, contact uuid.UU
 		if purge {
 			return ErrPurgeDisabled
 		}
-		removed := 0
-		if s.Objects != nil {
-			for _, file := range files {
-				if err := s.Objects.Delete(ctx, file.key, file.version); err != nil {
-					return err
-				}
-				removed++
-			}
-		}
-		if err := insertAudit(ctx, tx, p, "contact.privacy_delete", "contact", contact, "success"); err != nil {
+		if err := insertAudit(ctx, tx, p, "contact.privacy_delete", "contact", contact, "database_erased"); err != nil {
 			return err
 		}
 		out = DeletionResult{
 			ContactID: contact, Erased: true, Protocols: protocols,
 			MessagesRedacted: int(messages.RowsAffected()), NotesRedacted: int(notes.RowsAffected()),
-			AttachmentsRemoved: len(files), ObjectsRemoved: removed,
-			AutomaticPurge: false, Note: PrivacyDeletionNote,
+			AttachmentsRemoved: len(files),
+			AutomaticPurge:     false, Note: PrivacyDeletionNote,
 		}
 		return nil
 	})
-	return out, mapDB(err)
+	if err != nil {
+		return out, mapDB(err)
+	}
+	removed, err := s.cleanupPrivacyObjects(ctx, p, contact)
+	out.ObjectsRemoved = removed
+	if err != nil {
+		return out, ErrCleanupPending
+	}
+	return out, nil
+}
+
+func (s Service) guardIngress(ctx context.Context, tx pgx.Tx, tenant, contact uuid.UUID) error {
+	rows, err := tx.Query(ctx, `SELECT connector_id, external_id FROM contact_channel_identities WHERE tenant_id=$1 AND contact_id=$2 AND external_id NOT LIKE 'excluido-%'`, tenant, contact)
+	if err != nil {
+		return err
+	}
+	type identity struct {
+		connector uuid.UUID
+		external  string
+	}
+	var identities []identity
+	for rows.Next() {
+		var i identity
+		if err := rows.Scan(&i.connector, &i.external); err != nil {
+			rows.Close()
+			return err
+		}
+		identities = append(identities, i)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	var cutoff time.Time
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&cutoff); err != nil {
+		return err
+	}
+	for _, i := range identities {
+		if s.Keys == nil {
+			return ErrUnavailable
+		}
+		version := s.Keys.Current()
+		mac, err := privacyguard.Fingerprint(s.Keys, version, tenant, i.connector, i.external)
+		if err != nil {
+			return ErrUnavailable
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO privacy_ingress_guards (tenant_id,connector_id,key_version,identity_mac,cutoff) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (tenant_id,connector_id,key_version,identity_mac) DO UPDATE SET cutoff=GREATEST(privacy_ingress_guards.cutoff,EXCLUDED.cutoff)`, tenant, i.connector, version, mac, cutoff); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE webhook_items SET state='quarantined', payload='{}'::jsonb WHERE tenant_id=$1 AND connector_id=$2 AND ingress_received_at <= $4 AND ((kind='message' AND payload->>'from'=$3) OR (kind='status' AND payload->>'recipient_id'=$3))`, tenant, i.connector, i.external, cutoff); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// cleanupPrivacyObjects runs only after the erasure and restore ledger commit.
+// Deleting an object and acknowledging its queue item are independently
+// retryable; the object store's Delete must be idempotent.
+func (s Service) cleanupPrivacyObjects(ctx context.Context, p Principal, contact uuid.UUID) (int, error) {
+	var files []storedObject
+	err := s.DB.WithTenantTx(ctx, p.TenantID, func(ctx context.Context, tx pgx.Tx) error {
+		if err := authorize(ctx, tx, p, true, true); err != nil {
+			return err
+		}
+		rows, err := tx.Query(ctx, `SELECT attachment_id, object_key, object_version FROM privacy_object_cleanup WHERE tenant_id=$1 AND contact_id=$2 ORDER BY attachment_id`, p.TenantID, contact)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var f storedObject
+			if err := rows.Scan(&f.id, &f.key, &f.version); err != nil {
+				return err
+			}
+			files = append(files, f)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return 0, err
+	}
+	if len(files) > 0 && s.Objects == nil {
+		return 0, ErrUnavailable
+	}
+	removed := 0
+	for _, f := range files {
+		if err := s.Objects.Delete(ctx, f.key, f.version); err != nil {
+			return removed, err
+		}
+		if err := s.DB.WithTenantTx(ctx, p.TenantID, func(ctx context.Context, tx pgx.Tx) error {
+			if err := authorize(ctx, tx, p, true, true); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, `DELETE FROM privacy_object_cleanup WHERE tenant_id=$1 AND contact_id=$2 AND attachment_id=$3 AND object_key=$4 AND object_version=$5`, p.TenantID, contact, f.id, f.key, f.version)
+			return err
+		}); err != nil {
+			return removed, err
+		}
+		removed++
+	}
+	return removed, nil
 }
 
 func loadPrivacy(ctx context.Context, tx pgx.Tx, p Principal, contact uuid.UUID) (PrivacyExport, error) {
@@ -396,6 +512,25 @@ type storedObject struct {
 	key     string
 	version string
 	bytes   int64
+}
+
+// Earlier inbound media reservations could write this deterministic key
+// without persisting an attachment. Capture it before redacting the message.
+func lockLegacyMedia(ctx context.Context, tx pgx.Tx, tenant, contact uuid.UUID) ([]storedObject, error) {
+	rows, err := tx.Query(ctx, `SELECT m.id FROM messages m JOIN conversations c ON c.tenant_id=m.tenant_id AND c.id=m.conversation_id WHERE m.tenant_id=$1 AND c.contact_id=$2 AND m.direction='inbound' AND m.content_context->>'media_status'='reserved' ORDER BY m.id FOR UPDATE OF m`, tenant, contact)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var files []storedObject
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		files = append(files, storedObject{id: id, key: "in/" + tenant.String() + "/" + id.String()})
+	}
+	return files, rows.Err()
 }
 
 func lockAttachments(ctx context.Context, tx pgx.Tx, tenant, contact uuid.UUID) ([]storedObject, int64, error) {

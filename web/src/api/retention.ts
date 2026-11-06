@@ -63,7 +63,7 @@ export function getPlanUsage(signal?: AbortSignal): Promise<PlanUsage> {
 }
 
 export function exportDemands(contactId: string, signal?: AbortSignal): Promise<DemandExport> {
-  return panel(`/api/panel/contacts/${contactId}/demands`, { signal }).then((response) => response.json() as Promise<DemandExport>);
+  return panel(`/api/panel/contacts/${encodeURIComponent(contactId)}/demands`, { signal }).then((response) => response.json() as Promise<DemandExport>);
 }
 
 export type PrivacyExport = {
@@ -77,17 +77,18 @@ export type PrivacyExport = {
 export type PrivacyDeletion = {
   erased: boolean;
   already_erased: boolean;
+  objects_removed: number;
   protocols: string[];
   automatic_purge: boolean;
   note: string;
 };
 
 export function exportPrivacy(contactId: string, signal?: AbortSignal): Promise<PrivacyExport> {
-  return panel(`/api/panel/contacts/${contactId}/privacy-export`, { signal }).then((response) => response.json() as Promise<PrivacyExport>);
+  return panel(`/api/panel/contacts/${encodeURIComponent(contactId)}/privacy-export`, { signal }).then((response) => response.json() as Promise<PrivacyExport>);
 }
 
 export function deletePrivacy(contactId: string): Promise<PrivacyDeletion> {
-  return panel(`/api/panel/contacts/${contactId}/privacy-deletion`, {
+  return panel(`/api/panel/contacts/${encodeURIComponent(contactId)}/privacy-deletion`, {
     method: "POST",
     body: JSON.stringify({ confirm: "excluir titular" }),
   }).then((response) => response.json() as Promise<PrivacyDeletion>);

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,8 +14,22 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"chatisp/internal/platform/auth"
+	"chatisp/internal/platform/crypto"
 	"chatisp/internal/retention"
 )
+
+func privacyTestKeys(t *testing.T) *crypto.Ring {
+	t.Helper()
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i + 1)
+	}
+	ring, err := crypto.Parse("v1:"+base64.StdEncoding.EncodeToString(key), "v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ring
+}
 
 func TestHTTPPrivacyExportAndDeletion(t *testing.T) {
 	s := seedTenant(t)
@@ -59,7 +74,7 @@ func TestHTTPPrivacyExportAndDeletion(t *testing.T) {
 	router := chi.NewRouter()
 	Register(router, Dependencies{
 		Auth:  stubAuth{p: auth.Principal{UserID: s.admin.UserID, TenantID: s.tenant, MembershipID: s.admin.MembershipID, Role: "admin"}},
-		Store: testStore, TrustedOrigins: []string{"https://painel.test"},
+		Store: testStore, Keys: privacyTestKeys(t), TrustedOrigins: []string{"https://painel.test"},
 	})
 	exportReq := httptest.NewRequest(http.MethodGet, "/api/panel/contacts/"+s.contact.String()+"/privacy-export", nil)
 	exportReq.AddCookie(&http.Cookie{Name: "__Host-session", Value: "sessao"})
@@ -105,5 +120,36 @@ func TestHTTPPrivacyExportAndDeletion(t *testing.T) {
 	agentRouter.ServeHTTP(agentRec, agentReq)
 	if agentRec.Code != http.StatusForbidden {
 		t.Fatalf("atendente %d %s", agentRec.Code, agentRec.Body.String())
+	}
+}
+
+func TestHTTPPrivacyDeletionWithoutKeysFailsClosed(t *testing.T) {
+	s := seedTenant(t)
+	router := chi.NewRouter()
+	Register(router, Dependencies{
+		Auth:  stubAuth{p: auth.Principal{UserID: s.admin.UserID, TenantID: s.tenant, MembershipID: s.admin.MembershipID, Role: "admin"}},
+		Store: testStore, TrustedOrigins: []string{"https://painel.test"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/panel/contacts/"+s.contact.String()+"/privacy-deletion", strings.NewReader(`{"confirm":"excluir titular"}`))
+	req.Header.Set("Origin", "https://painel.test")
+	req.Header.Set("X-CSRF-Token", "csrf")
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "__Host-session", Value: "sessao"})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("exclusão sem chaves: %d %s", rec.Code, rec.Body.String())
+	}
+	if err := testStore.WithTenantTx(context.Background(), s.tenant, func(ctx context.Context, tx pgx.Tx) error {
+		var erased *time.Time
+		if err := tx.QueryRow(ctx, `SELECT privacy_erased_at FROM contacts WHERE tenant_id=$1 AND id=$2`, s.tenant, s.contact).Scan(&erased); err != nil {
+			return err
+		}
+		if erased != nil {
+			t.Fatal("contato anonimizado sem marcador")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }

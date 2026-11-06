@@ -12,6 +12,7 @@ import (
 	"chatisp/internal/channel/configuration"
 	"chatisp/internal/channel/whatsapp"
 	"chatisp/internal/channel/whatsapp/metacloud"
+	"chatisp/internal/platform/crypto"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/jobs"
 )
@@ -85,6 +86,7 @@ func (f *driverFactory) DriverFor(_ context.Context, _, _ uuid.UUID, material co
 // WorkersConfig provides dependencies for the pipeline's River worker handlers.
 type WorkersConfig struct {
 	DB                 *db.Store
+	Keys               *crypto.Ring
 	IngressPool        *pgxpool.Pool
 	JobsClient         *jobs.Client
 	AttendanceService  service.Service
@@ -114,6 +116,7 @@ func NewWorkers(cfg WorkersConfig) (jobs.Handlers, error) {
 	inbound := NewInboundHandler(cfg.DB, cfg.AttendanceService, automation)
 	if handler, ok := inbound.(*inboundHandler); ok {
 		handler.jobs = cfg.JobsClient
+		handler.keys = cfg.Keys
 	}
 	outbound := NewOutboundHandler(cfg.DB, cfg.AttendanceService, cfg.MaterialResolver, cfg.CredentialReporter, cfg.DriverFactory)
 	outbound.(*outboundHandler).triageInboxes = cfg.TriageInboxes

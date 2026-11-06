@@ -13,9 +13,10 @@ const (
 )
 
 type gate struct {
-	failures  int
-	openUntil time.Time
-	probing   bool
+	failures   int
+	openUntil  time.Time
+	probing    bool
+	generation uint64
 }
 
 // Breaker isolates one ERP connection. An open circuit does not call the adapter.
@@ -57,8 +58,10 @@ func (b *Breaker) Do(id uuid.UUID, now time.Time, fn func() error) error {
 	if !g.openUntil.IsZero() {
 		g.probing = true
 		g.openUntil = time.Time{}
+		g.generation++
 		probe = true
 	}
+	generation := g.generation
 	b.mu.Unlock()
 
 	err := fn()
@@ -66,13 +69,20 @@ func (b *Breaker) Do(id uuid.UUID, now time.Time, fn func() error) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	g = b.gate(id)
-	g.probing = false
+	// Calls admitted before an opening must not change the new circuit state.
+	if generation != g.generation {
+		return err
+	}
+	if probe {
+		g.probing = false
+	}
 	if err != nil {
 		g.failures++
 		// A failed half-open probe reopens at once, like sony/gobreaker.
 		if probe || g.failures >= breakerFailures {
 			g.openUntil = now.Add(breakerOpenFor)
 			g.failures = 0
+			g.generation++
 		}
 		return err
 	}

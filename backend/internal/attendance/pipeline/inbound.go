@@ -15,8 +15,10 @@ import (
 	"chatisp/internal/attendance/store"
 	"chatisp/internal/contactdirectory"
 	"chatisp/internal/lifecycle"
+	"chatisp/internal/platform/crypto"
 	"chatisp/internal/platform/db"
 	"chatisp/internal/platform/jobs"
+	"chatisp/internal/privacyguard"
 )
 
 type inboundHandler struct {
@@ -25,6 +27,7 @@ type inboundHandler struct {
 	repo       store.Repo
 	automation *Automation
 	jobs       *jobs.Client
+	keys       *crypto.Ring
 }
 
 // NewInboundHandler constructs the River InboundHandler for processing tenant webhook items.
@@ -129,10 +132,48 @@ func (h *inboundHandler) ApplyInbound(ctx context.Context, tenantID, itemID uuid
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-
+			// Privacy deletion holds the same tenant lock while removing identifiers.
+			// Reload the item after taking it: the initial read was a different transaction.
 			if err := automationTenant(ctx, tx, tenantID); err != nil {
 				return err
 			}
+			var currentState string
+			var currentPayload json.RawMessage
+			var received time.Time
+			if err := tx.QueryRow(ctx, `SELECT state, payload, ingress_received_at FROM webhook_items WHERE tenant_id=$1 AND id=$2 FOR UPDATE`, tenantID, itemID).Scan(&currentState, &currentPayload, &received); err != nil {
+				return err
+			}
+			if currentState != "pending" {
+				return nil
+			}
+			if err := json.Unmarshal(currentPayload, &p); err != nil {
+				return err
+			}
+			legacy, err := privacyguard.LegacyBlocked(ctx, tx, tenantID, received)
+			if err != nil {
+				return err
+			}
+			if legacy {
+				_, err = tx.Exec(ctx, `UPDATE webhook_items SET state='quarantined' WHERE tenant_id=$1 AND id=$2`, tenantID, itemID)
+				return err
+			}
+			blocked, err := privacyguard.Blocked(ctx, tx, h.keys, tenantID, connectorID, p.From, received)
+			if err != nil {
+				return err
+			}
+			if blocked {
+				_, err = tx.Exec(ctx, `UPDATE webhook_items SET state='quarantined',payload='{}'::jsonb WHERE tenant_id=$1 AND id=$2`, tenantID, itemID)
+				return err
+			}
+			var duplicate bool
+			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM messages WHERE tenant_id=$1 AND connector_id=$2 AND external_message_id=$3)`, tenantID, connectorID, p.ExternalID).Scan(&duplicate); err != nil {
+				return err
+			}
+			if duplicate {
+				_, err = tx.Exec(ctx, `UPDATE webhook_items SET state='processed',payload='{}'::jsonb WHERE tenant_id=$1 AND id=$2`, tenantID, itemID)
+				return err
+			}
+
 			// Resolve or create contact and contact_channel_identity.
 			var contactID, identityID uuid.UUID
 			err = tx.QueryRow(ctx, `
@@ -187,7 +228,7 @@ func (h *inboundHandler) ApplyInbound(ctx context.Context, tenantID, itemID uuid
 			if err := tx.QueryRow(ctx, `SELECT id FROM contacts WHERE tenant_id=$1 AND id=$2 FOR SHARE`, tenantID, contactID).Scan(&lockedID); err != nil {
 				return err
 			}
-			blocked, err := contactdirectory.IsBlocked(ctx, tx, tenantID, contactID)
+			blocked, err = contactdirectory.IsBlocked(ctx, tx, tenantID, contactID)
 			if err != nil {
 				return err
 			}
@@ -208,7 +249,7 @@ func (h *inboundHandler) ApplyInbound(ctx context.Context, tenantID, itemID uuid
 			if e != nil && !errors.Is(e, pgx.ErrNoRows) {
 				return e
 			}
-			var duplicate bool
+			duplicate = false
 			if e == nil {
 				if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM messages WHERE tenant_id=$1 AND connector_id=$2 AND external_message_id=$3)`, tenantID, connectorID, p.ExternalID).Scan(&duplicate); e != nil {
 					return e

@@ -39,7 +39,8 @@
 }
 
 # Garage com TLS público. O Host é repassado sem alteração: a assinatura SigV4 cobre esse nome.
-# Se usar S3 gerenciado em vez do Garage, remova este bloco e aponte CHATISP_ATTACHMENTS_S3_* para ele.
+# Para S3 gerenciado, adapte também o override Compose: ele fixa os dois
+# endpoints no CHATISP_STORAGE_HOST e depende do provisionamento do Garage.
 {$CHATISP_STORAGE_HOST} {
 	request_body {
 		max_size 40MB

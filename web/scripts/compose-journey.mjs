@@ -592,12 +592,21 @@ try {
     assert.equal((await signedInbound(live)).status, 200);
     await op.page.getByText(live).first().waitFor({ timeout: 30_000 });
     check("depois do reinício: webhook, worker e WebSocket voltaram a funcionar");
+  } else if (PHASE === "exclude-pending") {
+    // O Garage parado impede a limpeza física, mas a anonimização precisa persistir.
+    const op = await openContext();
+    await loginUi(op.page, state.adminB.email, state.adminB.password, state.adminB.secret, "adminb");
+    const del = await api(op.context, "POST", `/api/panel/contacts/${state.operation.contact}/privacy-deletion`, { confirm: "excluir titular" });
+    assert.equal(del.status, 503, `limpeza pendente: ${del.status} ${del.body.toString()}`);
+    assert.match(del.body.toString(), /limpeza de objetos pendente/i);
+    check("exclusão com storage indisponível: API informa anonimização e limpeza pendente");
   } else if (PHASE === "exclude") {
-    // Exclusão do titular 1 (decisão de privacidade) depois do backup: apaga o anexo e registra o livro.
+    // Repetir a exclusão já confirmada conclui a limpeza após a volta do storage.
     const op = await openContext();
     await loginUi(op.page, state.adminB.email, state.adminB.password, state.adminB.secret, "adminb");
     const del = await api(op.context, "POST", `/api/panel/contacts/${state.operation.contact}/privacy-deletion`, { confirm: "excluir titular" });
     assert.equal(del.status, 200, `exclusão do titular: ${del.status} ${del.body.toString()}`);
+    assert.equal(json(del).already_erased, true, "repetição não reconheceu titular já anonimizado");
     const gone = await api(op.context, "POST", `/api/panel/inboxes/${state.operation.inbox}/conversations/${state.operation.conversation}/attachments/${state.operation.attachment}/download`);
     assert.ok([403, 404, 409].includes(gone.status), `anexo excluído ainda responde ${gone.status}`);
     await downloadAttachment(op.context, "anexo do outro titular continua", "keep");

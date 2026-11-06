@@ -1,5 +1,5 @@
 // Command smtpsink is a DISPOSABLE VALIDATION DOUBLE for the Compose journey.
-// It is not part of the product image. It accepts plaintext SMTP on -smtp,
+// It is not part of the product image. It accepts STARTTLS SMTP on -smtp,
 // keeps the messages in memory and serves them as JSON on -http so the journey
 // can read invitation and password-reset links. POST /mode?reject=1 makes it
 // refuse every recipient (delivery-failure test); reject=0 restores delivery.
@@ -8,6 +8,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -30,9 +31,10 @@ type message struct {
 }
 
 type sink struct {
-	mu       sync.Mutex
-	messages []message
-	reject   atomic.Bool
+	mu        sync.Mutex
+	messages  []message
+	reject    atomic.Bool
+	tlsConfig *tls.Config
 }
 
 func (s *sink) add(m message) {
@@ -64,6 +66,7 @@ func (s *sink) serve(conn net.Conn) {
 	say := func(format string, args ...any) { fmt.Fprintf(conn, format+"\r\n", args...) }
 	say("220 smtpsink pronto (duplo de validação)")
 	var from, to string
+	secure := false
 	for {
 		line, err := r.ReadString('\n')
 		if err != nil {
@@ -73,10 +76,27 @@ func (s *sink) serve(conn net.Conn) {
 		switch {
 		case strings.HasPrefix(cmd, "EHLO"):
 			say("250-smtpsink")
+			if !secure {
+				say("250-STARTTLS")
+			}
 			say("250 8BITMIME")
+		case cmd == "STARTTLS" && !secure:
+			say("220 inicie TLS")
+			tlsConn := tls.Server(conn, s.tlsConfig)
+			if err := tlsConn.Handshake(); err != nil {
+				return
+			}
+			conn = tlsConn
+			r = bufio.NewReader(conn)
+			secure = true
+			from, to = "", ""
 		case strings.HasPrefix(cmd, "HELO"):
 			say("250 smtpsink")
 		case strings.HasPrefix(cmd, "MAIL FROM:"):
+			if !secure {
+				say("530 STARTTLS obrigatório")
+				continue
+			}
 			from = strings.Trim(strings.TrimSpace(line[len("MAIL FROM:"):]), "<>")
 			say("250 ok")
 		case strings.HasPrefix(cmd, "RCPT TO:"):
@@ -119,8 +139,14 @@ func (s *sink) serve(conn net.Conn) {
 func main() {
 	smtpAddr := flag.String("smtp", ":2525", "endereço SMTP")
 	httpAddr := flag.String("http", ":8025", "endereço HTTP de leitura")
+	certPath := flag.String("cert", "", "certificado TLS do laboratório")
+	keyPath := flag.String("key", "", "chave TLS do laboratório")
 	flag.Parse()
-	s := &sink{}
+	cert, err := tls.LoadX509KeyPair(*certPath, *keyPath)
+	if err != nil {
+		log.Fatal("certificado TLS do laboratório inválido")
+	}
+	s := &sink{tlsConfig: &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}}
 	ln, err := net.Listen("tcp", *smtpAddr)
 	if err != nil {
 		log.Fatal(err)

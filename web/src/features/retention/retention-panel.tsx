@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { deletePrivacy, exportDemands, exportPrivacy, getPlanUsage, getRetentionPolicy, saveRetentionPolicy, type DemandExport, type PrivacyDeletion, type PrivacyExport, type RetentionPolicy } from "@/api/retention";
 import { invalidateBranding } from "@/features/branding/cache";
@@ -32,6 +32,8 @@ export function RetentionPanel() {
   const [erasure, setErasure] = useState<PrivacyDeletion | null>(null);
   const [confirm, setConfirm] = useState("");
   const [notice, setNotice] = useState("");
+  const [erasing, setErasing] = useState(false);
+  const contactVersion = useRef(0);
   const current = draft ?? policy.data ?? empty;
 
   function setDays(key: (typeof classes)[number]["key"], value: string) {
@@ -44,6 +46,7 @@ export function RetentionPanel() {
   }
 
   async function save() {
+    if (!policy.data || policy.isError) return;
     setNotice("");
     try {
       const saved = await saveRetentionPolicy({ ...current, automatic_purge: false });
@@ -57,36 +60,63 @@ export function RetentionPanel() {
   }
 
   async function download() {
+    const version = contactVersion.current;
     setNotice("");
     setFile(null);
     try {
-      setFile(await exportDemands(contact.trim()));
+      const result = await exportDemands(contact.trim());
+      if (version === contactVersion.current) setFile(result);
     } catch {
-      setNotice("Não foi possível exportar as demandas deste contato.");
+      if (version === contactVersion.current) setNotice("Não foi possível exportar as demandas deste contato.");
     }
   }
 
   async function loadPrivacy() {
+    const version = contactVersion.current;
     setNotice("");
     setDossier(null);
     try {
-      setDossier(await exportPrivacy(contact.trim()));
+      const result = await exportPrivacy(contact.trim());
+      if (version === contactVersion.current) setDossier(result);
     } catch {
-      setNotice("Não foi possível exportar os dados deste titular.");
+      if (version === contactVersion.current) setNotice("Não foi possível exportar os dados deste titular.");
     }
   }
 
   async function erase() {
+    if (erasing) return;
+    const version = ++contactVersion.current;
+    setErasing(true);
+    setConfirm("");
     setNotice("");
+    setFile(null);
+    setDossier(null);
     setErasure(null);
     try {
       const result = await deletePrivacy(contact.trim());
+      if (version !== contactVersion.current) return;
       setErasure(result);
       setDossier(null);
-      setNotice(result.already_erased ? "Este titular já estava excluído. Nada mais foi apagado." : "Dados do titular excluídos. O expurgo automático continua desligado.");
+      setNotice(result.already_erased
+        ? result.objects_removed > 0
+          ? "Este titular já estava anonimizado. A remoção dos anexos pendentes foi retomada e concluída."
+          : "Este titular já estava excluído. Não havia anexos pendentes para remover."
+        : "Dados do titular excluídos. O expurgo automático continua desligado.");
     } catch {
-      setNotice("Não foi possível excluir os dados deste titular.");
+      if (version === contactVersion.current) setNotice("Não foi possível concluir a exclusão. A anonimização pode ter sido aplicada; tente novamente para concluir a remoção dos anexos.");
+    } finally {
+      setErasing(false);
     }
+  }
+
+  function changeContact(value: string) {
+    contactVersion.current += 1;
+    setContact(value);
+    setConfirm("");
+    setFile(null);
+    setDossier(null);
+    setErasure(null);
+    setNotice("");
   }
 
   return (
@@ -95,6 +125,7 @@ export function RetentionPanel() {
       <p>Histórico estruturado de demandas do atendimento. Não é o histórico completo do provedor nem do ERP.</p>
       <p>Expurgo automático desligado. Mensagens, mídia, envelopes, logs e jobs permanecem.</p>
       {policy.isError ? <p role="alert">Não foi possível ler a política de retenção.</p> : null}
+      <fieldset disabled={!policy.data || policy.isError}>
       <label>
         Nome do provedor
         <input aria-label="Nome do provedor" value={current.display_name} onChange={(event) => setDraft({ ...current, display_name: event.target.value, automatic_purge: false })} />
@@ -111,6 +142,7 @@ export function RetentionPanel() {
         </label>
       ))}
       <button type="button" onClick={() => void save()}>Guardar política</button>
+      </fieldset>
       {usage.data ? (
         <p>
           Plano: {usage.data.agents} atendentes, {usage.data.numbers} números, {usage.data.storage_bytes} bytes. {usage.data.note}
@@ -118,10 +150,10 @@ export function RetentionPanel() {
       ) : null}
       <label>
         Contato para exportar
-        <input aria-label="Contato para exportar" value={contact} onChange={(event) => setContact(event.target.value)} />
+        <input aria-label="Contato para exportar" value={contact} onChange={(event) => changeContact(event.target.value)} />
       </label>
-      <button type="button" disabled={contact.trim() === ""} onClick={() => void download()}>Exportar demandas</button>
-      <button type="button" disabled={contact.trim() === ""} onClick={() => void loadPrivacy()}>Exportar dados do titular</button>
+      <button type="button" disabled={erasing || contact.trim() === ""} onClick={() => void download()}>Exportar demandas</button>
+      <button type="button" disabled={erasing || contact.trim() === ""} onClick={() => void loadPrivacy()}>Exportar dados do titular</button>
       {dossier ? (
         <div>
           <p>{dossier.label}</p>
@@ -129,10 +161,10 @@ export function RetentionPanel() {
         </div>
       ) : null}
       <label>
-        Confirmação da exclusão
+        Digite “excluir titular” para confirmar a exclusão
         <input aria-label="Confirmação da exclusão" value={confirm} onChange={(event) => setConfirm(event.target.value)} />
       </label>
-      <button type="button" disabled={contact.trim() === "" || confirm.trim() !== "excluir titular"} onClick={() => void erase()}>Excluir dados do titular</button>
+      <button type="button" disabled={erasing || contact.trim() === "" || confirm.trim() !== "excluir titular"} onClick={() => void erase()}>Excluir dados do titular</button>
       {erasure ? <p>{erasure.note} Protocolos preservados: {erasure.protocols.join(", ") || "nenhum"}.</p> : null}
       {file ? (
         <div>

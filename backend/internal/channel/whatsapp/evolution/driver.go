@@ -122,7 +122,7 @@ func (f *Fake) Disconnect(connectionID string) {
 		return
 	}
 	f.mu.Lock()
-	f.up[connectionID] = false
+	delete(f.up, connectionID)
 	f.mu.Unlock()
 }
 
@@ -133,6 +133,9 @@ func (f *Fake) MarkUp(connectionID string) {
 		return
 	}
 	f.mu.Lock()
+	if f.up == nil {
+		f.up = make(map[string]bool)
+	}
 	f.up[connectionID] = true
 	f.mu.Unlock()
 }

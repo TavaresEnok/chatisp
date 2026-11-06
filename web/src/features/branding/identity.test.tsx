@@ -236,7 +236,8 @@ it("guardar o nome na retenção invalida a identidade e mantém a política", a
       <RetentionPanel />
     </QueryClientProvider>,
   );
-  const field = await screen.findByLabelText("Nome do provedor");
+  const field = await screen.findByDisplayValue("Nexo Fibra");
+  expect(field).toBeEnabled();
   await user.clear(field);
   await user.type(field, "Nexo Atual");
   await user.click(screen.getByRole("button", { name: "Guardar política" }));
