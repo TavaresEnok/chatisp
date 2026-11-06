@@ -1,0 +1,9 @@
+containers: 0 recursos chatisp-validate-* restantes
+volumes: 0 recursos chatisp-validate-* restantes
+networks: 0 recursos chatisp-validate-* restantes
+images: 0 recursos chatisp-validate-* restantes
+prom/prometheus:v3.5.0: etiqueta de teste removida
+prom/alertmanager:v0.28.1: etiqueta de teste removida
+caddy:2.10.2: etiqueta de teste removida
+Sondas chatisp-probe-garage e chatisp-probe-caddy: ausentes na inspeção inicial; nenhuma remoção/reutilização.
+Cache de build recriável preservado; nenhuma limpeza global, restart Docker, push ou deploy de produção.

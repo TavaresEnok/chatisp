@@ -1,0 +1,19 @@
+0 issues.
+=== Symbol Results ===
+
+No vulnerabilities found.
+
+Your code is affected by 0 vulnerabilities.
+This scan also found 0 vulnerabilities in packages you import and 1
+vulnerability in modules you require, but your code doesn't appear to call these
+vulnerabilities.
+Use '-show verbose' for more details.
+
+> chatisp-web@0.1.0 lint
+> eslint .
+
+
+> chatisp-web@0.1.0 typecheck
+> tsc -b --pretty false
+
+OpenAPI gravado em /tmp/tmp.egBvVgYi4r

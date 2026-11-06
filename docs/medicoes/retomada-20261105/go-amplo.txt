@@ -1,0 +1,83 @@
+--- FAIL: TestReapplyPrivacyRedactsStructuredContentAndPreservesOtherTenant (1.66s)
+    reapply_privacy_test.go:80: ERROR: cannot insert multiple commands into a prepared statement (SQLSTATE 42601)
+FAIL
+FAIL	chatisp/cmd/chatisp	26.433s
+?   	chatisp/cmd/devdb	[no test files]
+ok  	chatisp/cmd/m2demo	7.127s
+ok  	chatisp/cmd/restoredrill	3.658s
+ok  	chatisp/cmd/smtpsink	0.022s
+ok  	chatisp/internal/acceptance	9.733s
+ok  	chatisp/internal/attachments	0.018s
+ok  	chatisp/internal/attachments/httpapi	2.152s
+ok  	chatisp/internal/attendance/httpapi	2.422s
+ok  	chatisp/internal/attendance/pipeline	8.936s
+ok  	chatisp/internal/attendance/service	9.791s
+ok  	chatisp/internal/attendance/store	5.003s
+ok  	chatisp/internal/auditview	3.067s
+ok  	chatisp/internal/bothook	2.185s
+?   	chatisp/internal/bothook/httpapi	[no test files]
+ok  	chatisp/internal/branding	1.862s
+ok  	chatisp/internal/businesshours	2.103s
+?   	chatisp/internal/businesshours/httpapi	[no test files]
+ok  	chatisp/internal/cannedreplies	2.005s
+ok  	chatisp/internal/channel/catalog	1.920s
+ok  	chatisp/internal/channel/configuration	5.299s
+ok  	chatisp/internal/channel/httpapi	2.281s
+ok  	chatisp/internal/channel/whatsapp	0.022s
+ok  	chatisp/internal/channel/whatsapp/evolution	0.008s
+ok  	chatisp/internal/channel/whatsapp/metacloud	0.249s
+ok  	chatisp/internal/channelpolicy	2.862s
+?   	chatisp/internal/channelpolicy/httpapi	[no test files]
+?   	chatisp/internal/collision	[no test files]
+ok  	chatisp/internal/collision/httpapi	2.243s
+?   	chatisp/internal/contactdirectory	[no test files]
+ok  	chatisp/internal/contactdirectory/httpapi	3.968s
+ok  	chatisp/internal/contactdocs	0.008s
+ok  	chatisp/internal/contactdocs/httpapi	2.260s
+ok  	chatisp/internal/conversation	0.009s
+ok  	chatisp/internal/distribution	3.047s
+ok  	chatisp/internal/embed	0.023s
+ok  	chatisp/internal/erp	3.983s
+ok  	chatisp/internal/ingress/authmeta	0.010s
+ok  	chatisp/internal/lifecycle	2.868s
+?   	chatisp/internal/lifecycle/httpapi	[no test files]
+ok  	chatisp/internal/loadlocal	0.007s
+ok  	chatisp/internal/media	7.967s
+?   	chatisp/internal/media/httpapi	[no test files]
+?   	chatisp/internal/notifications	[no test files]
+ok  	chatisp/internal/notifications/httpapi	1.998s
+ok  	chatisp/internal/opsalert	0.011s
+ok  	chatisp/internal/outwebhook	45.359s
+ok  	chatisp/internal/platform/auth	6.066s
+ok  	chatisp/internal/platform/config	0.006s
+ok  	chatisp/internal/platform/crypto	0.004s
+ok  	chatisp/internal/platform/db	3.547s
+?   	chatisp/internal/platform/db/dbgen	[no test files]
+ok  	chatisp/internal/platform/httpapi	8.288s
+ok  	chatisp/internal/platform/jobs	4.080s
+ok  	chatisp/internal/platform/logging	0.021s
+ok  	chatisp/internal/platform/mail	0.215s
+ok  	chatisp/internal/platform/metrics	0.037s
+ok  	chatisp/internal/platform/migrate	0.009s
+ok  	chatisp/internal/platform/opsignals	1.957s
+ok  	chatisp/internal/platform/runtime	5.489s
+ok  	chatisp/internal/platform/tenantcache	0.143s
+ok  	chatisp/internal/platform/testdb	15.966s
+ok  	chatisp/internal/platform/urlguard	0.223s
+?   	chatisp/internal/platform/version	[no test files]
+ok  	chatisp/internal/platformusage	2.472s
+ok  	chatisp/internal/presence	2.166s
+?   	chatisp/internal/presence/httpapi	[no test files]
+ok  	chatisp/internal/publicapi	2.403s
+ok  	chatisp/internal/realtime	9.753s
+ok  	chatisp/internal/reports	1.816s
+ok  	chatisp/internal/restoredrill	3.884s
+ok  	chatisp/internal/retention	2.279s
+ok  	chatisp/internal/retention/httpapi	1.951s
+ok  	chatisp/internal/searchplan	3.806s
+ok  	chatisp/internal/sectors	2.330s
+ok  	chatisp/internal/sectors/httpapi	0.009s
+ok  	chatisp/internal/triage	2.678s
+?   	chatisp/internal/triage/httpapi	[no test files]
+ok  	chatisp/internal/upgradetest	1.947s
+FAIL

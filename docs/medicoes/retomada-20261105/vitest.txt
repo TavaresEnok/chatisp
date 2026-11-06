@@ -1,0 +1,25 @@
+
+> chatisp-web@0.1.0 test
+> vitest run
+
+
+ RUN  v5.0.5 /home/enok/srv_projetos/workspace/chat-isp-cursor-integracao-2/web
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+
+ Test Files  61 passed (61)
+      Tests  290 passed (290)
+   Start at  02:29:54
+   Duration  142.99s (tests 42%, environment 40%, import 10%, setup 6%, transform 2%)
+
+Environment  jsdom was created 61 times · 52.43s total, 40% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments

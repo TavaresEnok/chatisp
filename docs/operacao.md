@@ -62,26 +62,30 @@ curl -sS http://127.0.0.1:9090/metrics
 
 Troque o host e a porta se tiver usado as variáveis acima.
 
-## Subir com Docker
+## Subir com Docker (instalação por Compose)
 
-Este host de desenvolvimento não executa esse caminho. Em uma máquina com Docker e Compose:
+Pré-requisitos: Docker com Compose 2.24.4 ou mais novo (por causa de `!override`), ponte de rede padrão com saída para a internet durante o build, `openssl`. Versões **testadas de fato**: Docker 27.5.1 (rootless) com as imagens Debian originais e Docker 20.10.9 com as imagens Alpine de validação. Docker 20.10.10 ou mais novo é **compatibilidade esperada** (corrige o perfil seccomp que nega `clone3`), não testada versão a versão; o 20.10.9 quebra o `apt` do Debian 13, o Node 24 e o `initdb` do `postgres:18.6-trixie`. Prova rápida antes de subir: `docker run --rm debian:13-slim sh -c 'apt-get update >/dev/null && echo ok'`.
 
 ```
-cp deploy/.env.example deploy/.env
-docker compose -f deploy/compose.yaml --env-file deploy/.env up --build
+cp deploy/.env.example deploy/.env      # troque TODOS os placeholders
+docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --build
 ```
 
-O painel com Caddy fica em `https://localhost:8443`. `deploy/.env.example` só tem placeholders. Não grave segredo real no Git.
+Variáveis em `deploy/.env.example`. **O Compose só repassa ao contêiner o que está em `environment:` de `deploy/compose.yaml`**: uma variável presente no `.env` e ausente ali não chega à aplicação. Estão ligadas: banco, chaves de dados, origem do painel (`CHATISP_PANEL_ORIGINS`), SMTP (`CHATISP_SMTP_*`), Meta (`CHATISP_META_*`) e anexos (`CHATISP_ATTACHMENTS_S3_*`). As variáveis `S3_ENDPOINT/S3_REGION/S3_BUCKET` das versões antigas deste Compose **nunca foram lidas pela aplicação** e foram removidas.
 
-Requisitos do host: Docker Engine 20.10.10 ou mais novo (o 20.10.9 nega `clone3` com EPERM e quebra o `apt` do Debian 13 e o Node 24), ponte padrão funcional com saída para a internet durante o build, Compose 2.24.4 ou mais novo. Prova rápida antes de subir: `docker run --rm debian:13-slim sh -c 'apt-get update >/dev/null && echo ok'`.
+O que sobe: PostgreSQL 18.6, Garage 2.5 (nó único, sem redundância de produção), `chatisp-migrate`, `storage-setup` (cria o bucket privado, importa a chave da aplicação e concede leitura e escrita, de forma idempotente), API, worker e Caddy. O painel fica em `https://localhost:8443` com o certificado da CA interna do Caddy; o storage, em `https://storage.localhost:8443` (nome usado nas URLs assinadas). A aplicação confia na CA do storage por `CHATISP_ATTACHMENTS_S3_CA_FILE` (volume `trust`); a verificação de TLS nunca é desligada.
+
+Padrões do Compose: `CHATISP_ENV=production` (a aplicação então recusa simulação da Meta); Meta **desabilitada** (`CHATISP_META_OFFICIAL_DISPATCH=false`: o envio falha antes da rede com `driver_indisponivel`, o painel avisa, o recebimento e o resto seguem); métricas só na rede interna (porta 9090 sem publicação, `/metrics` responde 404 no acesso público); HTTPS só em `127.0.0.1`. Para o envio oficial, `CHATISP_META_OFFICIAL_DISPATCH=true` exige `CHATISP_META_GRAPH_VERSION` e `CHATISP_META_PRIMARY_DOC_URL` (decisão D2-03: o repositório não escolhe versão). Para domínio próprio com certificado público, `docs/implantacao.md`.
 
 Primeiro acesso, uma vez, numa instalação vazia (a senha vai pela entrada padrão e não aparece em argumento, variável nem log):
 
 ```
-printf '%s\n' "$SENHA_DO_ADMIN" | docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm -T chatisp-migrate bootstrap -email admin@provedor.example -superadmin
+printf '%s\n' "$SENHA_DO_ADMIN" | docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm -T chatisp-migrate bootstrap -email admin@provedor.example -superadmin -storage-bytes 10737418240
 ```
 
-O comando cria o primeiro provedor e o administrador (com `-superadmin`, também o operador da plataforma). Repetido com o mesmo e-mail, não altera nada; com outro e-mail numa instalação povoada, recusa. Entre em `https://localhost:8443/entrar`; o MFA é exigido no primeiro acesso. Provedores seguintes: o superadmin cria em Configurações › Provedores e usa "Convidar administrador" (exige SMTP em `CHATISP_SMTP_*`; o token vai só por e-mail). `chatisp dev-prepare` é do ambiente de desenvolvimento e não deve ser apontado para o banco do Compose.
+`-storage-bytes` grava `max_storage_bytes` do plano: **sem limite de armazenamento no plano os anexos são recusados** (409), porque não há padrão comercial. O comando cria o primeiro provedor e o administrador; com `-superadmin` a mesma conta também opera a plataforma, mas **superadmin não opera atendimento por desenho** (sem acesso livre às conversas): para atender, convide um administrador de provedor. Repetido com o mesmo e-mail não altera nada; com outro e-mail numa instalação povoada, recusa. O MFA é exigido no primeiro acesso. Provedores seguintes: o superadmin cria em Configurações › Provedores e usa "Convidar administrador" (exige SMTP em `CHATISP_SMTP_*`; o e-mail leva o link do painel e o token vai só por e-mail). Recuperação de senha também usa o SMTP. `chatisp dev-prepare` é do ambiente de desenvolvimento e não deve ser apontado para o banco do Compose.
+
+Backup e restauração: `docs/backup.md`.
 
 ## O que a operação local não faz
 
@@ -91,18 +95,30 @@ O comando cria o primeiro provedor e o administrador (com `-superadmin`, também
 - Não publica capacidade. O ensaio local é `./scripts/ops-load-local.sh`. A revisão operacional é `./scripts/ops-security-check.sh`.
 - O ensaio de restore continua `go run ./cmd/restoredrill` a partir de `backend/`, só com socket de cluster descartável, como em `docs/contracts/m8-restore-drill.md`. O sucesso grava `metrics.prom` no diretório temporário do dump.
 
-## Validar Compose e Caddy em ambiente isolado
+## Validar o pacote instalado em ambiente isolado
 
 ```
 ./scripts/compose-validate.sh
 ```
 
-O script usa projeto, volumes, rede e etiquetas de imagem próprios (`chatisp-validate-<pid>`), segredos descartáveis gerados na hora, porta de loopback livre para o Caddy, e se desfaz no fim (`down -v`). Não toca em outros projetos. Requer Docker com a ponte `docker0` e versão que rode imagens Debian 13/Node 24 (20.10.10 ou mais nova) e Compose 2.24.4 ou mais novo (por causa de `!override`).
+Projeto, volumes, rede, portas de loopback e etiquetas de imagem próprios (`chatisp-validate-<pid>`), segredos descartáveis gerados na hora; desfaz tudo no fim (`down -v` e remoção das imagens do próprio projeto). Não toca em outros projetos e não faz limpeza global. Requer Node 24 com Playwright (`web/node_modules`) e o Chromium já provisionado.
 
-Em host com Docker 20.10.9 (seccomp nega `clone3`), valide com bases musl, que não dependem disso:
+Prova, em ordem: build; subida com healthchecks; `storage-setup` idempotente; `bootstrap`; jornada no navegador (primeiro acesso e MFA, convite de administrador de outro provedor com e-mail e link, aceite, recuperação de senha, falha de entrega do SMTP, cookies/CSRF/Origin/WebSocket, canal Meta, conversa pelo worker, atualização em tempo real, anexo no Garage por TLS com URL assinada e isolamento entre provedores); envio Meta desabilitado de forma explícita; métricas privadas e portas publicadas; storage parado e de volta; reinício de todos os serviços com persistência; encerramento sem sobras.
 
-```
-CHATISP_VALIDATE_ALPINE=1 ./scripts/compose-validate.sh
-```
+Doubles identificados: SMTP descartável (`backend/cmd/smtpsink`) e o remetente do webhook da Meta (a própria jornada, assinando com o segredo do app que cadastra). O resto são os serviços reais.
 
-Esse modo usa `deploy/validacao/Dockerfile.alpine` e `postgres:18.6-alpine`, build na rede do host e uma sub-rede /24 própria (`CHATISP_VALIDATE_SUBNET` para escolher). Ele prova o Compose, as migrações, o HTTPS do Caddy, o bootstrap, o login, o reinício e o encerramento, mas não as imagens Debian de `deploy/Dockerfile`. Verde em 05/11/2026 neste host. A variante Debian (sem a variável) ficou verde no mesmo dia num Docker 27.5.1 rootless descartável; histórico, defeitos achados (Caddyfile sem nome de host) e logs em `docs/medicoes/verificacao-entrega-20261105.md` e `docs/medicoes/docker-20261105/`.
+Variações:
+
+- `CHATISP_VALIDATE_ALPINE=1`: Docker 20.10.9 sem `docker0` e com seccomp que nega `clone3`. Usa `deploy/validacao/Dockerfile.alpine`, `postgres:18.6-alpine`, build na rede do host e sub-rede /24 própria (`CHATISP_VALIDATE_SUBNET`). Prova o Compose, mas **não as imagens Debian** de `deploy/Dockerfile`.
+- `CHATISP_VALIDATE_BACKUP=1`: acrescenta pgBackRest, backup completo, exclusão de privacidade depois do backup, perda dos volumes de dados e restauração (`docs/backup.md`).
+- Sem variáveis, num Docker que rode as imagens Debian: valida o pacote como é entregue.
+
+Execuções registradas em `docs/medicoes/docker-20261105/` e `docs/medicoes/verificacao-entrega-20261105.md`.
+
+## Atualização da retomada de 05/11/2026
+
+Ao criar o provedor, o formulário permite definir o limite de armazenamento em bytes; sem valor, uploads novos continuam recusados. Configure setor, vínculo da caixa e setor padrão antes de receber mensagens: o worker recusa distribuição sem setor padrão. O superadmin convida o administrador e não recebe permissão de atendimento.
+
+Links diretos e recarregamento aguardam a restauração da sessão antes dos redirecionamentos protegidos. Catálogo Meta real é instalado somente com envio oficial autorizado e versão explícita; o modo desabilitado não faz chamadas Graph. Retenção oferece preview limitado, sem executor de expurgo. Suspensão transitória usa flags/limites explícitos descritos em `docs/contracts/suspended-ingress.md`.
+
+Evidências desta rodada e diferenças em relação às provas anteriores: `docs/medicoes/retomada-20261105/relatorio.md`. Para backup/restore com chaves realmente perdidas e alertas parametrizados, use `docs/backup.md`. Configuração de produção preparada não é produção implantada.

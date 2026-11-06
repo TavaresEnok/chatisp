@@ -183,3 +183,7 @@ Modo `-scan module` com padrão não é aceito pelo v1.9.0 ("patterns are not ac
 ## Reexecução
 
 Quarta parte (imagens Debian): `compose-validate.sh` original no Docker 27.5.1 rootless, verde. Terceira parte (validação do Compose): `go test` de `cmd/chatisp` (teste do Caddyfile) e seis execuções do `compose-validate.sh`, a última verde. Primeira parte (commit `89a95fa`): só sondas Docker, verificação dos contêineres e imagens do host, govulncheck (símbolo e pacote) e `go list` do grafo; nenhum código de produção mudou. Segunda parte (primeiro usuário): código mudou em `auth`, `httpapi`, `cmd/chatisp` e no painel. Foram reexecutados a suíte Go completa, `scripts/lint.sh`, o Vitest completo e os E2E `ux` e `m7-ops`. Os E2E `m3b`, `m4a` e `m4b-m6` não tocam essas áreas e não foram repetidos.
+
+## Retomada posterior à verificação acima
+
+As conclusões antigas de ausência de trabalho local e completude dos 33 itens externos foram revistas. O relatório atual fica em [retomada](retomada-20261105/relatorio.md). Foram encontradas lacunas de catálogo Meta, composição/restore de backup, redação de privacidade, sessão ao recarregar, suspensão transitória e alertas; o trabalho novo e sua evidência são separados da prova Debian anterior. A matriz atual reclassifica expurgo como parcial por executor ausente, sem confundi-lo com homologação.

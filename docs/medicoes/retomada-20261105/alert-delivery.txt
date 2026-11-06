@@ -1,0 +1,25 @@
+Checking '/config/off.json'  SUCCESS
+Found:
+ - global config
+ - route
+ - 0 inhibit rules
+ - 1 receivers
+ - 0 templates
+
+Checking '/config/smtp.json'  SUCCESS
+Found:
+ - global config
+ - route
+ - 0 inhibit rules
+ - 1 receivers
+ - 0 templates
+
+Checking '/config/webhook.json'  SUCCESS
+Found:
+ - global config
+ - route
+ - 0 inhibit rules
+ - 1 receivers
+ - 0 templates
+
+Alertmanager: off/SMTP TLS/webhook configs validated; real synthetic webhook delivered locally with installation identity

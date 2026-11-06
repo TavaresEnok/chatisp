@@ -1,0 +1,3 @@
+  SUCCESS
+
+8 cenários promtool: ausência/atraso de banco, anexos, chaves e ledger; outra instalação saudável não mascara a falha

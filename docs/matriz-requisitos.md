@@ -1,8 +1,10 @@
 # Matriz de requisitos V1 e V1 simples
 
-Contagem: Implementado e verificado: 207; Implementado, aguardando homologação externa: 33; Não implementado: 0; Parcial, com lacuna concreta: 17.
+Contagem: Implementado e verificado: 206; Implementado, aguardando homologação externa: 32; Parcial, com lacuna concreta: 19; Não implementado: 0. Total: 257.
 
 Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Implementado e verificado**, **Implementado, aguardando homologação externa**, **Parcial, com lacuna concreta**, **Não implementado**, e **A conferir**: o plano e as entregas citam o requisito, mas esta rodada ainda não confrontou código e teste. "A conferir" não é conclusão. Foram classificadas as linhas com estado explícito em documento de entrega e as de M1 a M8 conferidas em 04/11/2026 contra nomes de teste existentes e a suíte Go completa verde (`go test ./...`, código 0), sem reexecutar cada teste isoladamente; nenhuma foi marcada como verificada por existência de código.
+
+Revisão de 05/11/2026 na retomada: recusa de expurgo não prova executor; alertas no painel não provam entrega externa. Evidências atuais e limites em `docs/medicoes/retomada-20261105/relatorio.md`; afirmações históricas são mantidas como histórico, não como conclusão desta rodada.
 
 | Requisito | Marco | Tipo | Estado | Evidência / documentos que citam |
 | --- | --- | --- | --- | --- |
@@ -137,8 +139,8 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 02-receber-localizacao | M4 | V1 | Implementado, aguardando homologação externa | TestInboundReactionLocationAndVCard com stand-in; sem Meta real |
 | 02-citacao | M4 | V1 | Implementado e verificado | quoteTarget ignora o UUID zero (model.ts) + quote-target.test.ts; citação no envio: TestSendMediaCitationOverlapsInboundCommit; E2E m4b-m6 de 05/11/2026 |
 | 02-janela | M4 | V1 | Implementado e verificado | features/channelpolicy/channel-policy.test.tsx; WindowIndicator em conversation-workspace.tsx |
-| 02-biblioteca-templates | M4 | V1 | Implementado, aguardando homologação externa | TestDispatchTemplateReachesIdentifiedDriver, TestPolicyPostgres, TestListTemplatesDoesNotTrustCacheWithoutDatabase; catálogo simulado, sem Meta real |
-| 02-sync-templates | M4 | V1 | Implementado, aguardando homologação externa | TestDispatchTemplateReachesIdentifiedDriver, TestPolicyPostgres, TestListTemplatesDoesNotTrustCacheWithoutDatabase; catálogo simulado, sem Meta real |
+| 02-biblioteca-templates | M4 | V1 | Implementado, aguardando homologação externa | driver Graph real ligado ao runtime oficial; TestMetaCatalog*, TestPolicyPostgres e revalidação de geração; sem autorização/credencial/versionamento externo não há chamada. Homologação real D2-03 pendente |
+| 02-sync-templates | M4 | V1 | Implementado, aguardando homologação externa | driver Graph real ligado ao runtime oficial; TestMetaCatalog*, TestPolicyPostgres e revalidação de geração; sem autorização/credencial/versionamento externo não há chamada. Homologação real D2-03 pendente |
 | 02-envio-template | M4 | V1 | Implementado, aguardando homologação externa | TestDispatchTemplateReachesIdentifiedDriver, TestPolicyPostgres, TestListTemplatesDoesNotTrustCacheWithoutDatabase; catálogo simulado, sem Meta real |
 | 02-download-midia | M4 | V1 | Implementado, aguardando homologação externa | Inbound* (TestInboundImageWebhookDownloadIdempotent, TestInboundDocumentTextDownload, TestInboundAudioMP4Download) com stand-in; sem Meta real (D2-03) |
 | 02-consentimento | M4 | V1 | Implementado, aguardando homologação externa | TestDispatchTemplateReachesIdentifiedDriver, TestPolicyPostgres, TestListTemplatesDoesNotTrustCacheWithoutDatabase; catálogo simulado, sem Meta real |
@@ -251,15 +253,15 @@ Gerada em 04/11/2026 a partir das 257 linhas de `docs/plano.md`. Estados: **Impl
 | 09-volume-caixa | M7 | V1 simples | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
 | 09-csv | M7 | V1 simples | Implementado e verificado | reports: TestPersistedCycleMatchesTheClockRules, TestOperationalTimeSubtractsWaitingOnce, TestTransferSplitsTimeAndKeepsBothSectors, TestTagsDoNotEnterThePrimaryTotal, TestMedianIgnoresMissingHumanResponse; attendance-report.test.tsx |
 | 09-alerta-espera | M7 | V1 simples | Implementado e verificado | TestUrgentQueueDoesNotRaiseTheWaitAlert; queue-wait-alert.test.tsx |
-| 12-retencao | M7 | V1 simples | Implementado, aguardando homologação externa | perfil por provedor, classes e recusa registrada implementados; o plano diz "prazo por provedor depois de D2-06" e "expurgo automático permanece desligado até esse perfil": TestPurgeRefusesAndDeletesNothing. Falta a decisão D2-06 para habilitar a exclusão |
+| 12-retencao | M7 | V1 simples | Parcial, com lacuna concreta | perfil por classe, recusa auditada e preview limitado verificados (TestPreviewPurge, TestPurgeRefusesAndDeletesNothing); executor de expurgo não implementado. D2-06 deve definir elegibilidade e preservação por classe antes de implementar e habilitar; não é somente homologação |
 | 12-exportacao-contato | M7 | V1 simples | Implementado e verificado | TestPrivacyExportAndDeleteKeepsProtocol, TestPrivacyDeleteRollsBackWhenObjectRemains, TestHTTPPrivacyExportAndDeletion |
 | 12-historico-demandas | M7 | V1 simples | Implementado e verificado | TestExportDemandsKeepsProtocolAndHidesOtherSectors |
 | 12-logo | M7 | V1 simples | Implementado e verificado | branding: TestNormalizeRejectsActiveContentMisleadingTypeAndLimits, TestHTTPRolesMFAOriginAndImageHeaders; E2E M7 de 04/11 |
 | 12-limites-plano | M7 | V1 simples | Implementado e verificado | TestPlanLimitsBlockNewRowsAndKeepHistory |
 | 12-superadmin | M7 | V1 | Implementado e verificado | TestAdminSeesOwnTenantAudit, TestUsageHidesMessageBodyAndRejectsProviderRoles; platform/httpapi/panel_test.go. 05/11/2026: primeiro superadmin por `chatisp bootstrap -superadmin` (TestBootstrapFirstAdminOnEmptyInstallation, TestBootstrapResumesInterruptedRun) e primeiro admin de provedor novo por convite de plataforma (TestSuperadminInvitesFirstProviderAdmin, TestProviderAdminInviteRefusals, roles_test.go), sem SQL |
 | 12-criar-suspender | M7 | V1 | Implementado e verificado | platform/db/tenant_status_gate_test.go; panel_test.go |
-| 14-retencao | M7 | V1 simples | Implementado, aguardando homologação externa | mesma situação de 12-retencao: classes conteúdo, mídia, envelope, log e job registradas e expurgo recusado sem apagar nada; exclusão aguarda D2-06 |
-| 14-suspensao | M7 | V1 | Implementado e verificado | platform/db/tenant_status_gate_test.go; panel_test.go |
-| 14-backup | M8 | V1 | Implementado, aguardando homologação externa | restoredrill: TestDrillRestoresDumpAndReapplies, TestRecoveredRingDecryptsAfterSourceIsGone, TestRestoreObjectsAfterSourceIsGone passam em descartável; backup de produção, RPO e RTO não medidos (D2-07) |
+| 14-retencao | M7 | V1 simples | Parcial, com lacuna concreta | perfil por classe, recusa auditada e preview limitado verificados (TestPreviewPurge, TestPurgeRefusesAndDeletesNothing); executor de expurgo não implementado. D2-06 deve definir elegibilidade e preservação por classe antes de implementar e habilitar; não é somente homologação |
+| 14-suspensao | M7 | V1 | Implementado e verificado | TestSuspendedIngress*: limite explícito por quantidade/bytes, replay, concorrência, isolamento e retenção em quarentena sem bot após reativação; flags Compose desligadas por padrão; números e conciliação operacional D2-08 |
+| 14-backup | M8 | V1 | Implementado, aguardando homologação externa | pgBackRest/WAL, espelho sem sobrescrita, livros íntegros e chaves recuperadas com gate AES-GCM; ver relatório em docs/medicoes/retomada-20261105/relatorio.md. Destino independente, cofre, ensaio operacional, RPO/RTO/PITR continuam pendentes |
 | 14-carga | M8 | V1 | Parcial, com lacuna concreta | ensaio local existe (loadlocal) e se recusa como capacidade; k6 depende do perfil D2-07 |
-| 14-metricas-alertas | M8 | V1 | Implementado e verificado | opsignals/metrics, opsalert; /metrics privado verificado no E2E M7 de 04/11 |
+| 14-metricas-alertas | M8 | V1 | Implementado, aguardando homologação externa | métricas privadas, opsalert, 8 cenários promtool de backup e 7 operacionais (filas, coleta, canais, uncertain, webhook, disponibilidade), entrega sintética real Alertmanager. Regras e destino opt-in parametrizados; limiares/destino e recebimento operacional reais D2-08 pendentes |

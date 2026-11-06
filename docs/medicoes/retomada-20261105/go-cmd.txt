@@ -1,0 +1,1 @@
+ok  	chatisp/cmd/chatisp	29.929s

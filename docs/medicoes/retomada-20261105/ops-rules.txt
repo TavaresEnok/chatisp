@@ -1,0 +1,3 @@
+  SUCCESS
+
+7 cenários de alertas operacionais avaliados; off/configuração incompleta e isolamento entre instalações conferidos

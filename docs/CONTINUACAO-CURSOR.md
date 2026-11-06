@@ -247,3 +247,21 @@ Atualização (05/11/2026, 15:33): Compose validado de ponta a ponta neste host 
 Atualização (05/11/2026, 16:10): com autorização do usuário, `./scripts/compose-validate.sh` original (imagens Debian, `postgres:18.6-trixie`) passou num Docker 27.5.1 rootless descartável, sem mexer no Docker compartilhado; ambiente e pacotes auxiliares removidos depois. Cache de build de 05/11 removido por ID (2,1 GB → 867 kB). 13-self-host e 13-compose verificados. Matriz: 207 verificados, 33 aguardando homologação, 17 parciais; os 17 dependem de D2-01/D2-02 (ERP), D2-04 (Evolution) e D2-07 (carga).
 
 Próxima tarefa: nenhuma local. Aguardar as decisões externas D2-01, D2-02, D2-03, D2-04, D2-06 e D2-07 (`docs/perguntas.md`).
+
+## Retomada solicitada em 05/11/2026 — estado revisto
+
+A frase histórica "nenhuma tarefa local" está revogada. Base desta retomada: `b43edbb`, branch e worktree `continuation/cursor-integracao-2` / `chat-isp-cursor-integracao-2`. Fontes não versionadas preservadas em snapshot privado sem credenciais antes de editar. Não se usou a pasta antiga nem se alterou Paseo, Agent Control ou outros projetos.
+
+Correções e provas estão consolidadas em `docs/medicoes/retomada-20261105/relatorio.md`, `docs/backup.md`, `docs/implantacao.md` e `docs/dependencias-externas.md`. A tabela neste último é a única lista de dependências externas; não confundir código ausente com homologação.
+
+Nesta rodada: espelho append-only e manifesto completo; agendamento executável; volumes por projeto; locks e checksums; recuperação efetiva do anel perdido e autenticação AES-GCM; cobertura banco/objetos; reaplicação idempotente da exclusão e anonimização; associação de objeto registrada ao excluir; redação de conteúdo estruturado/eventos; catálogo Graph ligado ao runtime com flag off; suspensão transitória limitada e quarentena; preview de retenção sem expurgo; recuperação da sessão antes de redirects; limite de storage no formulário; produção sem dependência da CA interna; regras/entrega de alertas opt-in e parametrizadas.
+
+Migrações novas: `00051_privacy_deletion_objects.sql` e `00052_suspended_ingress.sql`. Seus rollbacks recusam descartar registros de recuperação. A base anteriormente existente continua preservada.
+
+Validação: Go amplo (65 pacotes aprovados, fixture novo de cmd corrigido e pacote repetido integralmente com sucesso), vet, lint completo, Vitest 61/290, 16 testes Python, 8 cenários promtool de backup, 7 operacionais e entrega Alertmanager sintética local. A prova Compose nova usa Alpine no Docker 20.10.9 deste host; a execução Debian anterior continua sendo evidência histórica, não verificação do código novo em Debian.
+
+Pendências que permanecem **implementação parcial**: adaptador ERP real e mecanismo de verificação/aprovação sensível dependem do contrato do fornecedor; conector de rede Evolution depende da release/licença/contrato; executor de expurgo depende de regras explícitas por classe e reaplicação completa das exclusões; roteiro de carga depende do perfil/metas. Todas são separadas de credencial, ambiente e autorização de homologação. Nenhum produto 100%, PITR/RPO/RTO nem produção implantada foram declarados.
+
+Resultado final: `CHATISP_VALIDATE_ALPINE=1 CHATISP_VALIDATE_BACKUP=1 ./scripts/compose-validate.sh` passou integralmente com saída 0 no código `bdf7f5e`, depois de `7827a90` (pacote principal). Evidência sem credenciais: `docs/medicoes/retomada-20261105/compose-final.txt`. Perda real de volumes/chaves, restore, MFA, integridade do anexo mantido, ausência do excluído e anonimização preservada foram verificados. Nenhum recurso `chatisp-validate-*` restou (contêiner, volume, rede, etiqueta); caches de build ficaram preservados, sem prune global. O commit que registra esta continuidade e os documentos vem após esses dois commits de código.
+
+Próxima ação exata: consultar `docs/dependencias-externas.md` e obter os contratos/decisões de ERP/verificação, Evolution, retenção por classe e perfil de carga antes de implementar seus executores dependentes. Homologação Meta/SMTP/storage/alertas, destino independente/cofre, domínio/ACME e passagem de operador exigem dados/autorização externos. Manter envio oficial e expurgo desligados e não fazer push/deploy/chamadas reais por conta da conclusão do laboratório.
