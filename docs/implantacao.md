@@ -66,6 +66,8 @@ No perfil direto, configuração validada em sintaxe não comprova emissão púb
 
 ## Instalação existente atrás do proxy TLS
 
+Desde `8150c9b`, o MFA é opcional por decisão do proprietário: ativação em Configurações → Segurança da conta, com QR Code local. Fatores já confirmados continuam exigidos no login. A migração 00057 exige API/worker antigos parados e não permite misturar binários; veja [implantação e provas do MFA opcional](medicoes/mfa-opcional-20261106/relatorio.md).
+
 Não execute um novo bootstrap nem troque o projeto Compose. O controlador privado em `/home/enok/.local/share/chatisp/pronto-hoje-20261106/controle.py` usa, nesta ordem, `compose.yaml`, `compose.local-alpine.yaml`, a rede privada original e `compose.behind-proxy.yaml`, com o mesmo `ambiente.env`. Banco, chaves, credenciais e volumes originais são reutilizados. O nome adicional é `CHATISP_PROXY_SITE_HOST=chatisp.tokstiloesporte.com`.
 
 A primeira origem permitida é `https://chatisp.tokstiloesporte.com`, usada para links de convite e recuperação. A segunda é `https://localhost:8443`, mantida para recuperação no servidor. Cookies continuam `__Host-*`, `Secure`, sem `Domain`, caminho `/`. SMTP permanece desligado: a formação correta de URLs não significa envio de e-mail disponível.

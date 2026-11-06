@@ -1,0 +1,9 @@
+Administrador original: login por senha e painel autenticado, sem cadastro MFA forçado.
+WebSocket autenticado pelo Nginx, com MFA desativado: conectado.
+Configurações → Segurança da conta → ativação voluntária disponível; nenhum segredo ou fator do proprietário foi gerado.
+Certificado público validado pelo Chromium; resolução interna usada, sem prova de conectividade externa.
+Encerramento da sessão de verificação: 204.
+
+Migração instalada: 57. Código: 8150c9b. Cinco serviços saudáveis.
+Administrador original: uma conta, zero fatores confirmados.
+Prova Compose final: chatisp-validate-720729, saída 0, sem recursos remanescentes.
