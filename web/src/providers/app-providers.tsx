@@ -16,8 +16,7 @@ export function AppProviders({ children, client }: AppProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <SessionQuerySync />
-      <SessionLifecycle />
-      {children}
+      <SessionLifecycle>{children}</SessionLifecycle>
     </QueryClientProvider>
   );
 }

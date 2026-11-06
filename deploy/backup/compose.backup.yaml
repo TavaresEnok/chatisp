@@ -1,0 +1,45 @@
+# Backup do PostgreSQL com pgBackRest e arquivamento de WAL, mais os volumes de destino.
+# Uso: docker compose -f deploy/compose.yaml -f deploy/backup/compose.backup.yaml --env-file deploy/.env up -d
+# O repositório do pgBackRest (backup-repo) e o espelho dos anexos (backup-mirror) são volumes
+# SEPARADOS dos dados. Em produção o destino precisa ser independente do servidor: monte outro
+# disco, NFS ou bucket em outro provedor no lugar destes volumes (docs/backup.md).
+#
+# Sem BACKUP_REPO_CIPHER_PASS e BACKUP_RETENTION_FULL o Compose recusa a subida: a senha do
+# repositório e a retenção são decisões do provedor (D2-07), não há valor padrão.
+x-pgbackrest-env: &pgbackrest-env
+  PGBACKREST_REPO1_CIPHER_PASS: ${BACKUP_REPO_CIPHER_PASS:?defina BACKUP_REPO_CIPHER_PASS (guarde-a fora do servidor)}
+  PGBACKREST_REPO1_RETENTION_FULL: ${BACKUP_RETENTION_FULL:?defina BACKUP_RETENTION_FULL (decisão do provedor, sem padrão)}
+
+services:
+  postgres:
+    # O Compose resolve caminhos relativos a partir do diretório do PRIMEIRO arquivo (deploy/).
+    build:
+      context: ./backup
+      dockerfile: Dockerfile.postgres
+    image: chatisp-postgres-backup:local
+    pull_policy: never
+    # O primeiro item é o $0 do "sh -c" do entrypoint; o restante vai ao postgres.
+    command:
+      - chatisp-postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=pgbackrest --stanza=chatisp archive-push %p
+      - -c
+      - archive_timeout=${BACKUP_ARCHIVE_TIMEOUT:-0}
+    environment:
+      <<: *pgbackrest-env
+    volumes:
+      - backup-repo:/backup/repo
+      - ./backup/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+
+  chatisp-migrate:
+    volumes:
+      - trust:/trust:ro
+      - backup-mirror:/mirror
+
+volumes:
+  backup-repo:
+  backup-mirror:

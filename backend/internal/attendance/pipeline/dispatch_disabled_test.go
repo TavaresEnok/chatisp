@@ -14,7 +14,7 @@ import (
 func TestDispatchFailsClearlyWhenMetaDispatchIsDisabled(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	st := seedTenantWithMeta(t, "disabled-dispatch-app", "disabled-dispatch-waba", "5511988880777", "disabled-token", "disabled-secret")
+	st := seedTenantWithMeta(t, "disabled-dispatch-app", "disabled-dispatch-waba", "5511988880767", "disabled-token", "disabled-secret")
 	attempt, _ := createTestAttempt(t, st, "sem autorização de envio", "disabled-dispatch")
 	factory, err := NewDriverFactory(DriverFactoryConfig{GraphVersion: "v99.0", PrimaryDocURL: "https://developers.facebook.com/docs/whatsapp/cloud-api/messages"})
 	if err != nil {

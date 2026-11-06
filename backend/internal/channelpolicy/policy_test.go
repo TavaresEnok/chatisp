@@ -287,7 +287,11 @@ func TestPolicyPostgres(t *testing.T) {
 			}
 			select {
 			case e := <-done:
-				if e != nil {
+				if tc.operation == "sync apply" {
+					if !errors.Is(e, cp.ErrStaleCatalog) {
+						t.Fatalf("rotation must fence stale catalog: %v", e)
+					}
+				} else if e != nil {
 					t.Fatal(e)
 				}
 			case <-c.Done():
@@ -474,6 +478,30 @@ func TestPolicyPostgres(t *testing.T) {
 	dispatch.Kind = "template"
 	dispatch.TemplateID = "welcome"
 	template := cp.Template{ExternalID: "welcome", Name: "welcome", Language: "pt_BR", Category: "UTILITY", State: "APPROVED", Components: json.RawMessage(`[]`)}
+	t.Run("catalog factory uses authorized tenant connector and generation", func(t *testing.T) {
+		scoped := svc
+		called := false
+		scoped.DriverFor = func(c context.Context, scope cp.CatalogScope) (cp.CatalogDriver, error) {
+			called = true
+			var current int64
+			run(func(c context.Context, tx pgx.Tx) error {
+				return tx.QueryRow(c, `SELECT version::bigint FROM channel_connectors WHERE tenant_id=$1 AND id=$2`, tenant, connector).Scan(&current)
+			})
+			if scope.TenantID != tenant || scope.ConnectorID != connector || scope.Version != current || scope.RemoteWABA == "" {
+				t.Fatalf("invalid authorized scope: %+v", scope)
+			}
+			return fixtureDriver{[]cp.Template{template}}, nil
+		}
+		if err := scoped.SyncTemplates(ctx, p, inbox); err != nil || !called {
+			t.Fatalf("factory called=%v err=%v", called, err)
+		}
+		called = false
+		denied := p
+		denied.TenantID = uuid.New()
+		if err := scoped.SyncTemplates(ctx, denied, inbox); err == nil || called {
+			t.Fatalf("unauthorized factory called=%v err=%v", called, err)
+		}
+	})
 	svc.Driver = cp.FakeCatalog{Items: []cp.Template{template}}
 	if e = svc.SyncTemplates(ctx, p, inbox); e != nil {
 		t.Fatal(e)

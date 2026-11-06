@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -83,11 +84,12 @@ func (s Service) ListTemplates(ctx context.Context, p sectors.Principal, inbox u
 // Supervisors can inspect/use the catalog but cannot configure or synchronize the provider.
 // A missing driver, or the zero fake catalog, is refused before any reservation or delete.
 func (s Service) SyncTemplates(ctx context.Context, p sectors.Principal, inbox uuid.UUID) error {
-	if s.DB == nil || s.Driver == nil || unconfiguredCatalog(s.Driver) {
+	if s.DB == nil || (s.DriverFor == nil && (s.Driver == nil || unconfiguredCatalog(s.Driver))) {
 		return ErrUnsupported
 	}
 	var waba uuid.UUID
 	var remote string
+	var scope CatalogScope
 	authorize := func(ctx context.Context, tx pgx.Tx) error {
 		c, e := loadChannel(ctx, tx, p, inbox)
 		if e != nil {
@@ -102,8 +104,20 @@ func (s Service) SyncTemplates(ctx context.Context, p sectors.Principal, inbox u
 		if waba != uuid.Nil && waba != c.waba {
 			return sectors.ErrForbidden
 		}
-		waba = c.waba
-		return tx.QueryRow(ctx, `SELECT waba_id FROM meta_wabas WHERE tenant_id=$1 AND id=$2`, p.TenantID, waba).Scan(&remote)
+		var currentRemote, versionText string
+		if e := tx.QueryRow(ctx, `SELECT w.waba_id,cc.version FROM meta_wabas w JOIN channel_connectors cc ON cc.tenant_id=w.tenant_id AND cc.id=$3 WHERE w.tenant_id=$1 AND w.id=$2`, p.TenantID, c.waba, c.connector).Scan(&currentRemote, &versionText); e != nil {
+			return e
+		}
+		version, e := strconv.ParseInt(versionText, 10, 64)
+		if e != nil || version < 1 {
+			return ErrInvalid
+		}
+		current := CatalogScope{TenantID: p.TenantID, ConnectorID: c.connector, Version: version, RemoteWABA: currentRemote}
+		if scope.ConnectorID != uuid.Nil && scope != current {
+			return ErrStaleCatalog
+		}
+		scope, waba, remote = current, c.waba, currentRemote
+		return nil
 	}
 	var generation int64
 	if e := s.DB.WithTenantTx(ctx, p.TenantID, func(ctx context.Context, tx pgx.Tx) error {
@@ -114,7 +128,18 @@ func (s Service) SyncTemplates(ctx context.Context, p sectors.Principal, inbox u
 	}); e != nil {
 		return e
 	}
-	items, e := s.Driver.Templates(ctx, remote)
+	driver := s.Driver
+	if s.DriverFor != nil {
+		var e error
+		driver, e = s.DriverFor(ctx, scope)
+		if e != nil {
+			return e
+		}
+	}
+	if driver == nil || unconfiguredCatalog(driver) {
+		return ErrUnsupported
+	}
+	items, e := driver.Templates(ctx, remote)
 	if e != nil {
 		return errors.New("template driver failed")
 	}
@@ -146,7 +171,7 @@ func (s Service) SyncTemplates(ctx context.Context, p sectors.Principal, inbox u
 			return e
 		}
 		source := "driver"
-		if s.Driver.IsFake() {
+		if driver.IsFake() {
 			source = "fake"
 		}
 		if _, e = tx.Exec(ctx, `DELETE FROM wa_templates WHERE tenant_id=$1 AND waba_id=$2`, p.TenantID, waba); e != nil {

@@ -141,8 +141,8 @@ export async function loadPlatformAccess(): Promise<PlatformAccess> {
   return { allowed: true, tenants: body.tenants ?? [] };
 }
 
-export async function createProvider(timezone: string) {
-  const result = await api.POST("/api/platform/tenants", { body: { timezone } });
+export async function createProvider(timezone: string, storageBytes?: number) {
+  const result = await api.POST("/api/platform/tenants", { body: { timezone, ...(storageBytes === undefined ? {} : { limits: { max_storage_bytes: storageBytes } }) } });
   return unwrap(result);
 }
 

@@ -11,3 +11,6 @@ build/
 coverage/
 *.log
 .paseo-*
+
+__pycache__/
+*.pyc

@@ -448,11 +448,14 @@ type CredentialSecret struct {
 }
 
 type DeletionRecord struct {
-	ID         uuid.UUID
-	TenantID   uuid.UUID
-	Subject    string
-	SubjectID  uuid.UUID
-	RecordedAt pgtype.Timestamptz
+	ID            uuid.UUID
+	TenantID      uuid.UUID
+	Subject       string
+	SubjectID     uuid.UUID
+	RecordedAt    pgtype.Timestamptz
+	ObjectKey     *string
+	ObjectVersion *string
+	ObjectBytes   *int64
 }
 
 type DispatchPolicyDecision struct {
@@ -1022,6 +1025,21 @@ type Session struct {
 	AbsoluteExpiresAt pgtype.Timestamptz
 	RevokedAt         pgtype.Timestamptz
 	Assurance         string
+}
+
+type SuspendedIngressAlert struct {
+	TenantID         uuid.UUID
+	LastSeenAt       pgtype.Timestamptz
+	RejectedCount    int64
+	AdmissionBlocked bool
+}
+
+type SuspendedIngressHold struct {
+	TenantID   uuid.UUID
+	AppID      string
+	BodySha256 []byte
+	BodyBytes  int64
+	HeldAt     pgtype.Timestamptz
 }
 
 type Tenant struct {

@@ -18,6 +18,7 @@ const (
 	// SignalWebhookIncomplete é um item da fila webhook_items ainda pending
 	// além do limite gravado.
 	SignalWebhookIncomplete = "webhook_incomplete"
+	SignalSuspendedIngress  = "suspended_ingress"
 
 	// MinAgeSeconds e MaxAgeSeconds limitam o limiar configurável. Não são
 	// capacidade de atendimento.
@@ -68,10 +69,12 @@ type WebhookFact struct {
 
 // Facts reúne as leituras de uma atualização.
 type Facts struct {
-	Jobs         []JobFact
-	Connectors   []ConnectorFact
-	Webhooks     []WebhookFact
-	WebhookQueue bool
+	Jobs                      []JobFact
+	Connectors                []ConnectorFact
+	Webhooks                  []WebhookFact
+	WebhookQueue              bool
+	SuspendedIngress          bool
+	SuspendedAdmissionBlocked bool
 }
 
 // Alert é o registro visível ao admin. Não há campo de mensagem, documento ou segredo.
@@ -111,6 +114,13 @@ var openJobStates = map[string]struct{}{
 // viram rótulo genérico, sem CPF, telefone ou texto livre.
 func Derive(limits Limits, facts Facts) []Alert {
 	out := make([]Alert, 0)
+	if facts.SuspendedIngress {
+		label := "Entrada recebida durante suspensão; conciliação manual necessária"
+		if facts.SuspendedAdmissionBlocked {
+			label = "Entrada recusada: retenção de suspensão indisponível ou esgotada; revisar admissão"
+		}
+		out = append(out, Alert{Signal: SignalSuspendedIngress, SubjectKey: "suspension", Label: label})
+	}
 	if limits.JobAge > 0 {
 		for _, job := range facts.Jobs {
 			if _, open := openJobStates[job.State]; !open || job.Age <= limits.JobAge || job.ID <= 0 {
@@ -194,7 +204,7 @@ func closed(value string, allowed map[string]struct{}, fallback string) string {
 
 func acceptable(alert Alert) bool {
 	switch alert.Signal {
-	case SignalJobAge, SignalConnectorDisconnected, SignalWebhookIncomplete:
+	case SignalJobAge, SignalConnectorDisconnected, SignalWebhookIncomplete, SignalSuspendedIngress:
 	default:
 		return false
 	}

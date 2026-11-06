@@ -1,0 +1,12 @@
+# Exemplo de cadência, NÃO decisão de RPO: ajuste ao que o provedor definir na D2-07.
+# Ative com: systemctl enable --now chatisp-backup-incr.timer
+[Unit]
+Description=Agenda o backup incr do Chat ISP
+
+[Timer]
+OnCalendar=Mon..Sat *-*-* 02:00:00
+Persistent=true
+Unit=chatisp-backup@incr.service
+
+[Install]
+WantedBy=timers.target

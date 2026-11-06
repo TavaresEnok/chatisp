@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { currentCsrfToken, setCsrfToken, setSessionLossHandler } from "@/api/client";
 import { loadCurrentSession, principalFromSession } from "@/api/panel";
 import { clearBrowserStorage } from "@/lib/browser-storage";
 import { queryKeys } from "@/lib/query-keys";
 import { useSessionStore } from "@/stores/session-store";
 
-export function SessionLifecycle() {
+export function SessionLifecycle({ children }: { children?: ReactNode }) {
   const queryClient = useQueryClient();
   const principal = useSessionStore((state) => state.principal);
   const endedReason = useSessionStore((state) => state.endedReason);
@@ -32,7 +32,7 @@ export function SessionLifecycle() {
     };
   }, [queryClient]);
 
-  useQuery({
+  const restoration = useQuery({
     queryKey: queryKeys.panelSession(),
     enabled: principal === null && endedReason === null,
     queryFn: async () => {
@@ -60,5 +60,9 @@ export function SessionLifecycle() {
     },
   });
 
-  return null;
+  // Protected routes must see the restored principal before evaluating redirects.
+  if (principal === null && endedReason === null && restoration.isPending && currentCsrfToken() !== null) {
+    return <p role="status">Verificando sessão…</p>;
+  }
+  return <>{children}</>;
 }

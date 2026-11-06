@@ -98,6 +98,14 @@ func (h *ingressHandler) ExpandIngress(ctx context.Context, deliveryID uuid.UUID
 		quarantineCount := 0
 
 		for _, item := range items {
+			retained, err := retainSuspendedItem(ctx, tx, deliveryID, item)
+			if err != nil {
+				return err
+			}
+			if retained {
+				quarantineCount++
+				continue
+			}
 			if item.Kind == metacloud.ItemNumberLimit {
 				reason, err := routeNumberLimit(ctx, tx, deliveryID, item)
 				if err != nil {

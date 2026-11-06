@@ -1,0 +1,22 @@
+# Contexto dos builds do Compose: só o que os Dockerfiles copiam (web/, backend/, deploy/Caddyfile).
+.git
+.github
+.tools
+.tmp
+.npm-cache
+.paseo-build-tmp
+docs
+load
+scripts
+web/node_modules
+web/dist
+web/playwright-report
+backend/tools
+**/*.log
+**/.DS_Store
+
+**/.env
+**/.env.*
+!**/.env.example
+**/__pycache__
+**/*.pyc

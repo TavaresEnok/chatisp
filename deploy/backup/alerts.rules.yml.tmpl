@@ -1,0 +1,63 @@
+# Regras do Prometheus para ausência e atraso de componentes obrigatórios do backup (postgres,
+# attachments, keys e ledger). Renderize com ./render-alerts.sh.
+#
+# Atenção: a idade da última execução periódica (BACKUP_MAX_AGE_SECONDS / BACKUP_MAX_LEDGER_AGE_SECONDS)
+# NÃO equivale automaticamente ao RPO:
+#   - banco (PostgreSQL): depende do backup base e do arquivamento contínuo de WAL;
+#   - anexos: objetos gravados após o último attachments-backup não estão no espelho;
+#   - chaves: uma rotação de CHATISP_DATA_KEYS exige novo backup de chaves imediato;
+#   - livro de exclusões (ledger): exclusões de privacidade após a última exportação do ledger e
+#     fora do WAL arquivado não seriam reaplicadas na restauração.
+#
+# As regras preservam o rótulo installation para que um servidor saudável na agregação central
+# nunca esconda outro servidor sem sinal ou atrasado.
+groups:
+  - name: chatisp-backup-__BACKUP_INSTALLATION__
+    rules:
+      - alert: ChatISPBackupAtrasado
+        expr: |
+          (time() - min by (installation, kind) (chatisp_backup_last_success_timestamp_seconds{installation="__BACKUP_INSTALLATION__",kind=~"postgres|attachments|keys"}) > __BACKUP_MAX_AGE_SECONDS__)
+          or
+          (time() - min by (installation, kind) (chatisp_backup_last_success_timestamp_seconds{installation="__BACKUP_INSTALLATION__",kind="ledger"}) > __BACKUP_MAX_LEDGER_AGE_SECONDS__)
+        for: 5m
+        labels:
+          severity: warning
+          installation: "__BACKUP_INSTALLATION__"
+        annotations:
+          summary: "Componente de backup {{ $labels.kind }} da instalação {{ $labels.installation }} do Chat ISP mais velho que o limite configurado"
+      - alert: ChatISPBackupSemSinalPostgres
+        expr: absent(chatisp_backup_last_success_timestamp_seconds{installation="__BACKUP_INSTALLATION__",kind="postgres"})
+        for: 30m
+        labels:
+          severity: warning
+          installation: "__BACKUP_INSTALLATION__"
+          kind: postgres
+        annotations:
+          summary: "Nenhum sucesso de backup do banco (postgres) registrado na instalação __BACKUP_INSTALLATION__"
+      - alert: ChatISPBackupSemSinalAttachments
+        expr: absent(chatisp_backup_last_success_timestamp_seconds{installation="__BACKUP_INSTALLATION__",kind="attachments"})
+        for: 30m
+        labels:
+          severity: warning
+          installation: "__BACKUP_INSTALLATION__"
+          kind: attachments
+        annotations:
+          summary: "Nenhum sucesso de espelho de anexos (attachments) registrado na instalação __BACKUP_INSTALLATION__"
+      - alert: ChatISPBackupSemSinalKeys
+        expr: absent(chatisp_backup_last_success_timestamp_seconds{installation="__BACKUP_INSTALLATION__",kind="keys"})
+        for: 30m
+        labels:
+          severity: warning
+          installation: "__BACKUP_INSTALLATION__"
+          kind: keys
+        annotations:
+          summary: "Nenhum sucesso de cópia de chaves (keys) registrado na instalação __BACKUP_INSTALLATION__"
+      - alert: ChatISPBackupSemSinalLedger
+        expr: absent(chatisp_backup_last_success_timestamp_seconds{installation="__BACKUP_INSTALLATION__",kind="ledger"})
+        for: 30m
+        labels:
+          severity: warning
+          installation: "__BACKUP_INSTALLATION__"
+          kind: ledger
+        annotations:
+          summary: "Nenhum sucesso de exportação do livro de exclusões (ledger) registrado na instalação __BACKUP_INSTALLATION__"

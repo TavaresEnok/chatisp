@@ -214,3 +214,60 @@ func (s *S3Storage) Delete(ctx context.Context, key, version string) error {
 	}
 	return nil
 }
+
+// Walker lists every stored object with the version string Read accepts.
+// It is the backup contract: the mirror copies exactly what the database can
+// reference. Delete markers are not objects.
+type Walker interface {
+	Walk(ctx context.Context, fn func(key, version string, size int64) error) error
+}
+
+// Walk implements Walker for S3 and S3-compatible services. Unversioned mode
+// lists current objects and uses the ETag identity; versioned mode lists every
+// non-delete-marker version.
+func (s *S3Storage) Walk(ctx context.Context, fn func(key, version string, size int64) error) error {
+	if s.unversioned {
+		var token *string
+		for {
+			out, e := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{Bucket: aws.String(s.bucket), ContinuationToken: token})
+			if e != nil {
+				return ErrStorage
+			}
+			for _, o := range out.Contents {
+				etag := strings.Trim(aws.ToString(o.ETag), `"`)
+				if etag == "" || strings.ContainsAny(etag, `" `) {
+					return ErrStorage
+				}
+				if e = fn(aws.ToString(o.Key), etagVersionPrefix+etag, aws.ToInt64(o.Size)); e != nil {
+					return e
+				}
+			}
+			if !aws.ToBool(out.IsTruncated) {
+				return nil
+			}
+			token = out.NextContinuationToken
+		}
+	}
+	var keyMarker, versionMarker *string
+	for {
+		out, e := s.client.ListObjectVersions(ctx, &s3.ListObjectVersionsInput{Bucket: aws.String(s.bucket), KeyMarker: keyMarker, VersionIdMarker: versionMarker})
+		if e != nil {
+			return ErrStorage
+		}
+		for _, v := range out.Versions {
+			if aws.ToString(v.VersionId) == "" || aws.ToString(v.VersionId) == "null" {
+				return ErrStorage
+			}
+			if e = fn(aws.ToString(v.Key), aws.ToString(v.VersionId), aws.ToInt64(v.Size)); e != nil {
+				return e
+			}
+		}
+		if !aws.ToBool(out.IsTruncated) {
+			return nil
+		}
+		keyMarker, versionMarker = out.NextKeyMarker, out.NextVersionIdMarker
+	}
+}
+
+// Unversioned reports whether object identity is the ETag captured at creation.
+func (s *S3Storage) Unversioned() bool { return s.unversioned }

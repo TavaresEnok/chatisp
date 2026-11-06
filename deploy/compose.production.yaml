@@ -1,0 +1,45 @@
+# Override de PRODUÇÃO com domínio próprio e certificado público. Não ativado aqui.
+# Uso: docker compose -f deploy/compose.yaml -f deploy/compose.production.yaml --env-file deploy/.env up -d --build
+# Obrigatórias no .env: CHATISP_SITE_HOST, CHATISP_STORAGE_HOST, CHATISP_ACME_EMAIL e as demais de
+# deploy/.env.example. O DNS dos dois nomes deve apontar para este servidor ANTES da subida; as portas
+# 80 e 443 ficam publicadas. Coerência exigida (docs/implantacao.md): CHATISP_PANEL_ORIGINS é
+# exatamente https://<CHATISP_SITE_HOST>; as URLs assinadas usam https://<CHATISP_STORAGE_HOST>.
+x-origins: &origins
+  CHATISP_ENV: production
+  CHATISP_PANEL_ORIGINS: https://${CHATISP_SITE_HOST:?defina CHATISP_SITE_HOST}
+  CHATISP_ATTACHMENTS_S3_ENDPOINT: https://${CHATISP_STORAGE_HOST:?defina CHATISP_STORAGE_HOST}
+  CHATISP_ATTACHMENTS_S3_PUBLIC_ENDPOINT: https://${CHATISP_STORAGE_HOST}
+  # Certificado público: nenhuma CA própria.
+  CHATISP_ATTACHMENTS_S3_CA_FILE: ""
+
+services:
+  chatisp-migrate:
+    environment: *origins
+  chatisp-api:
+    environment: *origins
+  chatisp-worker:
+    environment: *origins
+  trust-export:
+    # Com certificado público, o runtime usa a trust store do sistema (CA_FILE vazio).
+    entrypoint: ["/bin/sh", "-ec", "mkdir -p /trust && chmod 0755 /trust"]
+  storage-setup:
+    depends_on:
+      garage:
+        condition: service_healthy
+  caddy:
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/edge-health"]
+    environment:
+      CHATISP_SITE_HOST: ${CHATISP_SITE_HOST}
+      CHATISP_STORAGE_HOST: ${CHATISP_STORAGE_HOST}
+      CHATISP_ACME_EMAIL: ${CHATISP_ACME_EMAIL:?defina CHATISP_ACME_EMAIL}
+    volumes:
+      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro
+    ports: !override
+      - "${CHATISP_PUBLIC_BIND:-0.0.0.0}:80:80"
+      - "${CHATISP_PUBLIC_BIND:-0.0.0.0}:443:443"
+    networks:
+      default:
+        aliases:
+          # Dentro da rede, o nome público do storage resolve para o Caddy (mesmo certificado).
+          - ${CHATISP_STORAGE_HOST}

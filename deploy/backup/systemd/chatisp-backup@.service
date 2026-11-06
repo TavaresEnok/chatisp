@@ -1,0 +1,14 @@
+# Exemplo, NÃO instalado por este repositório. Uma unidade por tipo: chatisp-backup@full.service,
+# @diff, @incr, @ledger. Ajuste caminhos e o arquivo de ambiente (COMPOSE_CMD, BACKUP_* e a frase
+# das chaves em arquivo fora do servidor). Falha do script faz a unidade falhar e aparece em
+# "systemctl --failed" e no alerta ChatISPBackupAtrasado.
+[Unit]
+Description=Backup do Chat ISP (%i)
+After=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/chatisp/backup.env
+ExecStart=/opt/chatisp/deploy/backup/chatisp-backup.sh %i
+TimeoutStartSec=6h
+Nice=10

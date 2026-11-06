@@ -13,6 +13,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { useSessionStore } from "@/stores/session-store";
 
 const createSchema = z.object({
+  storageBytes: z.string().trim().refine((value) => value === "" || (/^[1-9][0-9]*$/.test(value) && Number.isSafeInteger(Number(value))), "Informe um total positivo de bytes."),
   timezone: z.string().trim().min(1, "Informe o fuso.").max(64, "Use no máximo 64 caracteres."),
 });
 
@@ -108,10 +109,10 @@ function CreateProviderForm() {
   const queryClient = useQueryClient();
   const form = useForm<CreateValues>({
     resolver: zodResolver(createSchema),
-    defaultValues: { timezone: "America/Sao_Paulo" },
+    defaultValues: { timezone: "America/Sao_Paulo", storageBytes: "" },
   });
   const create = useMutation({
-    mutationFn: (values: CreateValues) => createProvider(values.timezone),
+    mutationFn: (values: CreateValues) => createProvider(values.timezone, values.storageBytes ? Number(values.storageBytes) : undefined),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.platformTenants() });
     },
@@ -136,6 +137,12 @@ function CreateProviderForm() {
         {form.formState.errors.timezone?.message ? (
           <p className="text-sm text-destructive">{form.formState.errors.timezone.message}</p>
         ) : null}
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="armazenamento-do-provedor">Limite de armazenamento (bytes)</Label>
+        <Input id="armazenamento-do-provedor" inputMode="numeric" aria-describedby="armazenamento-ajuda" {...form.register("storageBytes")} />
+        <p id="armazenamento-ajuda" className="text-sm text-muted-foreground">Sem limite definido, novos anexos ficam bloqueados.</p>
+        {form.formState.errors.storageBytes?.message ? <p role="alert" className="text-sm text-destructive">{form.formState.errors.storageBytes.message}</p> : null}
       </div>
       <Button type="submit" disabled={create.isPending} className="h-11 w-fit px-3">
         Criar provedor

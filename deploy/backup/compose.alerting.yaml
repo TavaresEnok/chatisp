@@ -1,0 +1,42 @@
+# Optional private alert delivery. Prepare configuration files first; no services are installed
+# or activated by the base Compose. Usage: add -f deploy/backup/compose.alerting.yaml --profile alerting.
+# Prepare files in an operator-only directory; grant read to the service uid (65534), e.g. ACL.
+# Alertmanager config: umask 077; python3 deploy/backup/render-alertmanager.py > /path/alertmanager.yml
+# Rules: BACKUP_INSTALLATION=server-id BACKUP_MAX_AGE_SECONDS=... deploy/backup/render-alerts.sh > /path/backup.rules.yml
+# PROMETHEUS_CONFIG_FILE must scrape chatisp-api:9090 / chatisp-worker:9090, and
+# backup-metrics:8080/backup-status.prom, load /etc/prometheus/backup.rules.yml and send to alertmanager:9093.
+services:
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    profiles: [alerting]
+    command: [--config.file=/etc/alertmanager/alertmanager.yml, --storage.path=/alertmanager, --cluster.listen-address=]
+    volumes:
+      - ${ALERTMANAGER_CONFIG_FILE:?gere ALERTMANAGER_CONFIG_FILE antes de ativar o perfil}:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    # No public port. Mount SMTP credentials with a separate deployment override if required.
+    restart: unless-stopped
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [alerting]
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.path=/prometheus]
+    volumes:
+      - ${PROMETHEUS_CONFIG_FILE:?gere PROMETHEUS_CONFIG_FILE antes de ativar o perfil}:/etc/prometheus/prometheus.yml:ro
+      - ${BACKUP_RULES_FILE:?gere BACKUP_RULES_FILE por render-alerts.sh}:/etc/prometheus/backup.rules.yml:ro
+      - ${OPS_RULES_FILE:?gere OPS_RULES_FILE por render-ops-alerts.py (desligado por padrão)}:/etc/prometheus/ops.rules.yml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+  backup-metrics:
+    image: busybox:1.37.0
+    profiles: [alerting]
+    # Reads the 0600 status file created by the scheduler through a read-only mount.
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command: [httpd, -f, -p, "8080", -h, /metrics]
+    volumes:
+      - ${BACKUP_METRICS_DIR:?diretório de BACKUP_STATUS_FILE}:/metrics:ro
+    restart: unless-stopped
+volumes:
+  alertmanager-data:
+  prometheus-data:

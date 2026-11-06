@@ -134,6 +134,10 @@ WHERE tenant_id = $1`, tenantID).Scan(&jobSeconds, &webhookSeconds, &version)
 
 func loadFacts(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, limits Limits, now time.Time) (Facts, error) {
 	var facts Facts
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM suspended_ingress_alerts WHERE tenant_id=$1),
+        coalesce((SELECT admission_blocked FROM suspended_ingress_alerts WHERE tenant_id=$1),false)`, tenantID).Scan(&facts.SuspendedIngress, &facts.SuspendedAdmissionBlocked); err != nil {
+		return Facts{}, err
+	}
 	if limits.JobAge > 0 {
 		ok, err := relationExists(ctx, tx, "river.river_job")
 		if err != nil {

@@ -191,3 +191,74 @@ func TestCaddyfileNamesTheInternalCertificate(t *testing.T) {
 		t.Fatal("Caddyfile expõe métricas na superfície pública")
 	}
 }
+
+// A configuração de produção não pode ativar domínio real nem expor métricas, e os nomes que o
+// navegador usa precisam vir das mesmas variáveis em todos os pontos (origem do painel, storage
+// público e certificado), senão cookie Secure, CSRF, WebSocket e URL assinada divergem.
+func TestProductionDeployFilesStayInactiveAndCoherent(t *testing.T) {
+	root := repoRoot(t)
+	caddy, err := os.ReadFile(filepath.Join(root, "deploy", "Caddyfile.production"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(caddy)
+	for _, want := range []string{"{$CHATISP_SITE_HOST}", "{$CHATISP_STORAGE_HOST}", "{$CHATISP_ACME_EMAIL}", "handle /metrics* {\n\t\trespond 404", "Strict-Transport-Security"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("Caddyfile.production sem %q", want)
+		}
+	}
+	for _, bad := range []string{"local_certs", "tls internal", "reverse_proxy chatisp-api:9090", "reverse_proxy chatisp-worker:9090", "garage:3903"} {
+		if strings.Contains(text, bad) {
+			t.Fatalf("Caddyfile.production contém %q", bad)
+		}
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "deploy", "compose.production.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var node yaml.Node
+	if err := yaml.Unmarshal(raw, &node); err != nil {
+		t.Fatal(err)
+	}
+	if err := rejectSecretScalars(&node); err != nil {
+		t.Fatal(err)
+	}
+	compose := string(raw)
+	for _, want := range []string{
+		"CHATISP_PANEL_ORIGINS: https://${CHATISP_SITE_HOST:?",
+		"CHATISP_ATTACHMENTS_S3_PUBLIC_ENDPOINT: https://${CHATISP_STORAGE_HOST}",
+		"CHATISP_ATTACHMENTS_S3_ENDPOINT: https://${CHATISP_STORAGE_HOST:?",
+		"CHATISP_ACME_EMAIL:?",
+		"- ${CHATISP_STORAGE_HOST}",
+	} {
+		if !strings.Contains(compose, want) {
+			t.Fatalf("compose.production.yaml sem %q", want)
+		}
+	}
+	if !strings.Contains(compose, "http://127.0.0.1:8081/edge-health") || !strings.Contains(text, "http://:8081") || !strings.Contains(compose, "mkdir -p /trust && chmod 0755 /trust") {
+		t.Fatal("produção mantém dependência circular da CA interna do laboratório")
+	}
+	// Nenhum domínio, e-mail ou IP real escrito nos arquivos de produção.
+	for _, line := range strings.Split(compose+text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		for _, bad := range []string{".com.br", ".com\n", "@gmail", "@exemplo"} {
+			if strings.Contains(trimmed+"\n", bad) {
+				t.Fatalf("domínio ou contato literal em arquivo de produção: %q", trimmed)
+			}
+		}
+	}
+	// O Compose de referência só publica o HTTPS do Caddy em loopback e nunca as métricas.
+	base, err := os.ReadFile(filepath.Join(root, "deploy", "compose.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(base), ":9090\"") || strings.Contains(string(base), "- \"9090") {
+		t.Fatal("compose.yaml publica a porta de métricas")
+	}
+	if !strings.Contains(string(base), `"${CHATISP_PUBLIC_BIND:-127.0.0.1}:${CHATISP_PUBLIC_PORT:-8443}:443"`) {
+		t.Fatal("compose.yaml deixou de publicar o HTTPS só em loopback por padrão")
+	}
+}

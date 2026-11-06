@@ -92,11 +92,17 @@ func (s Service) DeletePrivacy(ctx context.Context, p Principal, contact uuid.UU
 		}
 		for _, file := range files {
 			if _, err := tx.Exec(ctx, `
-				INSERT INTO deletion_records (id, tenant_id, subject, subject_id)
-				VALUES ($1, $2, 'attachment', $3)
+				INSERT INTO deletion_records (id, tenant_id, subject, subject_id, object_key, object_version, object_bytes)
+				VALUES ($1, $2, 'attachment', $3, $4, $5, $6)
 				ON CONFLICT (tenant_id, subject, subject_id) DO NOTHING
-			`, uuid.New(), p.TenantID, file.id); err != nil {
+			`, uuid.New(), p.TenantID, file.id, file.key, file.version, file.bytes); err != nil {
 				return err
+			}
+			// Existing legacy or conflicting tombstones cannot silently claim a
+			// new association. Keep them unchanged and refuse the erasure.
+			var matches bool
+			if err := tx.QueryRow(ctx, `SELECT object_key=$3 AND object_version=$4 AND object_bytes=$5 FROM deletion_records WHERE tenant_id=$1 AND subject='attachment' AND subject_id=$2 AND object_key IS NOT NULL`, p.TenantID, file.id, file.key, file.version, file.bytes).Scan(&matches); err != nil || !matches {
+				return ErrUnavailable
 			}
 		}
 		if _, err := tx.Exec(ctx, `
@@ -130,12 +136,20 @@ func (s Service) DeletePrivacy(ctx context.Context, p Principal, contact uuid.UU
 		}
 		messages, err := tx.Exec(ctx, `
 			UPDATE messages m
-			SET body = ''
+			SET body = '', content_context = '{}'::jsonb
 			FROM conversations c
 			WHERE m.tenant_id = c.tenant_id AND m.conversation_id = c.id
-			  AND c.tenant_id = $1 AND c.contact_id = $2 AND m.body <> ''
+			  AND c.tenant_id = $1 AND c.contact_id = $2 AND (m.body <> '' OR m.content_context <> '{}'::jsonb)
 		`, p.TenantID, contact)
 		if err != nil {
+			return err
+		}
+		// Replay keeps event identities and cursor continuity, but never the
+		// historical content/citation that the subject asked to erase.
+		if _, err := tx.Exec(ctx, `UPDATE realtime_events r
+          SET payload=jsonb_build_object('conversation_id',c.id,'privacy_erased',true,'historical',true)
+          FROM conversations c WHERE r.tenant_id=c.tenant_id AND r.aggregate_type='conversation'
+          AND r.aggregate_id=c.id AND c.tenant_id=$1 AND c.contact_id=$2`, p.TenantID, contact); err != nil {
 			return err
 		}
 		notes, err := tx.Exec(ctx, `
@@ -381,6 +395,7 @@ type storedObject struct {
 	id      uuid.UUID
 	key     string
 	version string
+	bytes   int64
 }
 
 func lockAttachments(ctx context.Context, tx pgx.Tx, tenant, contact uuid.UUID) ([]storedObject, int64, error) {
@@ -400,12 +415,11 @@ func lockAttachments(ctx context.Context, tx pgx.Tx, tenant, contact uuid.UUID) 
 	var bytes int64
 	for rows.Next() {
 		var item storedObject
-		var size int64
-		if err := rows.Scan(&item.id, &item.key, &item.version, &size); err != nil {
+		if err := rows.Scan(&item.id, &item.key, &item.version, &item.bytes); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, item)
-		bytes += size
+		bytes += item.bytes
 	}
 	return out, bytes, rows.Err()
 }

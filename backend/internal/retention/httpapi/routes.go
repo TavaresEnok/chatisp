@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -43,6 +44,7 @@ func Register(r chi.Router, d Dependencies) {
 	r.Get("/api/panel/retention", h.getPolicy)
 	r.Put("/api/panel/retention", h.putPolicy)
 	r.Post("/api/panel/retention/purge", h.purge)
+	r.Get("/api/panel/retention/purge-preview", h.previewPurge)
 	r.Get("/api/panel/plan-limits", h.limits)
 	r.Get("/api/panel/meta-usage", h.metaUsage)
 	r.Get("/api/panel/contacts/{contact_id}/demands", h.export)
@@ -89,6 +91,29 @@ func (h handler) putPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, saved)
+}
+
+func (h handler) previewPurge(w http.ResponseWriter, r *http.Request) {
+	p, err := h.principal(r, false)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	// A technical bound on the census, never a retention or capacity default.
+	limit := 1000
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		limit, err = strconv.Atoi(raw)
+		if err != nil {
+			writeProblem(w, http.StatusUnprocessableEntity, "limite inválido")
+			return
+		}
+	}
+	result, err := h.s.PreviewPurge(r.Context(), p, limit)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h handler) purge(w http.ResponseWriter, r *http.Request) {

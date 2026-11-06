@@ -61,6 +61,9 @@ modos:
   all       API, worker e métricas
   openapi   grava o OpenAPI em JSON
   bootstrap cria o primeiro provedor e o primeiro administrador
+  attachments-backup   espelha os anexos do bucket em um diretório (só acrescenta)
+  attachments-restore  devolve o espelho a um bucket vazio, conferindo hashes
+  verify-data-keys     autentica todo material cifrado antes de reabrir após restore
 
 bootstrap (instalação vazia; senha pela entrada padrão, primeira linha):
   chatisp bootstrap -email admin@exemplo.com [-superadmin] [-storage-bytes N] [-timezone America/Sao_Paulo]
@@ -100,6 +103,12 @@ func runWithInput(ctx context.Context, args []string, environ []string, stdin io
 		return devPrepare(ctx, args[1:], stdout, stderr)
 	case "bootstrap":
 		return bootstrap(ctx, args[1:], environ, stdin, stdout, stderr)
+	case "verify-data-keys":
+		return verifyDataKeys(ctx, args[1:], environ, stdout)
+	case "attachments-backup":
+		return attachmentsBackup(ctx, args[1:], environ, stdout, stderr)
+	case "attachments-restore":
+		return attachmentsRestore(ctx, args[1:], environ, stdout, stderr)
 	case "api", "worker", "migrate", "all":
 		load := config.LoadRuntime
 		if args[0] == "migrate" {
@@ -396,13 +405,19 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 			}
 			return "", pipeline.ErrNotFound
 		})
+		suspendedIngress, err := pipeline.SuspendedIngressFromEnv(os.Environ())
+		if err != nil {
+			cleanupAll()
+			return runtimeServices{}, err
+		}
 		wh, err := pipeline.NewWebhookHandler(pipeline.WebhookConfig{
-			AppID:        cfg.MetaAppID,
-			AppResolver:  configServer,
-			VerifyTokens: verifyTokens,
-			IngressPool:  pools.Ingress,
-			JobsClient:   insertJobsClient,
-			Logger:       log,
+			AppID:            cfg.MetaAppID,
+			AppResolver:      configServer,
+			VerifyTokens:     verifyTokens,
+			IngressPool:      pools.Ingress,
+			JobsClient:       insertJobsClient,
+			Logger:           log,
+			SuspendedIngress: suspendedIngress,
 		})
 		if err != nil {
 			cleanupAll()
@@ -498,9 +513,25 @@ func setupRuntimeServices(ctx context.Context, cfg config.Config, mode config.Mo
 		canned = cannedreplies.New(store)
 		hours = businesshours.New(store)
 		hours.Cache = catalog
-		// No implicit catalog driver. SyncTemplates refuses before any write
-		// until a real driver is injected. An empty fake is not a provider snapshot.
 		policySvc = &channelpolicy.Service{DB: store, Cache: catalog}
+		// Resolve credentials only for the administrator's authorized tenant and
+		// connector generation. Disabled/simulated installations never read Graph.
+		if cfg.MetaDispatch() == config.MetaDispatchOfficial && channelSvc != nil {
+			server := channelSvc.Server()
+			policySvc.DriverFor = func(ctx context.Context, scope channelpolicy.CatalogScope) (channelpolicy.CatalogDriver, error) {
+				material, err := server.ResolveMaterial(ctx, scope.TenantID, scope.ConnectorID, scope.Version)
+				if err != nil || material.WABAID != scope.RemoteWABA {
+					return nil, channelpolicy.ErrUnsupported
+				}
+				return channelpolicy.NewMetaCatalog(channelpolicy.MetaCatalogConfig{
+					GraphVersion: cfg.MetaGraphVersion, PrimaryDocURL: cfg.MetaPrimaryDocURL,
+					AccessToken: material.AccessToken,
+					CredentialInvalid: func(ctx context.Context) error {
+						return server.ReportInvalidCredential(ctx, scope.TenantID, scope.ConnectorID, scope.Version)
+					},
+				})
+			}
+		}
 		attachmentSvc = &attachments.Service{DB: store, Storage: privateMedia, Limits: tenantAttachmentLimits}
 		documents = contactdocs.New(store, cfg.KeyRing)
 		operatorPresence = presence.New(store)

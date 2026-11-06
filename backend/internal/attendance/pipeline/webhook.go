@@ -19,13 +19,14 @@ import (
 
 // WebhookConfig contains parameters required for configuring the Meta webhook receiver.
 type WebhookConfig struct {
-	AppID        string
-	AppResolver  AppResolver
-	VerifyTokens VerifyTokenProvider
-	IngressPool  *pgxpool.Pool
-	JobsClient   *jobs.Client
-	Logger       *slog.Logger
-	MaxBodyBytes int64
+	AppID            string
+	AppResolver      AppResolver
+	VerifyTokens     VerifyTokenProvider
+	IngressPool      *pgxpool.Pool
+	JobsClient       *jobs.Client
+	Logger           *slog.Logger
+	MaxBodyBytes     int64
+	SuspendedIngress SuspendedIngressConfig
 }
 
 // WebhookHandler handles incoming Meta Cloud webhooks (both GET verification and POST delivery).
@@ -38,6 +39,9 @@ type WebhookHandler struct {
 
 // NewWebhookHandler creates an HTTP handler for Meta Cloud webhooks.
 func NewWebhookHandler(cfg WebhookConfig) (*WebhookHandler, error) {
+	if cfg.SuspendedIngress.Enabled && (cfg.SuspendedIngress.MaxDeliveries <= 0 || cfg.SuspendedIngress.MaxBytes <= 0) {
+		return nil, ErrInvalid
+	}
 	if cfg.AppResolver == nil || cfg.VerifyTokens == nil || cfg.IngressPool == nil || cfg.JobsClient == nil {
 		return nil, ErrInvalid
 	}
@@ -96,9 +100,15 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return db.WithIngressTx(ctx, h.cfg.IngressPool, func(ctx context.Context, tx pgx.Tx) error {
+		admitted := false
+		err := db.WithIngressTx(ctx, h.cfg.IngressPool, func(ctx context.Context, tx pgx.Tx) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
+			}
+			var err error
+			admitted, err = admitSuspendedEnvelope(ctx, tx, env, h.cfg.SuspendedIngress)
+			if err != nil || !admitted {
+				return err
 			}
 			del, err := h.repo.StoreDelivery(ctx, tx, env.AppID, env.Raw, "", "")
 			if err != nil {
@@ -111,6 +121,13 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			return nil
 		})
+		if err != nil {
+			return err
+		}
+		if !admitted {
+			return errSuspendedAdmission
+		}
+		return nil
 	})
 
 	// 5. Delegate to authmeta handler.

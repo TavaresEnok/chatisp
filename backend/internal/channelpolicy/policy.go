@@ -23,6 +23,8 @@ type Service struct {
 	DB     *db.Store
 	Clock  func(context.Context, pgx.Tx) (time.Time, error)
 	Driver CatalogDriver
+	// DriverFor resolves credentials only after authorization, scoped to the captured generation.
+	DriverFor func(context.Context, CatalogScope) (CatalogDriver, error)
 	// Cache holds the template catalog for display. EvaluateDispatchTx does not read it.
 	Cache *tenantcache.Cache
 }
@@ -396,6 +398,14 @@ type Template struct {
 	State      string          `json:"state"`
 	Components json.RawMessage `json:"components"`
 	Source     string          `json:"source"`
+}
+
+// CatalogScope is captured from authorized database rows, never from caller credentials.
+type CatalogScope struct {
+	TenantID    uuid.UUID
+	ConnectorID uuid.UUID
+	Version     int64
+	RemoteWABA  string
 }
 
 // CatalogDriver supplies a complete WABA snapshot, never credentials or approval creation.

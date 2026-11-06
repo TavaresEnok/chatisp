@@ -1,0 +1,53 @@
+# Borda de produção: domínio próprio com certificado público (ACME). NÃO ativada por este repositório:
+# exige DNS apontando para o servidor, as portas 80 e 443 livres e as variáveis abaixo definidas.
+# Veja docs/implantacao.md. Para laboratório (CA interna do Caddy) use deploy/Caddyfile.
+#   CHATISP_SITE_HOST     nome do painel, p.ex. chat.exemplo.com.br
+#   CHATISP_STORAGE_HOST  nome do storage de anexos, p.ex. anexos.exemplo.com.br
+#   CHATISP_ACME_EMAIL    contato da conta ACME
+{
+	admin off
+	email {$CHATISP_ACME_EMAIL}
+}
+
+{$CHATISP_SITE_HOST} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+
+	# Métricas Prometheus ficam em chatisp-api:9090 e chatisp-worker:9090, só na rede interna.
+	handle /metrics* {
+		respond 404
+	}
+	handle /api/* {
+		reverse_proxy chatisp-api:8080
+	}
+	handle /healthz {
+		reverse_proxy chatisp-api:8080
+	}
+	handle /readyz {
+		reverse_proxy chatisp-api:8080
+	}
+	handle {
+		root * /srv/panel
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# Garage com TLS público. O Host é repassado sem alteração: a assinatura SigV4 cobre esse nome.
+# Se usar S3 gerenciado em vez do Garage, remova este bloco e aponte CHATISP_ATTACHMENTS_S3_* para ele.
+{$CHATISP_STORAGE_HOST} {
+	request_body {
+		max_size 40MB
+	}
+	reverse_proxy garage:3900
+}
+
+# Sonda interna da borda, sem porta publicada. Independe da aplicação e da emissão ACME.
+http://:8081 {
+	respond /edge-health 200
+}

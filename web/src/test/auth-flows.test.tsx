@@ -242,6 +242,7 @@ describe("identidade", () => {
       expect(await screen.findByRole("heading", { level: 1, name: "Painel" })).toBeInTheDocument();
       await user.click(screen.getByRole("link", { name: "Configurações" }));
       expect(await screen.findByRole("heading", { name: "Provedores da plataforma" })).toBeInTheDocument();
+      await user.type(screen.getByLabelText("Limite de armazenamento (bytes)"), "10485760");
       await user.click(screen.getByRole("button", { name: "Criar provedor" }));
       expect(await screen.findByText("America/Sao_Paulo")).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Suspender" }));
@@ -260,6 +261,7 @@ describe("identidade", () => {
       expect(invited?.body).toMatchObject({ email: "admin@novo-provedor.test" });
       const created = panel.requests.find((request) => request.method === "POST" && request.path === "/api/platform/tenants");
       expect(created?.csrf).toBe("csrf-publico");
+      expect(created?.body).toMatchObject({ limits: { max_storage_bytes: 10485760 } });
     });
   });
 });
