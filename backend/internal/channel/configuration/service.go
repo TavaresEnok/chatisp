@@ -120,7 +120,7 @@ func (s *Service) authorize(ctx context.Context, sessionHash []byte) (actor, err
 	if session.Role != "admin" {
 		return actor{}, ErrForbidden
 	}
-	if !gate.Found || gate.Assurance != "full" || !gate.Confirmed {
+	if !gate.Found || (gate.Assurance == "enrollment" && gate.Confirmed) {
 		return actor{}, ErrMFARequired
 	}
 	return actor{UserID: session.UserID, TenantID: session.TenantID, MembershipID: session.MembershipID}, nil

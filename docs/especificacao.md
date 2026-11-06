@@ -497,7 +497,7 @@ Permissões granulares configuráveis	Premium	Não fazer
 Usuário em mais de um provedor	Community	V2	O modelo de dados da V1 já usa vínculo usuário ↔ tenant
 Login por e-mail e senha	Community	V1	Hash Argon2id
 Recuperação de senha	Community	V1	Token de uso único e curta validade
-MFA (TOTP + códigos de recuperação)	Community	V1	Obrigatório para superadmin e admins; opcional para atendentes
+MFA (TOTP + códigos de recuperação)	Community	V1	Opcional para todas as contas; ativação voluntária nas configurações com QR Code (decisão do proprietário em 06/11/2026)
 SSO / SAML	Enterprise	Não fazer	
 Login social (Google etc.)	Conforme implantação	Não fazer	
 Gestão de sessões e revogação	Community	V1	Admin derruba sessão de quem saiu
@@ -725,7 +725,7 @@ Logs	log/slog em JSON	IDs técnicos; sem conteúdo de mensagens ou credenciais p
 Sessão	Cookie __Host-session, estado no PostgreSQL	HttpOnly, Secure, SameSite=Lax, Path=/; revogação e expiração
 CSRF	http.CrossOriginProtection + token de sessão	API do painel separada da API Bearer e dos webhooks autenticados
 Senha	Argon2id, parâmetros calibrados e versionados	Não gravar senha reversível
-MFA	pquerna/otp para TOTP + códigos de recuperação com hash	Obrigatório para administradores e superadmin
+MFA	pquerna/otp para TOTP + códigos de recuperação com hash	Opcional, com ativação pelo titular; fator confirmado continua exigido no login (decisão de 06/11/2026)
 Tokens de integração	Aleatórios e opacos, hash no banco	Escopos, expiração configurada, rotação e revogação; emissão mostra o valor uma vez
 Segredos recuperáveis	AES-GCM, chaves versionadas fora do banco	Contexto autenticado do tenant/entidade; detalhes em B.4.14
 E-mail transacional	SMTP/serviço já disponível, por interface pequena	Convite e recuperação de senha; não cria canal de atendimento por e-mail

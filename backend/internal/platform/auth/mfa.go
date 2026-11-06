@@ -81,17 +81,29 @@ func (s *Service) BeginEnrollment(ctx context.Context, actor Principal) (Enrollm
 		return Enrollment{}, ErrUnavailable
 	}
 	now := s.now()
-	err = s.store.WithAuth(ctx, func(ctx context.Context) error {
-		if err := s.store.BeginMFA(ctx, actor.UserID, actor.TenantID, sealed.Ciphertext, sealed.Version); err != nil {
+	err = s.store.WithTenant(ctx, actor.TenantID, func(ctx context.Context) error {
+		if err := s.store.LockTenant(ctx); err != nil {
 			return err
 		}
-		for i, hash := range hashes {
-			if err := s.store.AddRecoveryCode(ctx, uuid.New(), actor.UserID, hash, now.Add(time.Duration(i))); err != nil {
+		return s.store.WithAuthInTenant(ctx, func(ctx context.Context) error {
+			ok, err := s.store.BeginMFA(ctx, actor.UserID, actor.TenantID, actor.SessionID, sealed.Ciphertext, sealed.Version, now)
+			if err != nil {
 				return err
 			}
-		}
-		return nil
+			if !ok {
+				return ErrMFAAlready
+			}
+			for i, hash := range hashes {
+				if err := s.store.AddRecoveryCode(ctx, uuid.New(), actor.UserID, hash, now.Add(time.Duration(i))); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	})
+	if errors.Is(err, ErrMFAAlready) {
+		return Enrollment{}, ErrMFAAlready
+	}
 	if err != nil {
 		s.log.ErrorContext(ctx, "falha ao gravar MFA", "component", "auth")
 		return Enrollment{}, ErrUnavailable
@@ -140,20 +152,25 @@ func (s *Service) ConfirmEnrollment(ctx context.Context, actor Principal, code s
 		s.audit(ctx, actor.TenantID, actor.UserID, actor.MembershipID, "mfa.verify", "user", &actor.UserID, "denied")
 		return ErrInvalidMFA
 	}
-	err = s.store.WithAuth(ctx, func(ctx context.Context) error {
-		confirmed, err := s.store.ConfirmMFA(ctx, actor.UserID, s.now())
-		if err != nil {
+	err = s.store.WithTenant(ctx, actor.TenantID, func(ctx context.Context) error {
+		if err := s.store.LockTenant(ctx); err != nil {
 			return err
 		}
-		if !confirmed {
-			return db.ErrNotFound
-		}
-		if actor.SessionID != uuid.Nil {
-			if err := s.store.SetSessionAssurance(ctx, actor.SessionID, "full"); err != nil {
+		return s.store.WithAuthInTenant(ctx, func(ctx context.Context) error {
+			confirmed, err := s.store.ConfirmMFA(ctx, actor.UserID, actor.SessionID, record.Ciphertext, s.now())
+			if err != nil {
 				return err
 			}
-		}
-		return s.clearMFAFailures(ctx, actor.UserID, "")
+			if !confirmed {
+				return db.ErrNotFound
+			}
+			if actor.SessionID != uuid.Nil {
+				if err := s.store.SetSessionAssurance(ctx, actor.SessionID, "full"); err != nil {
+					return err
+				}
+			}
+			return s.clearMFAFailures(ctx, actor.UserID, "")
+		})
 	})
 	if err != nil {
 		s.log.ErrorContext(ctx, "falha ao confirmar MFA", "component", "auth")
@@ -180,6 +197,9 @@ func (s *Service) ResetMFA(ctx context.Context, actor Principal, target uuid.UUI
 	if s.keys == nil {
 		return ErrUnavailable
 	}
+	if !actor.MFAEnabled {
+		return ErrForbidden
+	}
 	if target == uuid.Nil {
 		return ErrForbidden
 	}
@@ -203,9 +223,24 @@ func (s *Service) ResetMFA(ctx context.Context, actor Principal, target uuid.UUI
 	if err != nil {
 		return err
 	}
-	err = s.store.WithAuth(ctx, func(ctx context.Context) error {
-		return s.store.ClearMFA(ctx, target, s.now())
+	err = s.store.WithTenant(ctx, actor.TenantID, func(ctx context.Context) error {
+		if err := s.store.LockTenant(ctx); err != nil {
+			return err
+		}
+		return s.store.WithAuthInTenant(ctx, func(ctx context.Context) error {
+			ok, err := s.store.ResetMFA(ctx, actor.UserID, actor.SessionID, actor.TenantID, target, s.now())
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return ErrForbidden
+			}
+			return nil
+		})
 	})
+	if errors.Is(err, ErrForbidden) {
+		return ErrForbidden
+	}
 	if err != nil {
 		s.log.ErrorContext(ctx, "falha ao redefinir MFA", "component", "auth")
 		return ErrUnavailable
@@ -223,10 +258,9 @@ func (s *Service) finishLogin(ctx context.Context, identity db.LoginIdentity, me
 	if err != nil {
 		return IssuedSession{}, err
 	}
-	if s.keys == nil {
-		return s.issueAndAudit(ctx, identity, membership, record, account, "full", false, false)
+	if record.Confirmed && s.keys == nil {
+		return IssuedSession{}, ErrUnavailable
 	}
-	required := mfaRequired(identity.Memberships, membership, record.IsSuperadmin)
 	if record.Confirmed {
 		if strings.TrimSpace(code) == "" {
 			return IssuedSession{}, ErrMFARequired
@@ -246,9 +280,6 @@ func (s *Service) finishLogin(ctx context.Context, identity db.LoginIdentity, me
 			}
 		}
 		return issued, nil
-	}
-	if required {
-		return s.issueAndAudit(ctx, identity, membership, record, account, "enrollment", true, false)
 	}
 	return s.issueAndAudit(ctx, identity, membership, record, account, "full", false, false)
 }
@@ -461,29 +492,9 @@ func (s *Service) auditPlatform(ctx context.Context, actor uuid.UUID, action str
 	}
 }
 
-func (s *Service) enrollmentOnly(role string, gate db.SessionGate) bool {
-	if s.keys == nil || !gate.Found {
-		return false
-	}
-	if gate.Assurance == "enrollment" {
-		return true
-	}
-	if !gate.Confirmed && (role == "admin" || gate.IsSuperadmin) {
-		return true
-	}
-	return false
-}
-
-func mfaRequired(rows []db.LoginMembership, chosen db.LoginMembership, super bool) bool {
-	if super || chosen.Role == "admin" {
-		return true
-	}
-	for _, row := range rows {
-		if row.Status == "active" && row.TenantStatus == "active" && row.Role == "admin" {
-			return true
-		}
-	}
-	return false
+func (s *Service) enrollmentOnly(_ string, gate db.SessionGate) bool {
+	// A legacy enrollment session can enter only while no factor is active.
+	return gate.Assurance == "enrollment" && gate.Confirmed
 }
 
 func totpValidate() totp.ValidateOpts {

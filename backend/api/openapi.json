@@ -2636,7 +2636,7 @@
         "additionalProperties": false,
         "properties": {
           "mfa_enrollment_required": {
-            "description": "Verdadeiro enquanto o MFA obrigatório não foi confirmado.",
+            "description": "Campo legado; o cadastro de MFA é opcional.",
             "type": "boolean"
           }
         },
@@ -3028,8 +3028,12 @@
             "description": "Vínculo usado nesta sessão.",
             "type": "string"
           },
+          "mfa_enabled": {
+            "description": "Verdadeiro quando o MFA está confirmado para esta conta.",
+            "type": "boolean"
+          },
           "mfa_enrollment_required": {
-            "description": "Verdadeiro quando o administrador ainda precisa concluir o MFA.",
+            "description": "Campo legado; o cadastro de MFA é opcional.",
             "type": "boolean"
           },
           "role": {
@@ -3057,7 +3061,8 @@
           "role",
           "session_id",
           "expires_at",
-          "mfa_enrollment_required"
+          "mfa_enrollment_required",
+          "mfa_enabled"
         ],
         "type": "object"
       },
@@ -4219,8 +4224,12 @@
             "description": "Vínculo usado nesta sessão.",
             "type": "string"
           },
+          "mfa_enabled": {
+            "description": "Verdadeiro quando o MFA está confirmado para esta conta.",
+            "type": "boolean"
+          },
           "mfa_enrollment_required": {
-            "description": "Verdadeiro quando o administrador ainda precisa concluir o MFA.",
+            "description": "Campo legado; o cadastro de MFA é opcional.",
             "type": "boolean"
           },
           "role": {
@@ -4249,7 +4258,8 @@
           "session_id",
           "csrf_token",
           "expires_at",
-          "mfa_enrollment_required"
+          "mfa_enrollment_required",
+          "mfa_enabled"
         ],
         "type": "object"
       },

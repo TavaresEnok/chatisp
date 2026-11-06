@@ -544,21 +544,6 @@ func seedSmokeMetaBox(ctx context.Context, urls db.RoleURLs, appID, wabaID, phon
 	now := time.Now().UTC()
 
 	if err := store.WithAuth(ctx, func(ctx context.Context) error {
-		sealed, err := ring.Encrypt([]byte("totp-smoke-test"), crypto.Context{
-			TenantID: tenantID.String(),
-			Entity:   "user",
-			EntityID: userID.String(),
-			Field:    "totp_secret",
-		})
-		if err != nil {
-			return err
-		}
-		if err := store.BeginMFA(ctx, userID, tenantID, sealed.Ciphertext, sealed.Version); err != nil {
-			return err
-		}
-		if ok, err := store.ConfirmMFA(ctx, userID, now); err != nil || !ok {
-			return fmt.Errorf("falha ao confirmar MFA: %w", err)
-		}
 		if err := store.InsertSession(ctx, db.NewSession{
 			ID:                sessionID,
 			TokenHash:         tokenHash,

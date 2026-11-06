@@ -127,7 +127,7 @@ printf '%s\n' "$SENHA_DO_ADMIN" | docker compose -f deploy/compose.yaml --env-fi
 unset SENHA_DO_ADMIN
 ```
 
-No primeiro acesso, configure MFA. Sem SMTP configurado, convites e recuperação de senha ficam indisponíveis. A opção `-superadmin` cria uma conta de plataforma que não opera o atendimento; nesse caso, é preciso SMTP para convidar um administrador de provedor. O bootstrap não promove uma conta existente numa instalação já criada. Consulte [operação](docs/operacao.md) antes de escolher o papel inicial.
+O MFA é opcional. Para ativá-lo, abra Configurações → Segurança da conta e escaneie o QR Code com seu autenticador. Sem SMTP configurado, convites e recuperação de senha ficam indisponíveis. A opção `-superadmin` cria uma conta de plataforma que não opera o atendimento; nesse caso, é preciso SMTP para convidar um administrador de provedor. O bootstrap não promove uma conta existente numa instalação já criada. Consulte [operação](docs/operacao.md) antes de escolher o papel inicial.
 
 O Compose usa `CHATISP_ENV=production` também no laboratório, mantém o envio oficial Meta desligado e publica HTTPS apenas em loopback. O serviço Garage local é de nó único e não substitui backup independente. Para domínio próprio e certificado público, consulte [implantação](docs/implantacao.md). Validação completa em ambiente isolado: `./scripts/compose-validate.sh`.
 

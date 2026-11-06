@@ -66,7 +66,7 @@ func TestMigration08RejectsUnsafeRollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := seedActor(t, "admin", true, "full")
+	a := seedActor(t, "admin", false, "full")
 	input := manual("A", "rollback-proof", "rollback-waba-a", "rollback-phone-a", testToken, testSecret)
 	if _, err = svc.Configure(ctx, a.hash, input); err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestMigration08RejectsUnsafeRollback(t *testing.T) {
 	if err != nil || len(status.Boxes) != 1 || status.Boxes[0].AppSecretKeyVersion == "" {
 		t.Fatalf("status after rollback: %+v %v", status, err)
 	}
-	b := seedActor(t, "admin", true, "full")
+	b := seedActor(t, "admin", false, "full")
 	input.WABAID, input.PhoneNumberID = "rollback-waba-b", "rollback-phone-b"
 	if _, err = svc.Configure(ctx, b.hash, input); err != nil {
 		t.Fatal(err)
@@ -120,7 +120,7 @@ func assertMigration08Version(t *testing.T, ctx context.Context, provider *goose
 func TestSharedAppRegistry(t *testing.T) {
 	ctx := context.Background()
 	svc := newService(t, testRing(t))
-	a, b := seedActor(t, "admin", true, "full"), seedActor(t, "admin", true, "full")
+	a, b := seedActor(t, "admin", false, "full"), seedActor(t, "admin", false, "full")
 	first := manual("A", "app-shared-proof", "waba-shared-proof-a", "phone-shared-proof-a", testToken, testSecret)
 	second := manual("B", first.AppID, "waba-shared-proof-b", "phone-shared-proof-b", "token-teste-local-bbbb", testSecret)
 	boxA, err := svc.Configure(ctx, a.hash, first)
@@ -183,7 +183,7 @@ func TestSharedAppRegistry(t *testing.T) {
 func TestSharedAppLegacySecret(t *testing.T) {
 	ctx := context.Background()
 	svc := newService(t, testRing(t))
-	a, b := seedActor(t, "admin", true, "full"), seedActor(t, "admin", true, "full")
+	a, b := seedActor(t, "admin", false, "full"), seedActor(t, "admin", false, "full")
 	id := uuid.New()
 	secret, err := svc.seal(a.tenant, id, entityApp, fieldAppSecret, testSecret)
 	if err != nil {
@@ -262,7 +262,7 @@ func TestMigration08LegacyWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := seedActor(t, "admin", true, "full")
+	a := seedActor(t, "admin", false, "full")
 	id := uuid.New()
 	secret, err := svc.seal(a.tenant, id, entityApp, fieldAppSecret, testSecret)
 	if err != nil {
@@ -356,7 +356,7 @@ func TestMigration08LegacyWrites(t *testing.T) {
 	if err != nil || app.AppSecret != testSecret {
 		t.Fatalf("legacy app: %+v %v", app, err)
 	}
-	b := seedActor(t, "admin", true, "full")
+	b := seedActor(t, "admin", false, "full")
 	box, err := svc.Configure(ctx, b.hash, manual("Legacy", "legacy-upgrade", "legacy-upgrade-waba", "legacy-upgrade-phone", testToken, testSecret))
 	if err != nil {
 		t.Fatal(err)

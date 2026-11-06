@@ -2355,7 +2355,7 @@ export interface components {
             external_id: string;
         };
         MfaStateOutputBody: {
-            /** @description Verdadeiro enquanto o MFA obrigatório não foi confirmado. */
+            /** @description Campo legado; o cadastro de MFA é opcional. */
             mfa_enrollment_required: boolean;
         };
         MutationBody: {
@@ -2478,7 +2478,9 @@ export interface components {
             expires_at: string;
             /** @description Vínculo usado nesta sessão. */
             membership_id: string;
-            /** @description Verdadeiro quando o administrador ainda precisa concluir o MFA. */
+            /** @description Verdadeiro quando o MFA está confirmado para esta conta. */
+            mfa_enabled: boolean;
+            /** @description Campo legado; o cadastro de MFA é opcional. */
             mfa_enrollment_required: boolean;
             /** @description Papel no provedor. */
             role: string;
@@ -2814,7 +2816,9 @@ export interface components {
             expires_at: string;
             /** @description Vínculo usado nesta sessão. */
             membership_id: string;
-            /** @description Verdadeiro quando o administrador ainda precisa concluir o MFA. */
+            /** @description Verdadeiro quando o MFA está confirmado para esta conta. */
+            mfa_enabled: boolean;
+            /** @description Campo legado; o cadastro de MFA é opcional. */
             mfa_enrollment_required: boolean;
             /** @description Papel no provedor. */
             role: string;

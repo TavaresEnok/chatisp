@@ -48,19 +48,23 @@ func seed(t *testing.T, ring *crypto.Ring, role string, confirmed bool) actor {
 	}
 	now := time.Now()
 	if err := testStore.WithAuth(ctx, func(ctx context.Context) error {
+		sessionID := uuid.New()
+		if err := testStore.InsertSession(ctx, db.NewSession{ID: sessionID, TokenHash: auth.HashSecret(a.token), UserID: a.user, TenantID: a.tenant, MembershipID: a.membership, CSRFHash: auth.HashSecret(a.csrf), Now: now, IdleExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(2 * time.Hour)}); err != nil {
+			return err
+		}
 		if confirmed {
 			sealed, err := ring.Encrypt([]byte("totp-local-test"), crypto.Context{TenantID: a.tenant.String(), Entity: "user", EntityID: a.user.String(), Field: "totp_secret"})
 			if err != nil {
 				return err
 			}
-			if err = testStore.BeginMFA(ctx, a.user, a.tenant, sealed.Ciphertext, sealed.Version); err != nil {
+			if ok, err := testStore.BeginMFA(ctx, a.user, a.tenant, sessionID, sealed.Ciphertext, sealed.Version, now); err != nil || !ok {
 				return err
 			}
-			if ok, err := testStore.ConfirmMFA(ctx, a.user, now); err != nil || !ok {
+			if ok, err := testStore.ConfirmMFA(ctx, a.user, sessionID, sealed.Ciphertext, now); err != nil || !ok {
 				return fmt.Errorf("MFA: %v", err)
 			}
 		}
-		return testStore.InsertSession(ctx, db.NewSession{ID: uuid.New(), TokenHash: auth.HashSecret(a.token), UserID: a.user, TenantID: a.tenant, MembershipID: a.membership, CSRFHash: auth.HashSecret(a.csrf), Now: now, IdleExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(2 * time.Hour)})
+		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +146,7 @@ func TestHTTPFlow(t *testing.T) {
 	request("POST", path, body("phone-http-3"), a, origin, "bad", 403)
 	request("GET", path, "", actor{}, "", "", 401)
 	request("GET", path, "", agent, "", "", 403)
-	request("GET", path, "", pending, "", "", 403)
+	request("GET", path, "", pending, "", "", 200)
 	request("GET", path, "", other, "", "", 200)
 	conflict := strings.ReplaceAll(body("phone-http-other"), "secret-local-test", "different-secret-local-test")
 	request("POST", path, conflict, other, origin, other.csrf, 409)

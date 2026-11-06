@@ -67,6 +67,7 @@ type Principal struct {
 	Role           string
 	ExpiresAt      time.Time
 	EnrollmentOnly bool
+	MFAEnabled     bool
 	IsSuperadmin   bool
 }
 
@@ -328,6 +329,9 @@ func (s *Service) Authenticate(ctx context.Context, rawToken, csrf string, requi
 			return Principal{}, ErrUnavailable
 		}
 	}
+	if record.Status == "active" && !gate.Found {
+		return Principal{}, ErrUnauthenticated
+	}
 	switch record.Status {
 	case "active":
 	case "blocked":
@@ -367,6 +371,7 @@ func (s *Service) Authenticate(ctx context.Context, rawToken, csrf string, requi
 		Role:           record.Role,
 		ExpiresAt:      record.AbsoluteExpiresAt,
 		EnrollmentOnly: s.enrollmentOnly(record.Role, gate),
+		MFAEnabled:     gate.Confirmed,
 		IsSuperadmin:   gate.IsSuperadmin,
 	}, nil
 }
@@ -728,6 +733,7 @@ func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, email stri
 			MembershipID: membership.MembershipID,
 			Role:         membership.Role,
 			ExpiresAt:    absolute,
+			MFAEnabled:   record.Confirmed,
 		},
 		Token:     raw,
 		CSRFToken: csrf,
@@ -770,13 +776,8 @@ func (s *Service) issueForMembership(ctx context.Context, userID, tenantID, memb
 	if err != nil {
 		return IssuedSession{}, err
 	}
-	if s.keys != nil {
-		if record.Confirmed {
-			return IssuedSession{}, ErrMFARequired
-		}
-		if role == "admin" || record.IsSuperadmin {
-			assurance = "enrollment"
-		}
+	if record.Confirmed {
+		return IssuedSession{}, ErrMFARequired
 	}
 	issued, err := s.issueSession(ctx, userID, email, db.LoginMembership{
 		TenantID:     tenantID,

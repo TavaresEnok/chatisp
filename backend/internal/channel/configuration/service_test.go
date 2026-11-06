@@ -83,7 +83,7 @@ func TestManualConfigurationIsolationVersionAndSecret(t *testing.T) {
 	if _, err := svc.Configure(ctx, agent.hash, first); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("atendente: %v", err)
 	}
-	if _, err := svc.Configure(ctx, bare.hash, first); !errors.Is(err, ErrMFARequired) {
+	if _, err := svc.authorize(ctx, bare.hash); err != nil {
 		t.Fatalf("sem MFA: %v", err)
 	}
 	if _, err := svc.Configure(ctx, enroll.hash, first); !errors.Is(err, ErrMFARequired) {
@@ -674,6 +674,14 @@ func seedActor(t *testing.T, role string, confirm bool, assurance string) seeded
 	}
 	now := time.Now().UTC()
 	if err := testStore.WithAuth(ctx, func(ctx context.Context) error {
+
+		sessionID := uuid.New()
+		if err := testStore.InsertSession(ctx, db.NewSession{
+			ID: sessionID, TokenHash: actor.hash, UserID: actor.user, TenantID: actor.tenant, MembershipID: membership,
+			CSRFHash: randomBytes(t, 32), Now: now, IdleExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(2 * time.Hour),
+		}); err != nil {
+			return err
+		}
 		if confirm {
 			sealed, err := testRing(t).Encrypt([]byte("totp-teste-local-123456"), crypto.Context{
 				TenantID: actor.tenant.String(), Entity: "user", EntityID: actor.user.String(), Field: "totp_secret",
@@ -681,20 +689,13 @@ func seedActor(t *testing.T, role string, confirm bool, assurance string) seeded
 			if err != nil {
 				return err
 			}
-			if err := testStore.BeginMFA(ctx, actor.user, actor.tenant, sealed.Ciphertext, sealed.Version); err != nil {
+			if ok, err := testStore.BeginMFA(ctx, actor.user, actor.tenant, sessionID, sealed.Ciphertext, sealed.Version, now); err != nil || !ok {
 				return err
 			}
-			ok, err := testStore.ConfirmMFA(ctx, actor.user, now)
+			ok, err := testStore.ConfirmMFA(ctx, actor.user, sessionID, sealed.Ciphertext, now)
 			if err != nil || !ok {
 				return fmt.Errorf("confirmar MFA: %v", err)
 			}
-		}
-		sessionID := uuid.New()
-		if err := testStore.InsertSession(ctx, db.NewSession{
-			ID: sessionID, TokenHash: actor.hash, UserID: actor.user, TenantID: actor.tenant, MembershipID: membership,
-			CSRFHash: randomBytes(t, 32), Now: now, IdleExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(2 * time.Hour),
-		}); err != nil {
-			return err
 		}
 		if assurance != "full" {
 			return testStore.SetSessionAssurance(ctx, sessionID, assurance)

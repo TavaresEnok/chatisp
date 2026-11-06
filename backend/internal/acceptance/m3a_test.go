@@ -163,17 +163,7 @@ func TestM3AIntegrated(t *testing.T) {
 		now := time.Now()
 		session := uuid.New()
 		if e := store.WithAuth(ctx, func(c context.Context) error {
-			sealed, e := ring.Encrypt([]byte("simulation-secret"), crypto.Context{TenantID: tenant.String(), Entity: "user", EntityID: a.user.String(), Field: "totp_secret"})
-			if e != nil {
-				return e
-			}
-			if e = store.BeginMFA(c, a.user, tenant, sealed.Ciphertext, sealed.Version); e != nil {
-				return e
-			}
-			if ok, e := store.ConfirmMFA(c, a.user, now); e != nil || !ok {
-				return fmt.Errorf("confirm MFA: %v", e)
-			}
-			if e = store.InsertSession(c, db.NewSession{ID: session, TokenHash: auth.HashSecret(a.token), UserID: a.user, TenantID: tenant, MembershipID: a.member, CSRFHash: auth.HashSecret(a.csrf), Now: now, IdleExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(2 * time.Hour)}); e != nil {
+			if e := store.InsertSession(c, db.NewSession{ID: session, TokenHash: auth.HashSecret(a.token), UserID: a.user, TenantID: tenant, MembershipID: a.member, CSRFHash: auth.HashSecret(a.csrf), Now: now, IdleExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(2 * time.Hour)}); e != nil {
 				return e
 			}
 			return store.SetSessionAssurance(c, session, "full")

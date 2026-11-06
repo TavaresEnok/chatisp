@@ -181,7 +181,7 @@ func bootstrap(parent context.Context, args, environ []string, stdin io.Reader, 
 	if *superadmin {
 		role = "admin e superadmin"
 	}
-	fmt.Fprintf(stdout, "bootstrap: provedor %s criado; %s (%s). O MFA é exigido no primeiro acesso.\n", tenantID, normalized, role)
+	fmt.Fprintf(stdout, "bootstrap: provedor %s criado; %s (%s). O MFA pode ser ativado nas configurações da conta.\n", tenantID, normalized, role)
 	return nil
 }
 

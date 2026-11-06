@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QRCodeSVG } from "qrcode.react";
 import { describe, expect, it } from "vitest";
 import { currentCsrfToken } from "@/api/client";
 import { queryKeys } from "@/lib/query-keys";
@@ -72,6 +73,22 @@ describe("identidade", () => {
       expect(await screen.findByRole("heading", { level: 1, name: "Painel" })).toBeInTheDocument();
       const attempts = panel.requests.filter((request) => request.path === "/api/panel/session" && request.method === "POST");
       expect(attempts[1]?.body).toMatchObject({ code: "rec-123456" });
+      await user.click(screen.getByRole("link", { name: "Configurações" }));
+      expect(await screen.findByText("Autenticação em duas etapas: ativa.")).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Ativar autenticação em duas etapas" })).not.toBeInTheDocument();
+      expect(panel.requests.some((request) => request.path === "/api/panel/mfa/enrollment")).toBe(false);
+    });
+  });
+
+  it("permite entrar quando um cadastro antigo de MFA está pendente", async () => {
+    const panel = new PanelDouble();
+    const account = panel.accounts[0];
+    if (!account) throw new Error("conta ausente");
+    account.mfa = "pending";
+    await withPanel(panel, "/entrar", async () => {
+      await enter("ana@provedor.test", "senha-certa");
+      expect(await screen.findByRole("heading", { level: 1, name: "Painel" })).toBeInTheDocument();
+      expect(useSessionStore.getState().principal?.mfaEnabled).toBe(false);
     });
   });
 
@@ -81,18 +98,35 @@ describe("identidade", () => {
     if (!account) {
       throw new Error("conta ausente");
     }
-    account.mfa = "pending";
     await withPanel(panel, "/entrar", async () => {
       const user = await enter("ana@provedor.test", "senha-certa");
+      expect(await screen.findByRole("heading", { level: 1, name: "Painel" })).toBeInTheDocument();
+      await user.click(screen.getByRole("link", { name: "Configurações" }));
+      await user.click(await screen.findByRole("link", { name: "Ativar autenticação em duas etapas" }));
       expect(await screen.findByRole("heading", { name: "Autenticação em duas etapas" })).toBeInTheDocument();
-      await user.click(screen.getByRole("button", { name: "Gerar códigos de recuperação" }));
+      expect(panel.requests.some((request) => request.path === "/api/panel/mfa/enrollment")).toBe(false);
+      await user.click(screen.getByRole("button", { name: "Iniciar cadastro" }));
+      const qr = await screen.findByRole("img", { name: "QR code para aplicativo autenticador" });
+      const reference = render(<QRCodeSVG value="otpauth://totp/Chat%20ISP:ana@provedor.test?secret=SEGREDOBASE32" size={200} marginSize={2} />);
+      expect(qr.innerHTML).toBe(reference.container.querySelector("svg")?.innerHTML);
+      reference.unmount();
       expect(await screen.findByText("codigo-um")).toBeInTheDocument();
       expect(screen.getByText("codigo-dois")).toBeInTheDocument();
+      await user.click(screen.getByText("Não consigo escanear o QR Code"));
       expect(screen.getByText("SEGREDOBASE32")).toBeInTheDocument();
+      await user.type(screen.getByLabelText("Código do aplicativo"), "000000");
+      await user.click(screen.getByRole("button", { name: "Confirmar código" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("código de autenticação inválido");
+      await user.clear(screen.getByLabelText("Código do aplicativo"));
       await user.type(screen.getByLabelText("Código do aplicativo"), "123456");
       await user.click(screen.getByRole("button", { name: "Confirmar código" }));
-      expect(await screen.findByRole("heading", { level: 1, name: "Painel" })).toBeInTheDocument();
+      expect(await screen.findByText(/Autenticação em duas etapas ativada/)).toBeInTheDocument();
+      expect(screen.getByText("codigo-um")).toBeInTheDocument();
       expect(useSessionStore.getState().principal?.mfaEnrollmentRequired).toBe(false);
+      expect(useSessionStore.getState().principal?.mfaEnabled).toBe(true);
+      await user.click(screen.getByRole("link", { name: "Concluir e voltar às configurações" }));
+      expect(await screen.findByText("Autenticação em duas etapas: ativa.")).toBeInTheDocument();
+      expect(panel.requests.filter((request) => request.path === "/api/panel/mfa/enrollment")).toHaveLength(1);
     });
   });
 

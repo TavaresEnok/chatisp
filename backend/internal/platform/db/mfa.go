@@ -90,13 +90,14 @@ func (s *Store) MFARecord(ctx context.Context, userID uuid.UUID) (MFARecord, err
 }
 
 // BeginMFA stores a new ciphertext and drops previous recovery codes. It requires WithAuth.
-func (s *Store) BeginMFA(ctx context.Context, userID, tenantID uuid.UUID, ciphertext []byte, version string) error {
+func (s *Store) BeginMFA(ctx context.Context, userID, tenantID, sessionID uuid.UUID, ciphertext []byte, version string, now time.Time) (bool, error) {
 	scope, err := authFrom(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
-	_, err = scope.tx.Exec(ctx, `SELECT auth_mfa_begin($1, $2, $3, $4)`, userID, ciphertext, version, tenantID)
-	return mapAuthErr(err)
+	var ok bool
+	err = scope.tx.QueryRow(ctx, `SELECT auth_mfa_begin_optional($1, $2, $3, $4, $5, $6)`, userID, ciphertext, version, tenantID, sessionID, now).Scan(&ok)
+	return ok, mapAuthErr(err)
 }
 
 // AddRecoveryCode stores one hashed recovery code. It requires WithAuth.
@@ -110,27 +111,28 @@ func (s *Store) AddRecoveryCode(ctx context.Context, id, userID uuid.UUID, codeH
 }
 
 // ConfirmMFA marks the stored secret as confirmed. It requires WithAuth.
-func (s *Store) ConfirmMFA(ctx context.Context, userID uuid.UUID, now time.Time) (bool, error) {
+func (s *Store) ConfirmMFA(ctx context.Context, userID, sessionID uuid.UUID, ciphertext []byte, now time.Time) (bool, error) {
 	scope, err := authFrom(ctx)
 	if err != nil {
 		return false, err
 	}
 	var ok bool
-	err = scope.tx.QueryRow(ctx, `SELECT auth_mfa_confirm($1, $2)`, userID, now).Scan(&ok)
+	err = scope.tx.QueryRow(ctx, `SELECT auth_mfa_confirm_optional($1, $2, $3, $4)`, userID, sessionID, ciphertext, now).Scan(&ok)
 	if err != nil {
 		return false, mapAuthErr(err)
 	}
 	return ok, nil
 }
 
-// ClearMFA removes the secret, the recovery codes and the user's sessions. It requires WithAuth.
-func (s *Store) ClearMFA(ctx context.Context, userID uuid.UUID, now time.Time) error {
+// ResetMFA revalidates the actor and revokes target sessions atomically.
+func (s *Store) ResetMFA(ctx context.Context, actor, session, tenant, target uuid.UUID, now time.Time) (bool, error) {
 	scope, err := authFrom(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
-	_, err = scope.tx.Exec(ctx, `SELECT auth_mfa_clear($1, $2)`, userID, now)
-	return mapAuthErr(err)
+	var ok bool
+	err = scope.tx.QueryRow(ctx, `SELECT auth_mfa_reset_optional($1, $2, $3, $4, $5)`, actor, session, tenant, target, now).Scan(&ok)
+	return ok, mapAuthErr(err)
 }
 
 // ListRecoveryCodes returns unused recovery hashes. It requires WithAuth.

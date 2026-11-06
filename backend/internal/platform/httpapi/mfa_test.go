@@ -20,7 +20,7 @@ import (
 	"chatisp/internal/platform/mail"
 )
 
-func TestAdminWithoutMFACannotUseProtectedRoutes(t *testing.T) {
+func TestAdminWithoutMFACanUseProtectedRoutes(t *testing.T) {
 	password := "senha-correta-10"
 	admin := seedPanelUser(t, "admin", password)
 	agent := seedPanelUser(t, "agent", password)
@@ -59,8 +59,8 @@ func TestAdminWithoutMFACannotUseProtectedRoutes(t *testing.T) {
 	if err := json.Unmarshal(login.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if !body.MFAEnrollmentRequired {
-		t.Fatal("login de administrador não exigiu enrolamento")
+	if body.MFAEnrollmentRequired {
+		t.Fatal("cadastro de MFA deve ser opcional")
 	}
 	cookie, csrfCookie := panelCookies(t, login)
 	if body.CSRFToken != csrfCookie {
@@ -69,7 +69,7 @@ func TestAdminWithoutMFACannotUseProtectedRoutes(t *testing.T) {
 	blocked := panelCall(api.Handler, http.MethodPost, "/api/panel/invitations", "198.51.100.41", map[string]string{
 		"email": uuid.NewString() + "@example.com", "role": "agent",
 	}, cookie, body.CSRFToken, origin, "")
-	if blocked.Code != http.StatusForbidden || !strings.Contains(blocked.Body.String(), "conclua o cadastro do MFA") {
+	if blocked.Code != http.StatusCreated {
 		t.Fatalf("rota protegida: %d %s", blocked.Code, blocked.Body.String())
 	}
 

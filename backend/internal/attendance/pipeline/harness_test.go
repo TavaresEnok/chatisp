@@ -307,16 +307,6 @@ func seedTenantWithMeta(t *testing.T, appID, wabaID, phoneID, token, appSecret s
 	}
 	now := time.Now().UTC()
 	if err := testStore.WithAuth(ctx, func(ctx context.Context) error {
-		sealed, err := testRing.Encrypt([]byte("totp-teste-local-123456"), crypto.Context{TenantID: st.tenantID.String(), Entity: "user", EntityID: st.userID.String(), Field: "totp_secret"})
-		if err != nil {
-			return err
-		}
-		if err = testStore.BeginMFA(ctx, st.userID, st.tenantID, sealed.Ciphertext, sealed.Version); err != nil {
-			return err
-		}
-		if ok, err := testStore.ConfirmMFA(ctx, st.userID, now); err != nil || !ok {
-			return fmt.Errorf("confirmar MFA: %v", err)
-		}
 		return testStore.InsertSession(ctx, db.NewSession{ID: uuid.New(), TokenHash: hash, UserID: st.userID, TenantID: st.tenantID, MembershipID: st.memberID, CSRFHash: csrf, Now: now, IdleExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(2 * time.Hour)})
 	}); err != nil {
 		t.Fatalf("falha ao criar sessão: %v", err)

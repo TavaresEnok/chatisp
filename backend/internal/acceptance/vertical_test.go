@@ -202,17 +202,7 @@ func TestVertical(t *testing.T) {
 		now := time.Now()
 		session := uuid.New()
 		if err := store.WithAuth(ctx, func(c context.Context) error {
-			sealed, e := ring.Encrypt([]byte("simulation-totp-secret"), crypto.Context{TenantID: a.tenant.String(), Entity: "user", EntityID: a.user.String(), Field: "totp_secret"})
-			if e != nil {
-				return e
-			}
-			if e = store.BeginMFA(c, a.user, a.tenant, sealed.Ciphertext, sealed.Version); e != nil {
-				return e
-			}
-			if ok, e := store.ConfirmMFA(c, a.user, now); e != nil || !ok {
-				return fmt.Errorf("confirm MFA: %v", e)
-			}
-			if e = store.InsertSession(c, db.NewSession{ID: session, TokenHash: auth.HashSecret(a.token), UserID: a.user, TenantID: a.tenant, MembershipID: a.member, CSRFHash: auth.HashSecret(a.csrf), Now: now, IdleExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(2 * time.Hour)}); e != nil {
+			if e := store.InsertSession(c, db.NewSession{ID: session, TokenHash: auth.HashSecret(a.token), UserID: a.user, TenantID: a.tenant, MembershipID: a.member, CSRFHash: auth.HashSecret(a.csrf), Now: now, IdleExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(2 * time.Hour)}); e != nil {
 				return e
 			}
 			return store.SetSessionAssurance(c, session, "full")

@@ -31,6 +31,23 @@ export function SettingsPage() {
 
   return (
     <AreaPage areaId="settings">
+      {principal && !principal.mfaEnrollmentRequired && (
+        <section aria-labelledby="seguranca-conta" className="flex flex-col gap-2">
+          <h2 id="seguranca-conta" className="font-medium">Segurança da conta</h2>
+          {principal.mfaEnabled === true ? (
+            <p>Autenticação em duas etapas: ativa.</p>
+          ) : principal.mfaEnabled === false ? (
+            <>
+              <p>Autenticação em duas etapas: desativada (opcional).</p>
+              <Link to="/mfa" className="font-medium underline-offset-4 hover:underline">
+                Ativar autenticação em duas etapas
+              </Link>
+            </>
+          ) : (
+            <p>Não foi possível verificar o estado da autenticação em duas etapas. Atualize a página.</p>
+          )}
+        </section>
+      )}
       <SettingsSections />
  {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <DistributionSettings key={`distribution:${principal.sessionId}`} principal={principal} />}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <AutomationSettings key={`automation:${principal.sessionId}`} principal={principal} />}
@@ -45,13 +62,6 @@ export function SettingsPage() {
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <CannedSettings key={`canned:${principal.membershipId}`} principal={principal} />}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <HoursSettings key={`hours:${principal.membershipId}`} principal={principal} />}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <EmbedSettings key={`embed:${principal.membershipId}`} principal={principal} />}
-      {principal && !principal.mfaEnrollmentRequired ? (
-        <p className="text-sm">
-          <Link to="/mfa" className="font-medium underline-offset-4 hover:underline">
-            Cadastrar autenticação em duas etapas
-          </Link>
-        </p>
-      ) : null}
       <ProviderAdmin />
       <PlatformAdmin />
       <LocalDisplayNameForm />

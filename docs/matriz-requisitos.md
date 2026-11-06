@@ -16,7 +16,7 @@ Revisão de 05/11/2026 na retomada: recusa de expurgo não prova executor; alert
 | 12-papeis | M1 | V1 | Implementado e verificado | platform/httpapi/roles_test.go (papéis admin/supervisor/agent); RoleAllows |
 | 12-login | M1 | V1 | Implementado e verificado | TestArgon2idHashIsVersionedAndNotReversible (platform/auth) |
 | 12-reset-senha | M1 | V1 | Implementado e verificado | TestInviteAndResetTokensAreSingleUse |
-| 12-mfa | M1 | V1 | Implementado e verificado | TestMFAAttemptLimit, TestAdminWithoutMFACannotUseProtectedRoutes, TestAdminMustEnrollBeforePanelAndRecoveryIsSingleUse, TestKeyRotationKeepsReadingOldTOTP |
+| 12-mfa | M1 | V1 | Implementado e verificado | TestMFAAttemptLimit, TestAdminWithoutMFACanUseProtectedRoutes, TestAdminCanEnrollAndRecoveryIsSingleUse, TestKeyRotationKeepsReadingOldTOTP; política opcional e QR local conforme decisão do proprietário em 06/11/2026; evidências em medicoes/mfa-opcional-20261106 |
 | 12-sessoes | M1 | V1 | Implementado e verificado | TestSessionCookieFlagsAndHashedSecret, TestPanelRejectsBadOriginCSRFAndRevokedSession; login HTTPS real em 04/11 |
 | 12-bloqueio-login | M1 | V1 | Implementado e verificado | TestProgressiveLockoutByAccountAndIP, TestMFAAttemptLimit |
 | 12-https | M1 | V1 | Implementado e verificado | deploy/Caddyfile (corrigido em 05/11/2026: site `localhost:443, 127.0.0.1:443` e `default_sni`; o `:443` sem nome falhava no TLS) e TestCaddyfileNamesTheInternalCertificate; scripts/compose-validate.sh verde em 05/11/2026: HTTPS pelo Caddy, login com __Host-session Secure (docs/medicoes/docker-20261105/compose-validate-final.txt) |

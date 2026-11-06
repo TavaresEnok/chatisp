@@ -50,6 +50,7 @@ type Issued = {
   csrf_token: string;
   expires_at: string;
   mfa_enrollment_required: boolean;
+  mfa_enabled: boolean;
 };
 
 const createdAt = "2026-10-01T12:00:00.000Z";
@@ -212,6 +213,7 @@ export class PanelDouble {
       return;
     }
     if (method === "POST" && path === "/api/panel/mfa/enrollment") {
+      if (this.issued?.mfa_enabled) { problem(res, 409, "MFA já ativo"); return; }
       sendJson(res, 200, {
         otpauth_url: "otpauth://totp/Chat%20ISP:ana@provedor.test?secret=SEGREDOBASE32",
         secret: "SEGREDOBASE32",
@@ -222,11 +224,13 @@ export class PanelDouble {
     if (method === "POST" && path === "/api/panel/mfa/enrollment/confirm") {
       const code = this.record(body).code;
       if (code !== "123456") {
-        problem(res, 401, "código de autenticação inválido");
+        problem(res, 422, "código de autenticação inválido");
         return;
       }
       if (this.issued) {
-        this.issued = { ...this.issued, mfa_enrollment_required: false };
+        this.issued = { ...this.issued, mfa_enrollment_required: false, mfa_enabled: true };
+        const account = this.accounts.find((item) => item.userId === this.issued?.user_id);
+        if (account) account.mfa = "active";
       }
       sendJson(res, 200, { mfa_enrollment_required: false });
       return;
@@ -515,7 +519,7 @@ export class PanelDouble {
       problem(res, 401, input.code ? "código de autenticação inválido" : "informe o código de autenticação");
       return;
     }
-    this.issue(res, account, account.mfa === "pending");
+    this.issue(res, account, false);
   }
 
   private accept(res: http.ServerResponse, body: unknown) {
@@ -555,6 +559,7 @@ export class PanelDouble {
       csrf_token: account.csrf,
       expires_at: expiresAt,
       mfa_enrollment_required: enrollment,
+      mfa_enabled: account.mfa === "active",
     };
     this.memberships[0] = {
       id: this.issued.membership_id,
@@ -576,6 +581,7 @@ export class PanelDouble {
       session_id: this.issued?.session_id,
       expires_at: this.issued?.expires_at,
       mfa_enrollment_required: this.issued?.mfa_enrollment_required ?? false,
+      mfa_enabled: this.issued?.mfa_enabled ?? false,
     };
   }
 

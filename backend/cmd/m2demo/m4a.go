@@ -334,17 +334,7 @@ func insertFixtureSession(ctx context.Context, store *db.Store, ring *crypto.Rin
 	actor := m3bActor{Token: uuid.NewString(), CSRF: uuid.NewString(), User: user, Member: member, Role: role}
 	now, session := time.Now(), uuid.New()
 	err := store.WithAuth(ctx, func(c context.Context) error {
-		sealed, e := ring.Encrypt([]byte("simulation-secret"), crypto.Context{TenantID: tenant.String(), Entity: "user", EntityID: user.String(), Field: "totp_secret"})
-		if e != nil {
-			return e
-		}
-		if e = store.BeginMFA(c, user, tenant, sealed.Ciphertext, sealed.Version); e != nil {
-			return e
-		}
-		if _, e = store.ConfirmMFA(c, user, now); e != nil {
-			return e
-		}
-		if e = store.InsertSession(c, db.NewSession{ID: session, TokenHash: auth.HashSecret(actor.Token), UserID: user, TenantID: tenant, MembershipID: member, CSRFHash: auth.HashSecret(actor.CSRF), Now: now, IdleExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(2 * time.Hour)}); e != nil {
+		if e := store.InsertSession(c, db.NewSession{ID: session, TokenHash: auth.HashSecret(actor.Token), UserID: user, TenantID: tenant, MembershipID: member, CSRFHash: auth.HashSecret(actor.CSRF), Now: now, IdleExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(2 * time.Hour)}); e != nil {
 			return e
 		}
 		return store.SetSessionAssurance(c, session, "full")

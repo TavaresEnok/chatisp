@@ -74,17 +74,7 @@ func seedM3B(ctx context.Context, store *db.Store, ring *crypto.Ring, svc sector
 		}
 		now, session := time.Now(), uuid.New()
 		if err = store.WithAuth(ctx, func(c context.Context) error {
-			sealed, e := ring.Encrypt([]byte("simulation-secret"), crypto.Context{TenantID: p.TenantID.String(), Entity: "user", EntityID: a.User.String(), Field: "totp_secret"})
-			if e != nil {
-				return e
-			}
-			if e = store.BeginMFA(c, a.User, p.TenantID, sealed.Ciphertext, sealed.Version); e != nil {
-				return e
-			}
-			if _, e = store.ConfirmMFA(c, a.User, now); e != nil {
-				return e
-			}
-			if e = store.InsertSession(c, db.NewSession{ID: session, TokenHash: auth.HashSecret(a.Token), UserID: a.User, TenantID: p.TenantID, MembershipID: a.Member, CSRFHash: auth.HashSecret(a.CSRF), Now: now, IdleExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(2 * time.Hour)}); e != nil {
+			if e := store.InsertSession(c, db.NewSession{ID: session, TokenHash: auth.HashSecret(a.Token), UserID: a.User, TenantID: p.TenantID, MembershipID: a.Member, CSRFHash: auth.HashSecret(a.CSRF), Now: now, IdleExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(2 * time.Hour)}); e != nil {
 				return e
 			}
 			return store.SetSessionAssurance(c, session, "full")

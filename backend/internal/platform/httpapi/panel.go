@@ -53,7 +53,7 @@ func registerPanel(api huma.API, deps Dependencies) {
 		http.StatusUnauthorized, http.StatusForbidden, http.StatusConflict, http.StatusServiceUnavailable,
 	}), panel.beginMFA)
 	huma.Register(api, panelOp("confirm-panel-mfa", http.MethodPost, "/api/panel/mfa/enrollment/confirm", "Confirma o MFA", "Valida o primeiro código TOTP e libera o painel nesta sessão.", http.StatusOK, []int{
-		http.StatusUnauthorized, http.StatusForbidden, http.StatusConflict, http.StatusTooManyRequests, http.StatusServiceUnavailable,
+		http.StatusUnauthorized, http.StatusForbidden, http.StatusConflict, http.StatusTooManyRequests, http.StatusUnprocessableEntity, http.StatusServiceUnavailable,
 	}), panel.confirmMFA)
 	huma.Register(api, panelOp("reset-panel-mfa", http.MethodPost, "/api/panel/mfa/reset", "Redefine o MFA", "Administrador com MFA ativo limpa o fator de um usuário do provedor. A ação é auditada.", http.StatusNoContent, []int{
 		http.StatusUnauthorized, http.StatusForbidden, http.StatusServiceUnavailable,
@@ -107,7 +107,8 @@ type sessionBody struct {
 	SessionID             uuid.UUID `json:"session_id" doc:"Identificador da sessão, distinto do cookie."`
 	CSRFToken             string    `json:"csrf_token" doc:"Token de CSRF desta sessão. Também vai no cookie legível pelo painel."`
 	ExpiresAt             time.Time `json:"expires_at" doc:"Fim absoluto da sessão."`
-	MFAEnrollmentRequired bool      `json:"mfa_enrollment_required" doc:"Verdadeiro quando o administrador ainda precisa concluir o MFA."`
+	MFAEnrollmentRequired bool      `json:"mfa_enrollment_required" doc:"Campo legado; o cadastro de MFA é opcional."`
+	MFAEnabled            bool      `json:"mfa_enabled" doc:"Verdadeiro quando o MFA está confirmado para esta conta."`
 }
 
 type sessionOutput struct {
@@ -132,7 +133,8 @@ type principalBody struct {
 	Role                  string    `json:"role" doc:"Papel no provedor."`
 	SessionID             uuid.UUID `json:"session_id" doc:"Identificador da sessão."`
 	ExpiresAt             time.Time `json:"expires_at" doc:"Fim absoluto da sessão."`
-	MFAEnrollmentRequired bool      `json:"mfa_enrollment_required" doc:"Verdadeiro quando o administrador ainda precisa concluir o MFA."`
+	MFAEnrollmentRequired bool      `json:"mfa_enrollment_required" doc:"Campo legado; o cadastro de MFA é opcional."`
+	MFAEnabled            bool      `json:"mfa_enabled" doc:"Verdadeiro quando o MFA está confirmado para esta conta."`
 }
 
 type principalOutput struct {
@@ -389,7 +391,7 @@ type confirmMFAInput struct {
 
 type mfaStateOutput struct {
 	Body struct {
-		MFAEnrollmentRequired bool `json:"mfa_enrollment_required" doc:"Verdadeiro enquanto o MFA obrigatório não foi confirmado."`
+		MFAEnrollmentRequired bool `json:"mfa_enrollment_required" doc:"Campo legado; o cadastro de MFA é opcional."`
 	}
 }
 
@@ -423,6 +425,9 @@ func (p *panelAPI) confirmMFA(ctx context.Context, input *confirmMFAInput) (*mfa
 		return nil, err
 	}
 	if err := p.auth.ConfirmEnrollment(ctx, actor, input.Body.Code); err != nil {
+		if errors.Is(err, auth.ErrInvalidMFA) {
+			return nil, huma.Error422UnprocessableEntity(err.Error())
+		}
 		return nil, authProblem(err)
 	}
 	out := &mfaStateOutput{}
@@ -519,6 +524,7 @@ func sessionResponse(issued auth.IssuedSession) *sessionOutput {
 			CSRFToken:             issued.CSRFToken,
 			ExpiresAt:             issued.ExpiresAt,
 			MFAEnrollmentRequired: issued.EnrollmentRequired,
+			MFAEnabled:            issued.Principal.MFAEnabled,
 		},
 	}
 }
@@ -533,6 +539,7 @@ func principalFrom(principal auth.Principal) principalBody {
 		SessionID:             principal.SessionID,
 		ExpiresAt:             principal.ExpiresAt,
 		MFAEnrollmentRequired: principal.EnrollmentOnly,
+		MFAEnabled:            principal.MFAEnabled,
 	}
 }
 

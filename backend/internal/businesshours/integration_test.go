@@ -322,7 +322,8 @@ func TestPostgresAndHTTP(t *testing.T) {
 	request("GET", path, token, "", "", nil, 403)
 	exec(`UPDATE tenants SET status='active' WHERE id=$1`, tenant)
 	exec(`UPDATE users SET totp_confirmed_at=NULL WHERE id=$1`, user)
-	request("GET", path, token, "", "", nil, 403)
+	// A sessão sem fator confirmado continua autorizada pela política opcional.
+	request("GET", path, token, "", "", nil, 200)
 	exec(`UPDATE users SET totp_confirmed_at=now(),is_superadmin=true WHERE id=$1`, user)
 	request("GET", path, token, "", "", nil, 403)
 	exec(`UPDATE sessions SET revoked_at=now() WHERE token_hash=$1`, auth.HashSecret(token))

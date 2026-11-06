@@ -664,8 +664,8 @@ func TestPolicyPostgres(t *testing.T) {
 	request("GET", "/templates", "", "", "", "", 401)
 	request("POST", consentPath, body, token, "https://evil.example", csrf, 403)
 	request("POST", consentPath, body, token, "https://panel.example", "bad", 403)
-	// Admin enrollment is enforced by the real auth gate; complete MFA for successful operations.
-	request("POST", consentPath, body, token, "https://panel.example", csrf, 403)
+	// Sem fator confirmado, a sessão completa permite a operação; também verificamos após ativar MFA.
+	request("POST", consentPath, body, token, "https://panel.example", csrf, 200)
 	actor, e := authSvc.Authenticate(ctx, token, csrf, true)
 	if e != nil {
 		t.Fatal(e)

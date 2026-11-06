@@ -219,13 +219,21 @@ async function loginUi(page, email, password, secret, account) {
   await page.waitForURL(/\/(painel|mfa)$/);
 }
 async function enrollMfa(page, account) {
+  await page.waitForURL(/\/(painel|mfa)$/);
+  if (!page.url().endsWith("/mfa")) await page.goto(`${BASE}/mfa`);
   await page.waitForURL(/\/mfa$/);
-  await page.getByRole("button", { name: "Gerar códigos de recuperação" }).click();
+  await page.getByRole("button", { name: "Iniciar cadastro" }).click();
+  await page.getByRole("img", { name: "QR code para aplicativo autenticador" }).waitFor({ state: "visible" });
+  await page.getByText("Não consigo escanear o QR Code").click();
   const secretText = await page.getByText(/^Segredo:/).textContent();
   const secret = secretText.replace("Segredo:", "").trim();
   assert.match(secret, /^[A-Z2-7]{16,}$/, "segredo do MFA em formato inesperado");
   await page.getByLabel("Código do aplicativo").fill(await freshCode(account, secret));
   await page.getByRole("button", { name: "Confirmar código" }).click();
+  await page.getByText(/Autenticação em duas etapas ativada/).waitFor();
+  await page.getByRole("link", { name: "Concluir e voltar às configurações" }).click();
+  await page.waitForURL(/\/configuracoes$/);
+  await page.goto(`${BASE}/painel`);
   await page.waitForURL(/\/painel$/);
   await page.getByRole("heading", { level: 1, name: "Painel" }).waitFor();
   return secret;

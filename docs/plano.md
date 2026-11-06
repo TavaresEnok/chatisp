@@ -159,7 +159,7 @@ Estado de todas as linhas: pendente.
 | 12-papeis | V1 | Papéis Administrador, Supervisor e Atendente | Matriz fixa da seção 12, checada no backend, sem editor de permissões. |
 | 12-login | V1 | Login por e-mail e senha | Senha com Argon2id, parâmetros versionados, sem senha reversível. |
 | 12-reset-senha | V1 | Recuperação de senha | Token de uso único, validade curta e limite de tentativas. |
-| 12-mfa | V1 | MFA com TOTP e códigos de recuperação | Obrigatório para superadmin e administradores; opcional para atendente. Segredo cifrado; códigos com hash. |
+| 12-mfa | V1 | MFA com TOTP e códigos de recuperação | Opcional para todas as contas, com ativação nas configurações e QR Code local (decisão do proprietário em 06/11/2026). Segredo cifrado; códigos com hash; contas com fator ativo continuam exigindo o código. |
 | 12-sessoes | V1 | Gestão de sessões e revogação | Cookie __Host-session, hash do ID, expiração por inatividade e absoluta. Admin revoga sessão. |
 | 12-bloqueio-login | V1 | Bloqueio por tentativas de login | Força bruta no login e no MFA é limitada e auditada. |
 | 12-https | V1 | HTTPS / TLS | Caddy na instalação prevista. Cookie Secure. Este host não sobe o proxy; o arquivo de deploy sim. |

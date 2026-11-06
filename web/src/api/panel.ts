@@ -37,6 +37,7 @@ export function principalFromSession(body: SessionBody): PanelPrincipal {
     sessionId: body.session_id,
     expiresAt: body.expires_at,
     mfaEnrollmentRequired: body.mfa_enrollment_required,
+    mfaEnabled: body.mfa_enabled,
   };
 }
 

@@ -10,6 +10,7 @@ export type PanelPrincipal = {
   sessionId: string;
   expiresAt: string;
   mfaEnrollmentRequired: boolean;
+  mfaEnabled?: boolean;
 };
 
 type SessionState = {
@@ -61,7 +62,7 @@ export const useSessionStore = create<SessionState>()((set) => ({
   completeEnrollment: () => {
     set((state) => ({
       principal: state.principal
-        ? { ...state.principal, mfaEnrollmentRequired: false }
+        ? { ...state.principal, mfaEnrollmentRequired: false, mfaEnabled: true }
         : null,
     }));
   },

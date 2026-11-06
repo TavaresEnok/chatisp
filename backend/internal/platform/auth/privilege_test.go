@@ -70,9 +70,9 @@ func TestIdentityTablesStayOnTheAuthPath(t *testing.T) {
 		if platform || ingress {
 			t.Fatalf("%s executável fora do papel da aplicação", name)
 		}
-		if name == "auth_require_scope" {
+		if name == "auth_require_scope" || name == "auth_mfa_begin" || name == "auth_mfa_confirm" || name == "auth_mfa_clear" {
 			if app {
-				t.Fatal("auth_require_scope ficou executável pela aplicação")
+				t.Fatalf("função antiga ou interna %s ficou executável pela aplicação", name)
 			}
 			continue
 		}

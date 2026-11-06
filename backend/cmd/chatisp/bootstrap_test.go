@@ -96,8 +96,8 @@ func TestBootstrapFirstAdminOnEmptyInstallation(t *testing.T) {
 	if principal.Role != "admin" || !principal.IsSuperadmin || principal.TenantID == uuid.Nil {
 		t.Fatalf("principal: %+v", principal)
 	}
-	if !principal.EnrollmentOnly {
-		t.Fatal("admin entrou sem exigir o cadastro do MFA")
+	if principal.EnrollmentOnly || principal.MFAEnabled {
+		t.Fatal("primeiro acesso deve ter sessão completa sem fator confirmado")
 	}
 	if n := countRows(t, env.AdminURL, `SELECT count(*) FROM platform_audit_logs WHERE action = 'platform.bootstrap' AND result = 'success'`); n != 1 {
 		t.Fatalf("auditoria do bootstrap: %d", n)
