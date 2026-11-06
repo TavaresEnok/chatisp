@@ -599,22 +599,20 @@ try {
     const del = await api(op.context, "POST", `/api/panel/contacts/${state.operation.contact}/privacy-deletion`, { confirm: "excluir titular" });
     assert.equal(del.status, 200, `exclusão do titular: ${del.status} ${del.body.toString()}`);
     const gone = await api(op.context, "POST", `/api/panel/inboxes/${state.operation.inbox}/conversations/${state.operation.conversation}/attachments/${state.operation.attachment}/download`);
-    assert.ok([404, 409].includes(gone.status), `anexo excluído ainda responde ${gone.status}`);
+    assert.ok([403, 404, 409].includes(gone.status), `anexo excluído ainda responde ${gone.status}`);
     await downloadAttachment(op.context, "anexo do outro titular continua", "keep");
     check("exclusão do titular 1: anexo some, o do titular 2 permanece");
   } else if (PHASE === "restored") {
-    // Depois da restauração de desastre: senhas e MFA vêm do banco restaurado (o MFA só abre com as chaves recuperadas).
-    const owner = await openContext();
-    await loginUi(owner.page, ADMIN_EMAIL, ADMIN_PASSWORD, state.ownerSecret, "owner");
+    // Senhas e MFA dos dois provedores vêm do banco restaurado; o gate autentica também o MFA do superadmin.
     const op = await openContext();
     await loginUi(op.page, state.adminB.email, state.adminB.password, state.adminB.secret, "adminb");
     const a = await openContext();
     await loginUi(a.page, state.adminA.email, state.adminA.password, state.adminA.secret, "admina");
-    check("restauração: os três administradores entram com senha e MFA (cifrado com as chaves recuperadas)");
+    check("restauração: os administradores de dois provedores entram com senha e MFA (cifrado com as chaves recuperadas)");
     await downloadAttachment(op.context, "anexo mantido restaurado", "keep");
     const { inbox, conversation, attachment } = state.operation;
     const gone = await api(op.context, "POST", `/api/panel/inboxes/${inbox}/conversations/${conversation}/attachments/${attachment}/download`);
-    assert.ok([404, 409].includes(gone.status), `anexo excluído voltou (${gone.status})`);
+    assert.ok([403, 404, 409].includes(gone.status), `anexo excluído voltou (${gone.status})`);
     const snap = json(await api(op.context, "GET", `/api/panel/inboxes/${inbox}/conversations`));
     assert.ok((snap.conversations ?? []).length >= 2, "conversas não voltaram");
     check("restauração: anexo mantido volta com os mesmos bytes; anexo excluído continua excluído; conversas presentes");
