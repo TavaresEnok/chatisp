@@ -9,7 +9,7 @@ private=/home/enok/.local/share/chatisp/pronto-hoje-20261106
 project=chatisp-pronto-hoje
 ctl=(python3 "$private/controle.py")
 outroot=/home/enok/.local/share/chatisp/backups-publicacao
-containers=("$project-postgres-1" "$project-garage-1" "$project-chatisp-api-1" "$project-chatisp-worker-1")
+containers=("$project-caddy-1" "$project-postgres-1" "$project-garage-1" "$project-chatisp-api-1" "$project-chatisp-worker-1")
 volumes=(garage-config garage-meta garage-data)
 images=("$project:runtime" "$project:edge" dxflrs/garage:v2.5.0 postgres:18.6-alpine)
 # A identidade e os caminhos são verificados antes de qualquer interrupção.
@@ -41,15 +41,25 @@ needs_restart=0
 restart() {
   (( needs_restart )) || return 0
   local failed=0 healthy=0
-  docker start "$project-garage-1" >/dev/null || failed=1
+  docker start "$project-garage-1" >/dev/null || { echo "Falha ao iniciar Garage." >&2; failed=1; }
   for _ in {1..60}; do
     if [[ $(docker inspect -f '{{.State.Health.Status}}' "$project-garage-1" 2>/dev/null) == healthy ]]; then healthy=1; break; fi
     sleep 1
   done
   (( healthy )) || { echo 'Garage não ficou saudável em 60 segundos.' >&2; failed=1; }
   # Mesmo em erro, tentativa de retornar ambos os serviços ao estado anterior.
-  docker start "$project-chatisp-api-1" "$project-chatisp-worker-1" >/dev/null || failed=1
-  needs_restart=0
+  docker start "$project-chatisp-api-1" >/dev/null || { echo "Falha ao iniciar API." >&2; failed=1; }
+  docker start "$project-chatisp-worker-1" >/dev/null || { echo "Falha ao iniciar worker." >&2; failed=1; }
+  local container
+  for container in "$project-chatisp-api-1" "$project-chatisp-worker-1"; do
+    healthy=0
+    for _ in {1..60}; do
+      if [[ $(docker inspect -f '{{.State.Status}} {{.State.Health.Status}}' "$container" 2>/dev/null) == "running healthy" ]]; then healthy=1; break; fi
+      sleep 1
+    done
+    (( healthy )) || { echo "Contêiner não ficou saudável: $container" >&2; failed=1; }
+  done
+  if (( failed == 0 )); then needs_restart=0; else echo "Retomada incompleta; nova tentativa no encerramento." >&2; fi
   return "$failed"
 }
 trap restart EXIT
@@ -67,7 +77,7 @@ tar -C "$root" -czf "$out/compose-fontes.tar.gz" deploy/compose*.yaml deploy/Cad
 {
   git -C "$root" rev-parse HEAD
   git -C "$root" status --short
-  docker image inspect -f '{{.Id}} {{join .RepoTags ","}}' "${images[@]}"
+  docker image inspect -f '{{.Id}} {{json .RepoTags}}' "${images[@]}"
 } > "$out/versoes.txt"
 restart
 trap - EXIT

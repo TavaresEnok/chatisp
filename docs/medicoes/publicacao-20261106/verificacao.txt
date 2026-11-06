@@ -1,0 +1,9 @@
+Validação de publicação — 06/11/2026
+
+Origem: https://chatisp.tokstiloesporte.com, conectada por resolução forçada ao endereço interno 10.10.0.10. Chromium e Node validaram o certificado com suas trust stores padrão, sem CA adicional e sem ignorar erros TLS. Esta prova não comprova DNS nem acesso externo; o endereço público recusou conexões nas portas 80 e 443.
+
+Duas fixtures sintéticas independentes, cada uma com usuário próprio, conector desabilitado e contato sintético. Nas duas: login e cadastro de MFA da conta sintética, leitura de conversa, assinatura e snapshot WebSocket, upload, validação e download do anexo com bytes idênticos. Na segunda: objeto recusado sem assinatura e URL recusada depois do prazo informado (máximo 60 segundos). Não houve envio a fornecedor.
+
+As duas exclusões de privacidade do contato sintético retornaram sucesso; depois os dois tenants foram suspensos, usuários e vínculos desativados e sessões revogadas. Consulta agregada posterior: 2 fixtures, 2 tenants suspensos, 2 usuários/vínculos desativados, 0 anexos remanescentes, 0 objetos pendentes na fila de privacidade, 2 registros de exclusão de anexo. A resposta de sucesso do fluxo e a fila vazia evidenciam a limpeza; não foi feita inspeção independente no Garage.
+
+O administrador original permaneceu com totp_ciphertext e totp_confirmed_at nulos (1 conta conferida). Não foi iniciado cadastro MFA dele. Fontes e credenciais da prova foram preservadas no diretório privado da instalação; o helper temporário foi removido do código do produto.

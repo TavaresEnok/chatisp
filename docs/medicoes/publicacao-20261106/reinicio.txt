@@ -1,0 +1,37 @@
+Reinício e persistência — 06/11/2026 (America/Fortaleza)
+Serviços reiniciados: PostgreSQL, Garage, Caddy, API e worker.
+Prova após reinício pela borda interna (sem alterar DNS do sistema):
+Conexão com endereço substituído: esta prova não confirma DNS nem acesso externo
+painel healthz: 200
+painel readyz: 200
+painel entrar: 200
+métricas na borda: 404
+storage HTTPS: 200
+TLS: certificados e nomes conferidos pela trust store padrão do Node para as duas origens
+login: 200
+cookie seguro e MFA do administrador ainda pendente
+escrita sem CSRF: 403
+escrita com Origin não permitido: 403
+WebSocket com Origin não permitido: 403
+logout: 204
+
+Prova de recuperação local com CA própria explícita:
+Conexão com endereço substituído: esta prova não confirma DNS nem acesso externo
+CA fornecida explicitamente: esta prova não confirma confiança pública do certificado
+painel healthz: 200
+painel readyz: 200
+painel entrar: 200
+métricas na borda: 404
+storage HTTPS: 200
+TLS: certificados e nomes conferidos com a CA fornecida
+login: 200
+cookie seguro e MFA do administrador ainda pendente
+escrita sem CSRF: 403
+escrita com Origin não permitido: 403
+WebSocket com Origin não permitido: 403
+logout: 204
+
+Roteamento preservado: PNETLab 80/443/18080 respondeu 301.
+NexoISP: resposta anterior 301 para fluxo PNETLab preservada; destino próprio não homologado.
+Acesso sem assinatura: 403; PUT no caminho S3 público: 404; métricas pela borda: 404.
+DNS normal público: 177.104.156.25; curl em 80/443 falhou com conexão recusada.
