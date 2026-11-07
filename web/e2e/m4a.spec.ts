@@ -126,7 +126,7 @@ async function loadSignature(page: Page) {
 }
 
 async function bindInbox(page: Page, inbox: string) {
-  await page.getByRole("combobox", { name: "Caixa", exact: true }).selectOption(inbox);
+  await page.getByRole("combobox", { name: "Caixa de atendimento", exact: true }).selectOption(inbox);
   await page.getByRole("tab", { name: "Todas", exact: true }).click();
 }
 

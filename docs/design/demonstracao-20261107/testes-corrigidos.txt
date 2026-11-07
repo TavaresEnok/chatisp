@@ -1,0 +1,39 @@
+
+> chatisp-web@0.1.0 test
+> vitest run --run src/features/queue src/features/conversation/attendance-integration.test.tsx src/features/contacts/history-events.test.tsx src/test/panel.test.tsx src/test/m2-attendance.test.tsx src/test/m3a-attendance.test.tsx src/pages/conversations-loss.test.tsx src/features/retention
+
+
+ RUN  v5.0.5 /home/enok/Documentos/projetos/chatisp/web
+
+ ✓ src/features/conversation/attendance-integration.test.tsx (15 tests) 2143ms
+   ✓ limpa diretório após negativa HTTP 403 com fila vazia e sem socket 312ms
+   ✓ transfere para setor fora dos vínculos e remove o conteúdo da conversa 402ms
+   ✓ carrega caixa e histórico e envia comando versionado pelo contrato HTTP 815ms
+ ✓ src/test/panel.test.tsx (12 tests) 1608ms
+   ✓ painel (12)
+     ✓ troca preferências por vínculo com cache fresco e descarta salvamento antigo 581ms
+     ✓ percorre as seis áreas com o teclado 331ms
+ ✓ src/test/m3a-attendance.test.tsx (4 tests) 1122ms
+   ✓ admin cadastra setor e contato; troca para agente limpa edição e administração 705ms
+ ✓ src/features/contacts/history-events.test.tsx (6 tests) 682ms
+   ✓ atualiza histórico nos eventos reais e remove dados do supervisor ao trocar perfil 388ms
+ ✓ src/test/m2-attendance.test.tsx (2 tests) 1078ms
+   ✓ opera atendimento simulado pelo contrato do painel 1066ms
+ ✓ src/pages/conversations-loss.test.tsx (1 test) 591ms
+   ✓ trata duas negativas consecutivas da mesma conversa e limpa os caches de novo 590ms
+ ✓ src/features/retention/retention-panel.test.tsx (7 tests) 1071ms
+   ✓ mostra o nome, o expurgo desligado e a exportação que não é histórico do ERP 307ms
+ ✓ src/features/queue/queue-controls.test.tsx (2 tests) 518ms
+   ✓ permite navegar por teclado, alterar e limpar a busca e filtros, ordenar e selecionar 486ms
+ ✓ src/features/queue/queue-wait-alert.test.tsx (1 test) 233ms
+ ✓ src/features/queue/queue-integration.test.tsx (3 tests) 233ms
+
+ Test Files  10 passed (10)
+      Tests  53 passed (53)
+   Start at  01:48:07
+   Duration  24.03s (tests 41%, environment 33%, import 15%, setup 5%, transform 4%)
+
+Environment  jsdom was created 10 times · 7.48s total, 33% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+

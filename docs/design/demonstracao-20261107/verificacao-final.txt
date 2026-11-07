@@ -1,0 +1,53 @@
+
+> chatisp-web@0.1.0 test
+> vitest run --run src/features/annotations src/features/queue
+
+
+ RUN  v5.0.5 /home/enok/Documentos/projetos/chatisp/web
+
+ ✓ src/features/queue/queue-controls.test.tsx (2 tests) 662ms
+   ✓ permite navegar por teclado, alterar e limpar a busca e filtros, ordenar e selecionar 596ms
+ ✓ src/features/annotations/annotation-panel.test.tsx (2 tests) 438ms
+   ✓ salva nota privada e leitura com UUID válido como agent 319ms
+ ✓ src/features/queue/queue-integration.test.tsx (3 tests) 244ms
+ ✓ src/features/queue/queue-wait-alert.test.tsx (1 test) 233ms
+
+ Test Files  4 passed (4)
+      Tests  8 passed (8)
+   Start at  01:53:16
+   Duration  6.54s (environment 52%, tests 27%, setup 9%, import 8%, transform 3%)
+
+Environment  jsdom was created 4 times · 3.07s total, 52% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+
+> chatisp-web@0.1.0 build
+> tsc -b --pretty false && vite build
+
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 2442 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                                   0.39 kB │ gzip:   0.27 kB
+dist/assets/geist-mono-symbols2-wght-normal-CO5SzqOn.woff2        5.81 kB
+dist/assets/geist-mono-cyrillic-ext-wght-normal-X_5orZeX.woff2    6.17 kB
+dist/assets/geist-cyrillic-ext-wght-normal-DjL33-gN.woff2         7.42 kB
+dist/assets/geist-mono-vietnamese-wght-normal-DadHysG0.woff2      7.69 kB
+dist/assets/geist-vietnamese-wght-normal-6IgcOCM7.woff2           8.00 kB
+dist/assets/geist-mono-cyrillic-wght-normal-DiZS0aHC.woff2       12.94 kB
+dist/assets/geist-mono-latin-ext-wght-normal-Bwz-egvJ.woff2      14.69 kB
+dist/assets/geist-cyrillic-wght-normal-BEAKL7Jp.woff2            15.08 kB
+dist/assets/geist-latin-ext-wght-normal-DC-KSUi6.woff2           16.51 kB
+dist/assets/geist-mono-latin-wght-normal-XN7g48iV.woff2          23.12 kB
+dist/assets/geist-latin-wght-normal-BgDaEnEv.woff2               29.40 kB
+dist/assets/index-jrYSFcL-.css                                   58.90 kB │ gzip:  12.14 kB
+dist/assets/index-DmtqJPb2.js                                   825.95 kB │ gzip: 245.77 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 879ms

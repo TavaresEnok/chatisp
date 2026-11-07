@@ -42,12 +42,13 @@ export function useAttendance(principal: PanelPrincipal) {
     membershipId: principal.membershipId,
   }), [principal.tenantId, principal.userId, principal.sessionId, principal.role, principal.membershipId]);
   const client = useQueryClient();
-  const [inbox, setInbox] = useState<string | null>(null);
+  const [chosenInbox, setInbox] = useState<string | null | undefined>(undefined);
   const [selected, setSelected] = useState<string | null>(null);
   const intents = useRef(new Map<string, number>());
   const reopening = useRef(new Map<string, string>());
   const assuming = useRef(new Map<string, number>());
   const boxes = useQuery({ queryKey: [...base, "inboxes"], queryFn: api.listInboxes });
+  const inbox = chosenInbox === undefined && boxes.data?.inboxes?.length === 1 ? boxes.data.inboxes[0]?.id ?? null : chosenInbox ?? null;
   const list = useQuery({ queryKey: [...base, inbox ?? "", "snapshot"], queryFn: () => api.snapshot(inbox!), enabled: !!inbox });
   const detail = useQuery({ queryKey: [...base, inbox ?? "", "history", selected ?? ""], queryFn: () => api.history(inbox!, selected!), enabled: !!inbox && !!selected });
   const [notificationBatch, setNotificationBatch] = useState<NotificationBatch | null>(null);

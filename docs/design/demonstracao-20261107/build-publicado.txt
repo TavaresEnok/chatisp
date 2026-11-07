@@ -1,0 +1,92 @@
+#0 building with "default" instance using docker driver
+
+#1 [caddy internal] load build definition from Dockerfile.alpine
+#1 transferring dockerfile: 39B done
+#1 DONE 0.0s
+
+#2 [caddy internal] load .dockerignore
+#2 transferring context: 35B done
+#2 DONE 0.0s
+
+#3 [caddy internal] load metadata for docker.io/library/caddy:2.10.2
+#3 ...
+
+#4 [caddy internal] load metadata for docker.io/library/node:24.22.1-alpine
+#4 DONE 0.4s
+
+#3 [caddy internal] load metadata for docker.io/library/caddy:2.10.2
+#3 DONE 0.4s
+
+#5 [caddy web 1/7] FROM docker.io/library/node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
+#5 DONE 0.0s
+
+#6 [caddy edge 1/3] FROM docker.io/library/caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+#6 DONE 0.0s
+
+#7 [caddy internal] load build context
+#7 transferring context: 334.65kB 0.3s done
+#7 DONE 0.3s
+
+#8 [caddy web 2/7] WORKDIR /src/web
+#8 CACHED
+
+#9 [caddy web 3/7] COPY web/package.json web/package-lock.json ./
+#9 CACHED
+
+#10 [caddy web 4/7] RUN npm ci --no-audit --no-fund
+#10 CACHED
+
+#11 [caddy web 5/7] COPY web/ ./
+#11 DONE 0.5s
+
+#12 [caddy web 6/7] COPY backend/api/openapi.json /src/backend/api/openapi.json
+#12 DONE 0.1s
+
+#13 [caddy web 7/7] RUN npm run build
+#13 0.369 
+#13 0.369 > chatisp-web@0.1.0 build
+#13 0.369 > tsc -b --pretty false && vite build
+#13 0.369 
+#13 13.58 vite v8.3.5 building client environment for production...
+#13 13.60 transforming...
+#13 14.22 ✓ 2442 modules transformed.
+#13 14.37 rendering chunks...
+#13 14.55 computing gzip size...
+#13 14.57 dist/index.html                                                   0.39 kB │ gzip:   0.27 kB
+#13 14.57 dist/assets/geist-mono-symbols2-wght-normal-CO5SzqOn.woff2        5.81 kB
+#13 14.57 dist/assets/geist-mono-cyrillic-ext-wght-normal-X_5orZeX.woff2    6.17 kB
+#13 14.57 dist/assets/geist-cyrillic-ext-wght-normal-DjL33-gN.woff2         7.42 kB
+#13 14.57 dist/assets/geist-mono-vietnamese-wght-normal-DadHysG0.woff2      7.69 kB
+#13 14.57 dist/assets/geist-vietnamese-wght-normal-6IgcOCM7.woff2           8.00 kB
+#13 14.57 dist/assets/geist-mono-cyrillic-wght-normal-DiZS0aHC.woff2       12.94 kB
+#13 14.57 dist/assets/geist-mono-latin-ext-wght-normal-Bwz-egvJ.woff2      14.69 kB
+#13 14.57 dist/assets/geist-cyrillic-wght-normal-BEAKL7Jp.woff2            15.08 kB
+#13 14.57 dist/assets/geist-latin-ext-wght-normal-DC-KSUi6.woff2           16.51 kB
+#13 14.57 dist/assets/geist-mono-latin-wght-normal-XN7g48iV.woff2          23.12 kB
+#13 14.57 dist/assets/geist-latin-wght-normal-BgDaEnEv.woff2               29.40 kB
+#13 14.57 dist/assets/index-jrYSFcL-.css                                   58.90 kB │ gzip:  12.14 kB
+#13 14.57 dist/assets/index-DmtqJPb2.js                                   825.95 kB │ gzip: 245.77 kB
+#13 14.57 
+#13 14.58 [plugin builtin:vite-reporter] 
+#13 14.58 (!) Some chunks are larger than 500 kB after minification. Consider:
+#13 14.58 - Using dynamic import() to code-split the application
+#13 14.58 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+#13 14.58 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+#13 14.59 ✓ built in 1.01s
+#13 DONE 14.8s
+
+#6 [caddy edge 1/3] FROM docker.io/library/caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+#6 CACHED
+
+#14 [caddy edge 2/3] COPY --from=web /src/web/dist /srv/panel
+#14 DONE 0.1s
+
+#15 [caddy edge 3/3] COPY deploy/Caddyfile /etc/caddy/Caddyfile
+#15 DONE 0.1s
+
+#16 [caddy] exporting to image
+#16 exporting layers 0.1s done
+#16 writing image sha256:8b9a8ee29d46aa2ce609ac1a7474a43bf5c9841459c3d12ca34428b786a3a680 done
+#16 naming to docker.io/library/chatisp-pronto-hoje:edge
+#16 naming to docker.io/library/chatisp-pronto-hoje:edge done
+#16 DONE 0.1s

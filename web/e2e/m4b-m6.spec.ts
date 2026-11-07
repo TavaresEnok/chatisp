@@ -157,7 +157,7 @@ export async function runM4BM6(browser: Browser, testInfo: { attach(name: string
     expect(secret.length).toBeGreaterThan(16);
     evidence.webhook = "assinatura message.created cadastrada no painel para o receptor loopback";
 
-    const inbox = agent.page.getByRole("combobox", { name: "Caixa", exact: true });
+    const inbox = agent.page.getByRole("combobox", { name: "Caixa de atendimento", exact: true });
     try {
       await inbox.waitFor({ state: "visible", timeout: 40_000 });
     } catch (error) {

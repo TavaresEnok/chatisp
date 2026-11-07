@@ -60,7 +60,7 @@ export function AppShell() {
           <header className="app-topbar">
             <button type="button" className="mobile-menu icon-button" aria-label={menuOpen ? "Fechar menu" : "Abrir menu"} aria-expanded={menuOpen} aria-controls="app-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button>
             <div className="topbar-location"><span>{brand.name}</span><span aria-hidden="true">/</span><strong>{heading}</strong></div>
-            <div className="topbar-session">{displayName && <span>{displayName}</span>}
+            <div className="topbar-session">{displayName && <span aria-label="Nome desta aba">{displayName}</span>}
             {principal ? (
               <button
                 type="button"

@@ -146,7 +146,7 @@ export async function runM7Ops(browser: Browser, testInfo: { attach(name: string
     await admin.page.getByRole("link", { name: "Conversas", exact: true }).click();
     await expect(admin.page.getByRole("heading", { name: "Conversas", level: 1 })).toBeVisible();
     const socket = admin.page.waitForEvent("websocket", { timeout: 20_000 });
-    await admin.page.getByRole("combobox", { name: "Caixa", exact: true }).selectOption(m7.Alfa.Inbox);
+    await admin.page.getByRole("combobox", { name: "Caixa de atendimento", exact: true }).selectOption(m7.Alfa.Inbox);
     await socket;
     const metrics = await readMetrics(fixture);
     evidence.metrics = `pools app/platform/ingress/jobs, websocket ${metrics.sockets}, river ok=${metrics.riverOk} fila ingress/available=${metrics.ingressJobs}`;

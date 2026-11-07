@@ -32,7 +32,7 @@ it("trata duas negativas consecutivas da mesma conversa e limpa os caches de nov
   const policy = ["m4a-policy", "t", "u", "s", "m", "i1", "sentinel"] as const;
   const user = userEvent.setup();
   const view = render(<QueryClientProvider client={qc}><MemoryRouter><ConversationsPage /></MemoryRouter></QueryClientProvider>);
-  await user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
+  await user.selectOptions(await screen.findByLabelText("Caixa de atendimento"), "i1");
   await user.click(await screen.findByRole("button", { name: /Protocolo P1/ }));
   expect(await screen.findByLabelText("Mensagem")).toBeInTheDocument();
   for (const round of [1, 2]) {

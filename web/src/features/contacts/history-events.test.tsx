@@ -63,7 +63,7 @@ it("atualiza histórico nos eventos reais e remove dados do supervisor ao trocar
   useSessionStore.getState().applySession(principal, "csrf");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><MemoryRouter><ConversationsPage /></MemoryRouter></QueryClientProvider>);
-  fireEvent.change(await screen.findByLabelText("Caixa"), { target: { value: "i1" } });
+  fireEvent.change(await screen.findByLabelText("Caixa de atendimento"), { target: { value: "i1" } });
   fireEvent.click(await screen.findByRole("button", { name: /Protocolo PRIVADO-123/ }));
   expect(await screen.findByText("PRIVADO-123 — Aberta")).toBeInTheDocument();
   const socket = sockets[0]!; const send = (id: string, type: string) => act(() => socket.onmessage?.({ data: JSON.stringify({ type: "events", inbox_id: "i1", events: [{ ID: id, Seq: Number(id), Type: type }] }) }));

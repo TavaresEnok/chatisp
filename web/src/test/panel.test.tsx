@@ -162,7 +162,7 @@ describe("painel", () => {
     const user = userEvent.setup();
     const { queryClient } = renderPanel("/conversas");
     await waitFor(() => expect(queryClient.getQueryData(queryKeys.notificationPreferences(notificationPrincipal))).toEqual(m1Preferences));
-    await user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
+    await user.selectOptions(await screen.findByLabelText("Caixa de atendimento"), "i1");
     const first = sockets[0]!;
     const emit = (socket: PreferenceSocket, message: unknown) => act(() => socket.onmessage?.({ data: JSON.stringify(message) }));
     const event = (id: string, cursor: number) => ({ type: "events", inbox_id: "i1", events: [{ ID: id, Seq: cursor, Type: "conversation.opened" }] });
@@ -176,7 +176,7 @@ describe("painel", () => {
     expect(audio).toHaveBeenCalledTimes(1);
     switchNotificationMembership("m2");
     await waitFor(() => expect(queryClient.getQueryData(queryKeys.notificationPreferences({ ...notificationPrincipal, membershipId: "m2" }))).toEqual(m2Preferences));
-    await user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
+    await user.selectOptions(await screen.findByLabelText("Caixa de atendimento"), "i1");
     const second = sockets[1]!;
     act(() => second.onopen?.());
     emit(second, { type: "snapshot", inbox_id: "i1" });
@@ -332,10 +332,6 @@ describe("painel", () => {
     expect(
       screen.queryByText("Provedor em sessão. Nome nesta aba: Ana."),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Sessão do servidor ainda não ligada. Nome nesta aba: Ana.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Nome desta aba")).toHaveTextContent("Ana");
   });
 });

@@ -5,6 +5,7 @@ import { QueueSearch } from "./queue-search";
 import type { QueueFilterOptions, QueueFilters, QueueItem, QueueOrder, QueueResultState, QueueTab } from "./queue-types";
 
 export type QueueControlsProps = {
+  counts?: Partial<Record<QueueTab, number>>;
   tab: QueueTab;
   onTabChange: (tab: QueueTab) => void;
   search: string;
@@ -33,6 +34,13 @@ const fields = [
   { key: "tag", label: "Tag" },
 ] as const;
 
+function messageTime(value: string | undefined): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime()) || date.getFullYear() < 1970) return null;
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
 export function QueueControls(props: QueueControlsProps) {
   const id = useId();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -57,7 +65,7 @@ export function QueueControls(props: QueueControlsProps) {
   }
   return (
     <section aria-label="Fila de conversas" className="queue-controls">
-      <div className="queue-heading"><h2>Atendimentos</h2>{props.resultState === "ready" && <span title="Resultados desta página">{props.items.length}</span>}</div>
+      <div className="queue-heading"><h2>Atendimentos</h2>{props.resultState === "ready" && <span title={props.counts ? "Total no recorte autorizado" : "Resultados desta página"}>{props.counts?.[props.tab] ?? props.items.length}</span>}</div>
       <div role="tablist" aria-label="Escopo da fila" className="flex flex-wrap gap-2">
         {tabs.map((tab, index) => (
           <button key={tab.value} ref={(element) => { tabRefs.current[index] = element; }}
@@ -65,7 +73,7 @@ export function QueueControls(props: QueueControlsProps) {
             aria-controls={`${id}-results`} tabIndex={props.tab === tab.value ? 0 : -1}
             className="min-h-11 rounded-lg border px-3 aria-selected:bg-muted focus-visible:outline-2"
             onClick={() => props.onTabChange(tab.value)} onKeyDown={(event) => changeTab(event, index)}>
-            {tab.label}
+            {tab.label}{props.resultState === "ready" && props.counts?.[tab.value] !== undefined && <span aria-hidden="true" className="queue-tab-count">{props.counts[tab.value]}</span>}
           </button>
         ))}
       </div>
@@ -108,7 +116,9 @@ export function QueueControls(props: QueueControlsProps) {
                 <button type="button" aria-pressed={props.selectedId === item.id} onClick={() => props.onSelect(item.id)}
                   data-wait-alert={item.waitAlert ? "true" : undefined}
                   className={`queue-item${item.waitAlert ? " queue-item-alert border-destructive bg-destructive/10" : ""}`}>
-                  <ContactAvatar label={item.contactLabel} /><span className="queue-contact"><strong>{item.contactLabel}</strong><span>Protocolo {item.protocol}</span></span>
+                  <ContactAvatar label={item.avatarLabel ?? item.contactLabel} /><span className="queue-contact"><strong>{item.contactLabel}</strong><span>Protocolo {item.protocol}</span>{item.statusLabel && <span className="queue-state">{item.statusLabel}</span>}</span>
+                  {messageTime(item.lastMessageAt) && <time className="queue-message-time" dateTime={item.lastMessageAt} title="Última mensagem">{messageTime(item.lastMessageAt)}</time>}
+                  {(item.assigneeLabel || item.sectorLabel) && <span className="queue-assignment">{[item.sectorLabel, item.assigneeLabel].filter(Boolean).join(" · ")}</span>}
                   {item.priorityLabel && <span>Prioridade: {item.priorityLabel}</span>}
                   {item.unreadCount > 0 && <span className="unread-count">{item.unreadCount} não lida(s)</span>}
                   {item.waitAlert && <span>Passou do tempo de espera.</span>}

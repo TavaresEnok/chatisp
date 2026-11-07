@@ -45,7 +45,7 @@ it.each([403, 404])("limpa diretório após negativa HTTP %s com fila vazia e se
   const key = ["m3b-directory", "t", "u", "s", "agent", "m", "i1"];
   const user = userEvent.setup();
   const view = render(<QueryClientProvider client={qc}><MemoryRouter><ConversationsPage /></MemoryRouter></QueryClientProvider>);
-  await user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
+  await user.selectOptions(await screen.findByRole("combobox", { name: "Caixa de atendimento" }), "i1");
   expect(await screen.findByRole("option", { name: label })).toHaveValue("outside-page");
   denied = true;
   await act(async () => { await qc.invalidateQueries({ queryKey: key }); });
@@ -81,7 +81,7 @@ it("transfere para setor fora dos vínculos e remove o conteúdo da conversa", a
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const user = userEvent.setup();
   const view = render(<QueryClientProvider client={qc}><MemoryRouter><ConversationsPage /></MemoryRouter></QueryClientProvider>);
-  await user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
+  await user.selectOptions(await screen.findByRole("combobox", { name: "Caixa de atendimento" }), "i1");
   await user.click(await screen.findByRole("button", { name: /Protocolo P1/ }));
   await screen.findByLabelText("Mensagem");
   await user.click(await screen.findByRole("button", { name: "Transferir para setor" }));
@@ -121,7 +121,7 @@ it("carrega caixa e histórico e envia comando versionado pelo contrato HTTP", a
   useSessionStore.getState().applySession({ tenantId: "t", userId: "u", sessionId: "s", email: "a@b.test", membershipId: "m", role: "agent", expiresAt: "2099-01-01", mfaEnrollmentRequired: false }, "csrf");
   const user = userEvent.setup();
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><ConversationsPage /></MemoryRouter></QueryClientProvider>);
-  await user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
+  await user.selectOptions(await screen.findByRole("combobox", { name: "Caixa de atendimento" }), "i1");
   await user.click(await screen.findByRole("button", { name: /Protocolo P1/ }));
   await user.type(await screen.findByLabelText("Mensagem"), "Olá");
   await user.click(screen.getByRole("button", { name: "Enviar" }));
@@ -302,7 +302,7 @@ it.each(["loaded", "pending"])("revoga diretório %s sem conversa selecionada e 
   const key = ["m3b-directory", "t", "u", "s", "agent", "m", "i1"];
   const user = userEvent.setup();
   const view = render(<QueryClientProvider client={qc}><MemoryRouter><ConversationsPage /></MemoryRouter></QueryClientProvider>);
-  await user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
+  await user.selectOptions(await screen.findByRole("combobox", { name: "Caixa de atendimento" }), "i1");
   await waitFor(() => expect(directoryCalls).toBeGreaterThan(0));
   // A cached authorized label must also disappear while its refresh is pending.
   if (state === "pending") {

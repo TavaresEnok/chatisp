@@ -1,0 +1,275 @@
+Configurações
+
+Administre sua equipe, os canais e as regras do atendimento.
+
+Segurança da conta
+
+Autenticação em duas etapas: desativada (opcional).
+
+Ativar autenticação em duas etapas
+Usuários
+Pessoas, papéis e convites do provedor.
+Caixas e números
+Configuração dos canais e estado das conexões.
+Equipes e setores
+Organização e vínculos dos atendentes.
+Horários
+Expediente e regras de plantão.
+Respostas prontas
+Textos compartilhados e atalhos do compositor.
+Etiquetas e notas
+Gerencie no contexto de cada atendimento.
+Distribuição
+Ocupação e atribuição dos atendimentos.
+Automação
+Adiamento, triagem e regras de inatividade.
+Integrações
+API, webhooks e estado dos conectores.
+Mostrar distribuição e ocupação
+Mostrar automação do atendimento
+ Som Notificações do navegador Modo silencioso
+
+Permissão ainda não solicitada.
+
+Permitir notificações
+
+Notificações exigem o painel aberto.
+
+Caixas Meta
+Auditoria do provedor
+Início 
+Fim 
+Eventos de auditoria
+Data	Ação	Tipo do alvo	Resultado
+07/11/2026, 01:54	login	session	success
+07/11/2026, 01:50	login	session	success
+07/11/2026, 01:42	login	session	success
+07/11/2026, 01:40	login	session	success
+07/11/2026, 01:39	demo.seed	inbox	authorized_synthetic_data
+07/11/2026, 01:31	login	session	success
+07/11/2026, 00:57	login	session	success
+06/11/2026, 20:10	login	session	success
+06/11/2026, 20:10	login	session	success
+06/11/2026, 16:38	login	session	success
+06/11/2026, 16:34	login	session	success
+06/11/2026, 16:31	login	session	success
+06/11/2026, 16:29	login	session	success
+06/11/2026, 16:12	login	session	enrollment
+06/11/2026, 15:51	login	session	enrollment
+06/11/2026, 15:51	login	session	enrollment
+06/11/2026, 15:47	login	session	enrollment
+06/11/2026, 04:21	login	session	enrollment
+Alertas operacionais
+
+O registro fica neste painel. Não enviamos e-mail nem chamamos um serviço externo.
+
+Teste de carga e restauração ficam de fora.
+
+Incerteza, reservas, webhook, storage e conectores saem em GET /metrics no listener privado. Este painel não mostra esses totais.
+
+Conector desconectado
+
+Conector meta_cloud desconectado
+
+Idade do job em segundosIdade do webhook pendente em segundosSalvar limites
+Identidade do provedor
+
+O nome exibido é o mesmo da política de retenção. Aqui não se alteram prazos nem o expurgo, que continua desligado.
+
+Nome exibido do provedor
+Logo (PNG ou JPEG, até 256 KiB e 1024 por 1024 pixels)
+
+Sem logo. O painel usa o nome ou Chat ISP.
+
+Guardar identidade
+Remover logo
+Retenção e demandas
+
+Histórico estruturado de demandas do atendimento. Não é o histórico completo do provedor nem do ERP.
+
+Expurgo automático desligado. Mensagens, mídia, envelopes, logs e jobs permanecem.
+
+Nome do provedorConteúdo (dias, vazio se ainda não definido)Mídia (dias, vazio se ainda não definido)Envelope (dias, vazio se ainda não definido)Registro (dias, vazio se ainda não definido)Tarefa (dias, vazio se ainda não definido)Guardar política
+
+Uso atual: 4 atendentes, 1 números, 3681 bytes. O excesso bloqueia cadastro ou upload novo e não apaga o histórico.
+Limites configurados: 8 atendentes, não definido números, 1073741824 bytes.
+
+Contato para exportar
+Exportar demandas
+Exportar dados do titular
+Digite “excluir titular” para confirmar a exclusão
+Excluir dados do titular
+Integrações
+
+Tokens e webhooks de saída do provedor. O segredo de cada um aparece uma única vez.
+
+Documentação OpenAPI pública
+Tokens de API
+Escopos
+Leitura geral
+Leitura de contatos
+Escrita de contatos
+Leitura de conversas
+Escrita de conversas
+Leitura de mensagens
+Envio de template
+Leitura de cadastros
+Limite por minuto
+Gerar token
+
+Nenhum token de API.
+
+Webhooks de saída
+URL do webhook
+Eventos
+Conversa criada
+Conversa atribuída
+Conversa encerrada
+Mensagem criada
+Cadastrar assinatura
+
+Nenhuma assinatura de webhook.
+
+Conector ERP
+
+Item 11-conector-erp. O conector está simulado e desligado. O driver é fake e não há chamada a um ERP real.
+
+Situação
+simulado
+Estado
+desligado
+Link do cadastro no ERP
+
+Endereço da tela de cliente no ERP que o provedor já usa, com {cliente} no lugar da referência do cliente. Só HTTPS; o link não aceita token, senha, CPF nem CNPJ. Referência que pareça CPF ou CNPJ não vira link.
+
+Modelo do link
+Salvar link
+Conector Evolution
+
+A modalidade Web permanece desligada. Não há QR, sessão gravada nem chamada ao serviço. A decisão D2-04 continua em aberto.
+
+Situação
+desligada
+QR
+não exibido
+Capacidade de atendimento
+Caixa dos atendentes 
+Selecione
+DEMONSTRAÇÃO — Atendimento do provedor
+Atendente 
+Selecione
+Capacidade Salvar capacidade
+Mostrar respostas compartilhadas
+Mostrar horário e plantão
+Mostrar painel externo
+Convidar
+E-mail
+Papel
+Administrador
+Supervisor
+Atendente
+Convidar
+Usuários do provedor
+
+73588678-8662-4c08-8e4b-e5118c3d258b
+
+Administrador · Ativo
+
+Desde 06/11/2026, 04:19
+
+Desativar
+
+09d876bc-a8b1-5293-85a4-9778f7af2c33
+
+Atendente · Ativo
+
+Desde 07/11/2026, 01:39
+
+Desativar
+
+55f285cd-0b25-5007-b5f1-3d04e10c3edf
+
+Atendente · Ativo
+
+Desde 07/11/2026, 01:39
+
+Desativar
+
+c7d3f39b-5899-526c-af89-7a0aab901f05
+
+Supervisor · Ativo
+
+Desde 07/11/2026, 01:39
+
+Desativar
+
+12efe2d7-96da-5f4d-b984-c2e31d3358cf
+
+Atendente · Ativo
+
+Desde 07/11/2026, 01:39
+
+Desativar
+
+21105271-9bb1-519c-883a-73d79f56d161
+
+Atendente · Ativo
+
+Desde 07/11/2026, 01:39
+
+Desativar
+Sessões
+
+Outra sessão
+
+Aberta em 06/11/2026, 16:34
+
+Encerra em 07/11/2026, 04:34
+
+Derrubar sessão
+
+Outra sessão
+
+Aberta em 07/11/2026, 01:31
+
+Encerra em 07/11/2026, 13:31
+
+Derrubar sessão
+
+Outra sessão
+
+Aberta em 07/11/2026, 01:40
+
+Encerra em 07/11/2026, 13:40
+
+Derrubar sessão
+
+Outra sessão
+
+Aberta em 07/11/2026, 01:42
+
+Encerra em 07/11/2026, 13:42
+
+Derrubar sessão
+
+Outra sessão
+
+Aberta em 07/11/2026, 01:50
+
+Encerra em 07/11/2026, 13:50
+
+Derrubar sessão
+
+Esta sessão
+
+Aberta em 07/11/2026, 01:54
+
+Encerra em 07/11/2026, 13:54
+
+Derrubar sessão
+Preferência desta aba
+Nome de exibição nesta aba
+
+Fica só na memória desta aba. Não cria usuário nem vai para o servidor.
+
+Guardar nesta aba

@@ -1,55 +1,24 @@
+import { Link } from "react-router";
+import { useSessionStore } from "@/stores/session-store";
+
 const sections = [
-  {
-    title: "Usuários",
-    description:
-      "Ainda sem registros. O convite de pessoas depende do servidor.",
-  },
-  {
-    title: "Números",
-    description:
-      "Ainda sem registros. Cada número entra quando o canal estiver ligado.",
-  },
-  {
-    title: "Horários",
-    description:
-      "Ainda sem registros. O expediente do provedor depende do servidor.",
-  },
-  {
-    title: "Respostas prontas",
-    description:
-      "Ainda sem registros. Os textos compartilhados dependem do servidor.",
-  },
-  {
-    title: "Etiquetas",
-    description:
-      "Ainda sem registros. Os motivos do contato dependem do servidor.",
-  },
-  {
-    title: "Integrações",
-    description:
-      "Ainda sem registros. Nada aqui representa uma conexão real.",
-  },
+  { title: "Usuários", description: "Pessoas, papéis e convites do provedor.", to: "/configuracoes/usuarios", roles: ["admin"] },
+  { title: "Caixas e números", description: "Configuração dos canais e estado das conexões.", to: "/configuracoes/canais", roles: ["admin"] },
+  { title: "Equipes e setores", description: "Organização e vínculos dos atendentes.", to: "/equipes", roles: ["admin", "supervisor", "agent"] },
+  { title: "Horários", description: "Expediente e regras de plantão.", to: "#config-horarios", roles: ["admin", "supervisor"] },
+  { title: "Respostas prontas", description: "Textos compartilhados e atalhos do compositor.", to: "#config-respostas", roles: ["admin", "supervisor", "agent"] },
+  { title: "Etiquetas e notas", description: "Gerencie no contexto de cada atendimento.", to: "/conversas", roles: ["admin", "supervisor", "agent"] },
+  { title: "Distribuição", description: "Ocupação e atribuição dos atendimentos.", to: "#config-distribuicao", roles: ["admin", "supervisor"] },
+  { title: "Automação", description: "Adiamento, triagem e regras de inatividade.", to: "#config-automacao", roles: ["admin", "supervisor"] },
+  { title: "Integrações", description: "API, webhooks e estado dos conectores.", to: "#config-integracoes", roles: ["admin"] },
 ] as const;
 
 export function SettingsSections() {
-  return (
-    <section aria-labelledby="partes-das-configuracoes" className="flex flex-col gap-3">
-      <h2 id="partes-das-configuracoes" className="text-base font-medium">
-        Partes desta área
-      </h2>
-      <ul className="grid gap-3 sm:grid-cols-2" aria-label="Partes das configurações">
-        {sections.map((section) => (
-          <li
-            key={section.title}
-            className="rounded-xl bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
-          >
-            <h3 className="text-sm font-medium">{section.title}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {section.description}
-            </p>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
+  const role = useSessionStore(s => s.principal?.role);
+  return <nav aria-label="Partes das configurações" className="settings-shortcuts">
+    {sections.filter(section => role && (section.roles as readonly string[]).includes(role)).map(section => {
+      const content = <><strong>{section.title}</strong><span>{section.description}</span></>;
+      return section.to.startsWith("#") ? <a key={section.title} href={section.to}>{content}</a> : <Link key={section.title} to={section.to}>{content}</Link>;
+    })}
+  </nav>;
 }

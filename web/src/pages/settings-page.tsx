@@ -29,8 +29,10 @@ import { useState } from "react";
 export function SettingsPage() {
   const principal = useSessionStore((state) => state.principal);
 
+  if (!principal || principal.mfaEnrollmentRequired) return <AreaPage areaId="settings"><LocalDisplayNameForm /></AreaPage>;
+
   return (
-    <AreaPage areaId="settings">
+    <article className="settings-page"><h1>Configurações</h1><p className="settings-intro">Administre sua equipe, os canais e as regras do atendimento.</p>
       {principal && !principal.mfaEnrollmentRequired && (
         <section aria-labelledby="seguranca-conta" className="flex flex-col gap-2">
           <h2 id="seguranca-conta" className="font-medium">Segurança da conta</h2>
@@ -49,23 +51,23 @@ export function SettingsPage() {
         </section>
       )}
       <SettingsSections />
- {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <DistributionSettings key={`distribution:${principal.sessionId}`} principal={principal} />}
-      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <AutomationSettings key={`automation:${principal.sessionId}`} principal={principal} />}
+ {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <div id="config-distribuicao"><DistributionSettings key={`distribution:${principal.sessionId}`} principal={principal} /></div>}
+      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <div id="config-automacao"><AutomationSettings key={`automation:${principal.sessionId}`} principal={principal} /></div>}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <Preferences key={`preferences:${JSON.stringify(queryKeys.notificationPreferences(principal))}`} principal={principal} />}
       {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <Link to="/configuracoes/canais">Caixas Meta</Link> : null}
       {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <AuditLog key={`audit:${principal.sessionId}`} principal={principal} /> : null}
       {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <OpsAlerts key={`ops:${principal.sessionId}`} sessionId={principal.sessionId} /> : null}
       {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <IdentityEditor key={`identity:${principal.tenantId}:${principal.sessionId}`} /> : null}
       {principal?.role === "admin" && !principal.mfaEnrollmentRequired ? <RetentionPanel key={`retention:${principal.membershipId}`} /> : null}
-      {canManageIntegrations(principal) ? <IntegrationsPanel key={`integrations:${principal.sessionId}`} principal={principal} /> : null}
+      {canManageIntegrations(principal) ? <div id="config-integracoes"><IntegrationsPanel key={`integrations:${principal.sessionId}`} principal={principal} /></div> : null}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <Capacity key={`capacity:${principal.sessionId}`} principal={principal} />}
-      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <CannedSettings key={`canned:${principal.membershipId}`} principal={principal} />}
-      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <HoursSettings key={`hours:${principal.membershipId}`} principal={principal} />}
-      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <EmbedSettings key={`embed:${principal.membershipId}`} principal={principal} />}
+      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <div id="config-respostas"><CannedSettings key={`canned:${principal.membershipId}`} principal={principal} /></div>}
+      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <div id="config-horarios"><HoursSettings key={`hours:${principal.membershipId}`} principal={principal} /></div>}
+      {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <div id="config-painel-externo"><EmbedSettings key={`embed:${principal.membershipId}`} principal={principal} /></div>}
       <ProviderAdmin />
       <PlatformAdmin />
       <LocalDisplayNameForm />
-    </AreaPage>
+    </article>
   );
 }
 

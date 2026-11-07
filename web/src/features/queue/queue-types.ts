@@ -22,8 +22,13 @@ export type QueueFilterOptions = {
 };
 
 export type QueueItem = {
+  statusLabel?: string;
+  assigneeLabel?: string;
+  sectorLabel?: string;
+  lastMessageAt?: string;
   id: string;
   contactLabel: string;
+  avatarLabel?: string;
   protocol: string;
   priorityLabel: string | null;
   unreadCount: number;

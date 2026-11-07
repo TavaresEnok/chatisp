@@ -47,7 +47,7 @@ describe("isolamento da sessão", () => {
         useSessionStore.getState().setDisplayName("Ana");
         localStorage.setItem("rascunho", "da ana");
         sessionStorage.setItem("filtro", "abertos");
-        expect(await screen.findByText(/Nome nesta aba: Ana/)).toBeInTheDocument();
+        expect(await screen.findByLabelText("Nome desta aba")).toHaveTextContent("Ana");
 
         const result = await login({ email: "bia@provedor.test", password: "senha-certa" });
         if (!result.data) {
@@ -66,8 +66,7 @@ describe("isolamento da sessão", () => {
         expect(queryClient.getQueryData(queryKeys.conversations(tenantId))).toBeUndefined();
         expect(localStorage.getItem("rascunho")).toBeNull();
         expect(sessionStorage.getItem("filtro")).toBeNull();
-        expect(screen.getByText(/O nome desta aba ainda não foi definido/)).toBeInTheDocument();
-        expect(screen.queryByText(/Nome nesta aba: Ana/)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText("Nome desta aba")).not.toBeInTheDocument();
       });
     } finally {
       await server.close();

@@ -106,7 +106,7 @@ async function go(page: Page, csrf: string, path: string, remember = false) {
 }
 
 async function bindInbox(page: Page, inbox: string) {
-  await page.getByRole("combobox", { name: "Caixa", exact: true }).selectOption(inbox);
+  await page.getByRole("combobox", { name: "Caixa de atendimento", exact: true }).selectOption(inbox);
   await page.getByRole("tab", { name: "Todas", exact: true }).click();
 }
 function rows(page: Page) { return page.getByRole("list", { name: "Conversas encontradas" }).getByRole("button"); }

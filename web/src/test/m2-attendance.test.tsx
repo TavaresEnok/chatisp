@@ -35,7 +35,7 @@ it("opera atendimento simulado pelo contrato do painel", async () => {
   useSessionStore.getState().applySession({ tenantId: "t", userId: "u", sessionId: "s", email: "a@b.test", membershipId: "m", role: "agent", expiresAt: "2099-01-01", mfaEnrollmentRequired: false }, "csrf");
   const user = userEvent.setup();
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><ConversationsPage /></MemoryRouter></QueryClientProvider>);
-  await user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
+  await user.selectOptions(await screen.findByLabelText("Caixa de atendimento"), "i1");
   await user.click(await screen.findByRole("button", { name: /Protocolo SIM-001/ }));
   await user.click(screen.getByRole("button", { name: "Assumir" }));
   await waitFor(() => expect(requests.some((r) => r.path.endsWith("/assume"))).toBe(true));

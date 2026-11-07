@@ -137,7 +137,7 @@ it("revogação pelo socket confirmada pela sessão limpa conversa, histórico, 
   }));
   session({ ...principal, role: "agent" }); const user = userEvent.setup();
   const view = mount(<ConversationsPage />);
-  await user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
+  await user.selectOptions(await screen.findByLabelText("Caixa de atendimento"), "i1");
   await user.click(await screen.findByRole("button", { name: /Protocolo M3A-SUPORTE/ }));
   expect(await screen.findByText(/M3A-ANTERIOR/)).toBeInTheDocument();
   await user.type(screen.getByLabelText("Mensagem"), "Privado");

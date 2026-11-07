@@ -145,7 +145,8 @@ export function RetentionPanel() {
       </fieldset>
       {usage.data ? (
         <p>
-          Plano: {usage.data.agents} atendentes, {usage.data.numbers} números, {usage.data.storage_bytes} bytes. {usage.data.note}
+          Uso atual: {usage.data.agents} atendentes, {usage.data.numbers} números, {usage.data.storage_bytes} bytes. {usage.data.note}
+          <br />Limites configurados: {usage.data.max_agents ?? "não definido"} atendentes, {usage.data.max_numbers ?? "não definido"} números, {usage.data.max_storage_bytes ?? "não definido"} bytes.
         </p>
       ) : null}
       <label>

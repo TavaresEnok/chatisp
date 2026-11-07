@@ -4,7 +4,7 @@ import * as api from "@/api/annotations";
 import { AttendanceError } from "@/api/attendance";
 import type { PanelPrincipal } from "@/stores/session-store";
 
-export function AnnotationPanel({ principal, inbox, conversation, cursor, onChanged }: { principal: PanelPrincipal; inbox: string; conversation: string; cursor: number; onChanged: () => void }) {
+export function AnnotationPanel({ principal, inbox, conversation, cursor, onChanged, labels }: { principal: PanelPrincipal; inbox: string; conversation: string; cursor: number; onChanged: () => void; labels?: ReadonlyMap<string, string> }) {
   const client = useQueryClient();
   const key = ["m3b-annotations", principal.tenantId, principal.userId, principal.sessionId, principal.role, principal.membershipId, inbox, conversation];
   const state = useQuery({ queryKey: key, queryFn: () => api.annotations(inbox, conversation), retry: false });
@@ -46,7 +46,7 @@ export function AnnotationPanel({ principal, inbox, conversation, cursor, onChan
     {["admin", "supervisor"].includes(principal.role) && <button type="button" disabled={busy} onClick={() => void update("priority", data.priority === "urgent" ? "normal" : "urgent")}>Alterar prioridade</button>}
     <div>Tags: {(data.tags ?? []).map(tag => <button type="button" disabled={busy} key={tag.id} onClick={() => void update("tag_remove", "", tag.id)}>{tag.name} ×</button>)}</div>
     <label>Adicionar tag <select disabled={busy} value="" onChange={e => { if (e.target.value) void update("tag_add", "", e.target.value); }}><option value="">Selecione</option>{(catalog.data ?? []).filter(tag => !(data.tags ?? []).some(t => t.id === tag.id)).map(tag => <option key={tag.id} value={tag.id}>{tag.name}</option>)}</select></label>
-    <ul>{(data.notes ?? []).map(item => <li key={item.id}>{item.body} — {item.author_id}</li>)}</ul>
+    <ul>{(data.notes ?? []).map(item => <li key={item.id}>{item.body} — {labels?.get(item.author_id) ?? (item.author_id === principal.membershipId ? principal.email : "Atendente indisponível")}</li>)}</ul>
     <label>Nova nota privada <textarea value={note} onChange={e => setNote(e.target.value)} /></label>
     <button type="button" disabled={busy || !note.trim()} onClick={() => void update("note", note)}>Salvar nota</button>
     <button type="button" disabled={busy} onClick={() => void read(false)}>Marcar como lida</button>
