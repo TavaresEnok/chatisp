@@ -1,10 +1,12 @@
+import { MessagesSquare } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useProviderBrand } from "@/features/branding/use-provider-brand";
 
 export function ProviderMark() {
   const brand = useProviderBrand();
   return (
-    <div className="flex items-center gap-3 px-4 py-4">
+    <div className="provider-mark">
+      {!brand.hasLogo && <span className="provider-symbol"><MessagesSquare size={23} aria-hidden="true" /></span>}
       <BlobImage blob={brand.hasLogo ? brand.logo : null} alt={`Logo de ${brand.name}`} className="h-10 w-10 rounded-md object-contain" />
       <div>
         <p className="text-base font-semibold tracking-tight">{brand.name}</p>

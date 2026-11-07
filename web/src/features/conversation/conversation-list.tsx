@@ -60,7 +60,7 @@ export function ConversationList({
   }
 
   return (
-    <section className="flex min-w-0 flex-col gap-3" aria-labelledby={`${baseId}-titulo`}>
+    <section className="conversation-list flex min-w-0 flex-col gap-3" aria-labelledby={`${baseId}-titulo`}>
       <h2 id={`${baseId}-titulo`} className="text-base font-medium text-foreground">
         Conversas
       </h2>

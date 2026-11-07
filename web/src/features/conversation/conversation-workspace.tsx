@@ -1,3 +1,4 @@
+import { ArrowLeft, PanelRight, MessagesSquare } from "lucide-react";
 import { ContactDocument } from "@/features/contactdocs/contact-document";
 import { ConversationSidebar } from "@/features/conversation/conversation-sidebar";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
@@ -158,6 +159,8 @@ function WorkspaceSession({
   conversationVersion = null,
   principal = null,
 }: ConversationWorkspaceProps) {
+  const [mobileConversation, setMobileConversation] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
   const [session, setSession] = useState<Session>({
     selectedId: null,
     opened: [],
@@ -304,16 +307,17 @@ function WorkspaceSession({
   }
 
   return (
-    <div ref={workspace} className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)] lg:has-[.painel-externo]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)_minmax(18rem,24rem)] lg:has-[.painel-lateral]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)_minmax(18rem,24rem)]" onKeyDown={handleShortcut}>
-      {renderQueue ? renderQueue(card?.id ?? null, selectConversation) : <ConversationList
+    <div ref={workspace} className="conversation-workspace" data-mobile-conversation={mobileConversation && Boolean(card)} data-context-open={contextOpen} onKeyDown={handleShortcut}>
+      <div className="workspace-queue">{renderQueue ? renderQueue(card?.id ?? null, id => { selectConversation(id); setMobileConversation(true); }) : <ConversationList
         status={listStatus}
         conversations={conversations}
         selectedId={card?.id ?? null}
-        onSelect={selectConversation}
-      />}
-      <div className="flex min-w-0 flex-col gap-4">
+        onSelect={id => { selectConversation(id); setMobileConversation(true); }}
+      />}</div>
+      <div className="workspace-conversation">
         {card ? (
           <>
+            <div className="conversation-view-tools"><button type="button" className="mobile-back" onClick={() => setMobileConversation(false)}><ArrowLeft size={16} aria-hidden="true" /> Fila de conversas</button>{(principal || renderSide || renderActions) && <button type="button" className="context-toggle" aria-expanded={contextOpen} aria-controls="conversation-context" onClick={() => setContextOpen(!contextOpen)}><PanelRight size={16} aria-hidden="true" /> {contextOpen ? "Fechar detalhes" : "Detalhes"}</button>}</div>
             <ConversationHeader
               contactLabel={card.contactLabel}
               protocol={card.protocol}
@@ -324,7 +328,6 @@ function WorkspaceSession({
               onAssume={() => void assume()}
               onClose={() => setCloseOpen(true)}
             />
-            {renderActions?.(card.id)}
             <MessageTimeline
               scope={{ ...scope, conversationId: card.id }}
               protocol={card.protocol}
@@ -333,15 +336,6 @@ function WorkspaceSession({
               onReply={setReplyTo}
               loadDownload={inboxId ? loadDownload : undefined}
             />
-            {principal && inboxId ? (
-              <>
-                {contactId && detailMatches && <ContactDocument key={`document:${card.id}:${contactId}`} principal={principal} contactId={contactId} />}
- <WindowIndicator connectorType={connectorType} />
-                <TemplateCatalog key={`templates:${card.id}`} principal={principal} inboxId={inboxId} conversationId={card.id} connectorType={connectorType} version={detailMatches ? conversationVersion : null} />
-                {contactId && detailMatches ? <ConsentForm key={`consent:${card.id}:${contactId}`} principal={principal} inboxId={inboxId} contactId={contactId} /> : null}
-                <AttachmentDesk key={`attachments:${card.id}`} principal={principal} inboxId={inboxId} conversationId={card.id} closed={card.phase === "closed"} />
-              </>
-            ) : null}
             {card.phase === "closed" ? (
               <div><p className="text-sm text-muted-foreground">
                 O compositor fica indisponível após o encerramento.
@@ -366,15 +360,30 @@ function WorkspaceSession({
             ))}
           </>
         ) : (
-          <p className="text-sm text-muted-foreground">
-            Selecione uma conversa para ver o protocolo e o histórico.
-          </p>
+          <div className="conversation-empty"><span><MessagesSquare size={36} aria-hidden="true" /></span><h2>Seu próximo atendimento começa aqui</h2><p>Selecione uma conversa para ver o protocolo e o histórico.</p><small>Assuma o atendimento, converse e acompanhe cada etapa.</small></div>
         )}
       </div>
-      {card && (principal || renderSide) ? (
-        <ConversationSidebar principal={principal} conversationId={card.id} protocol={card.protocol}>
-          {renderSide?.(card.id)}
-        </ConversationSidebar>
+      {card && (principal || renderSide || renderActions) ? (
+        <aside id="conversation-context" className="workspace-context" aria-label="Detalhes do atendimento">
+          <div className="context-heading"><h2>Detalhes do atendimento</h2><button type="button" onClick={() => setContextOpen(false)} className="context-close">Fechar detalhes</button></div>
+          {renderActions && <details open className="context-section"><summary>Responsável, setor e notas</summary><div>{renderActions(card.id)}</div></details>}
+          <details className="context-section"><summary>Contato, canal e anexos</summary><div>
+            {principal && inboxId ? (
+              <>
+                {contactId && detailMatches && <ContactDocument key={`document:${card.id}:${contactId}`} principal={principal} contactId={contactId} />}
+ <WindowIndicator connectorType={connectorType} />
+                <TemplateCatalog key={`templates:${card.id}`} principal={principal} inboxId={inboxId} conversationId={card.id} connectorType={connectorType} version={detailMatches ? conversationVersion : null} />
+                {contactId && detailMatches ? <ConsentForm key={`consent:${card.id}:${contactId}`} principal={principal} inboxId={inboxId} contactId={contactId} /> : null}
+                <AttachmentDesk key={`attachments:${card.id}`} principal={principal} inboxId={inboxId} conversationId={card.id} closed={card.phase === "closed"} />
+              </>
+            ) : null}
+          </div></details>
+          <details className="context-section"><summary>Cadastro e integrações</summary><div>
+            <ConversationSidebar principal={principal} conversationId={card.id} protocol={card.protocol}>
+              {renderSide?.(card.id)}
+            </ConversationSidebar>
+          </div></details>
+        </aside>
       ) : null}
       {closeOpen && card ? (
         <CloseConversationDialog

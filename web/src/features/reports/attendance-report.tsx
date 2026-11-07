@@ -38,17 +38,15 @@ function metric(title: string, stats: ReportStats, empty: string) {
 
 function LiveBoard({ report }: { report: AttendanceReport }) {
   const live = report.live;
-  return <section aria-label="Situação agora">
-    <h2>Agora</h2>
-    <ul>
-      <li>Na fila: {live.in_queue}</li>
-      <li>Em atendimento: {live.in_attendance}</li>
-      <li>Aguardando o cliente: {live.waiting_customer}</li>
-      <li>Adiadas: {live.snoozed}</li>
-      <li>Sem responsável: {live.unassigned}</li>
-      <li>Atendentes online: {live.online_attendants}</li>
-      <li>Maior espera: {formatDuration(live.longest_queue_wait_seconds)}</li>
-      <li>Alertas de espera: {live.wait_alerts}</li>
+  return <section aria-label="Situação agora" className="live-board">
+    <div className="section-heading"><h2>Visão do atendimento</h2><span>Agora</span></div>
+    <ul className="live-metrics">
+      {([
+        ["Na fila", live.in_queue], ["Em atendimento", live.in_attendance],
+        ["Aguardando o cliente", live.waiting_customer], ["Adiadas", live.snoozed],
+        ["Sem responsável", live.unassigned], ["Atendentes online", live.online_attendants],
+        ["Maior espera", formatDuration(live.longest_queue_wait_seconds)], ["Alertas de espera", live.wait_alerts],
+      ] as const).map(([label, value]) => <li key={label}><span className="sr-only">{label}: {value}</span><span aria-hidden="true">{label}</span><strong aria-hidden="true">{value}</strong></li>)}
     </ul>
   </section>;
 }

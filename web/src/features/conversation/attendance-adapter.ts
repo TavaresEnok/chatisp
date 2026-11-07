@@ -29,6 +29,7 @@ function messageEntry(message: Schema["Message"], messages: readonly Schema["Mes
   const replyTo = quoteTarget(message.reply_to_message_id, message.content, messages);
   const shared = {
     id: message.id,
+    direction: message.direction === "outbound" ? "outbound" as const : "inbound" as const,
     author: message.direction === "inbound" ? "Cliente" : "Atendimento",
     occurredAt: message.trusted_at || message.ingested_at,
     ...(state ? { localState: state } : {}),

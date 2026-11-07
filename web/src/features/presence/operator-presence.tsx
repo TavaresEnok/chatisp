@@ -54,7 +54,7 @@ function PresenceBody({ principal }: { principal: PanelPrincipal }) {
     catch { if (!active.signal.aborted) setError("Não foi possível alterar a presença."); }
     finally { if (!active.signal.aborted) setBusy(false); }
   }
-  return <section aria-label="Minha presença">
+  return <section aria-label="Minha presença" className="operator-presence">
     <label>Minha presença <select aria-label="Minha presença" value={snapshot?.manual ?? "available"} disabled={!snapshot || busy} onChange={e => void change(e.target.value as "available" | "busy")}><option value="available">Disponível</option><option value="busy">Ocupado</option></select></label>
     <p role="status">{error ? "Presença não confirmada" : snapshot?.connected ? "Conectado" : "Verificando presença…"}{occupied && ` · Vagas: ${occupied.occupied}/${occupied.capacity}`}{occupied && occupancyDetail(occupied)}</p>
     {error && <p role="alert">{error}</p>}

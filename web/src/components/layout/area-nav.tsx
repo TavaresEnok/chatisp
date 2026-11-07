@@ -77,7 +77,7 @@ function onNavigationKeyDown(event: KeyboardEvent<HTMLElement>) {
 export function AreaNav() {
   return (
     <nav aria-label="Áreas do painel" onKeyDown={onNavigationKeyDown}>
-      <ul className="flex gap-1 overflow-x-auto p-2 md:flex-col">
+      <ul className="area-nav-list">
         {areas.map((area) => {
           const Icon = areaIcons[area.id];
           return (

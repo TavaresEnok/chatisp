@@ -1,0 +1,51 @@
+{
+  "environment": "Fixture M4A descartável; API e PostgreSQL reais, nenhuma integração externa",
+  "desktop": {
+    "width": 1536,
+    "scrollWidth": 1536,
+    "main": {
+      "x": 208,
+      "y": 62,
+      "width": 1328,
+      "height": 938,
+      "top": 62,
+      "right": 1536,
+      "bottom": 1000,
+      "left": 208
+    },
+    "workspace": {
+      "x": 208,
+      "y": 162.796875,
+      "width": 1328,
+      "height": 837.203125,
+      "top": 162.796875,
+      "right": 1536,
+      "bottom": 1000,
+      "left": 208
+    },
+    "composer": {
+      "x": 488,
+      "y": 733.4375,
+      "width": 768,
+      "height": 266.5625,
+      "top": 733.4375,
+      "right": 1256,
+      "bottom": 1000,
+      "left": 488
+    }
+  },
+  "mobile": {
+    "width": 390,
+    "scrollWidth": 390,
+    "composerVisible": true,
+    "composerBottom": 844
+  },
+  "checks": [
+    "selecionar conversa",
+    "abrir filtros por atendente",
+    "rascunho preservado ao voltar à fila no celular",
+    "contexto móvel",
+    "menu móvel"
+  ],
+  "errors": []
+}

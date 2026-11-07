@@ -56,7 +56,8 @@ export function QueueControls(props: QueueControlsProps) {
     props.onFiltersChange({ status: "", sector: "", assignee: "", inbox: "", tag: "", from: "", to: "" });
   }
   return (
-    <section aria-label="Fila de conversas" className="flex min-w-0 flex-col gap-4">
+    <section aria-label="Fila de conversas" className="queue-controls">
+      <div className="queue-heading"><h2>Atendimentos</h2>{props.resultState === "ready" && <span title="Resultados desta página">{props.items.length}</span>}</div>
       <div role="tablist" aria-label="Escopo da fila" className="flex flex-wrap gap-2">
         {tabs.map((tab, index) => (
           <button key={tab.value} ref={(element) => { tabRefs.current[index] = element; }}
@@ -70,7 +71,7 @@ export function QueueControls(props: QueueControlsProps) {
       </div>
       <p className="text-sm text-muted-foreground">Todas mostra as conversas disponíveis no seu acesso.</p>
       <QueueSearch value={props.search} onChange={props.onSearchChange} />
-      <fieldset className="flex min-w-0 flex-wrap gap-3">
+      <details className="queue-filters"><summary>Filtrar atendimentos{Object.values(props.filters).some(Boolean) ? " • ativos" : ""}</summary><fieldset className="flex min-w-0 flex-wrap gap-3">
         <legend className="font-medium">Filtros</legend>
         {fields.map(({ key, label }) => (
           <label key={key} className="flex min-w-0 max-w-full flex-col gap-1">{label}
@@ -88,7 +89,7 @@ export function QueueControls(props: QueueControlsProps) {
           <input type="date" className="min-h-11 rounded-lg border border-input px-2" value={props.filters.to} onChange={(event) => setFilter("to", event.target.value)} />
         </label>
         <button type="button" className="min-h-11 self-end rounded-lg border px-3" onClick={clearFilters}>Limpar filtros</button>
-      </fieldset>
+      </fieldset></details>
       <label className="flex flex-col gap-1">Ordenar por
         <select className="min-h-11 rounded-lg border border-input px-2" value={props.order}
           onChange={(event) => props.onOrderChange(event.target.value as QueueOrder)}>
@@ -96,20 +97,20 @@ export function QueueControls(props: QueueControlsProps) {
           <option value="lastMessage">Última mensagem</option>
         </select>
       </label>
-      <div role="tabpanel" id={`${id}-results`} aria-labelledby={`${id}-${props.tab}`} tabIndex={0}>
+      <div className="queue-results" role="tabpanel" id={`${id}-results`} aria-labelledby={`${id}-${props.tab}`} tabIndex={0}>
         {props.resultState === "loading" && <p role="status" aria-busy="true">Carregando conversas.</p>}
         {props.resultState === "error" && <p role="alert">Não foi possível carregar as conversas.</p>}
         {props.resultState === "ready" && props.items.length === 0 && <p>Nenhuma conversa encontrada.</p>}
         {props.resultState === "ready" && props.items.length > 0 && (
-          <ul aria-label="Conversas encontradas" className="flex flex-col gap-2">
+          <ul aria-label="Conversas encontradas" className="queue-items">
             {props.items.map((item) => (
               <li key={item.id}>
                 <button type="button" aria-pressed={props.selectedId === item.id} onClick={() => props.onSelect(item.id)}
                   data-wait-alert={item.waitAlert ? "true" : undefined}
-                  className={`flex min-h-11 w-full flex-wrap items-center gap-2 rounded-lg border p-2 text-left focus-visible:outline-2${item.waitAlert ? " border-destructive bg-destructive/10" : ""}`}>
-                  <ContactAvatar label={item.contactLabel} /><span>{item.contactLabel}</span><span>Protocolo {item.protocol}</span>
+                  className={`queue-item${item.waitAlert ? " queue-item-alert border-destructive bg-destructive/10" : ""}`}>
+                  <ContactAvatar label={item.contactLabel} /><span className="queue-contact"><strong>{item.contactLabel}</strong><span>Protocolo {item.protocol}</span></span>
                   {item.priorityLabel && <span>Prioridade: {item.priorityLabel}</span>}
-                  {item.unreadCount > 0 && <span>{item.unreadCount} não lida(s)</span>}
+                  {item.unreadCount > 0 && <span className="unread-count">{item.unreadCount} não lida(s)</span>}
                   {item.waitAlert && <span>Passou do tempo de espera.</span>}
                 </button>
               </li>

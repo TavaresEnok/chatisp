@@ -1,4 +1,5 @@
-import { useEffect, type MouseEvent } from "react";
+import { Menu, X, LogOut, Headphones } from "lucide-react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { Link, Navigate, Outlet, useLocation } from "react-router";
 import { useEndSession } from "@/components/auth/use-end-session";
 import { OperatorPresence } from "@/features/presence/operator-presence";
@@ -7,17 +8,6 @@ import { useProviderBrand } from "@/features/branding/use-provider-brand";
 import { AreaNav } from "@/components/layout/area-nav";
 import { areas } from "@/lib/areas";
 import { useSessionStore } from "@/stores/session-store";
-
-function sessionSummary(tenantId: string | null, displayName: string): string {
-  const session =
-    tenantId === null
-      ? "Sessão do servidor ainda não ligada."
-      : "Provedor em sessão.";
-  if (displayName.length === 0) {
-    return `${session} O nome desta aba ainda não foi definido.`;
-  }
-  return `${session} Nome nesta aba: ${displayName}.`;
-}
 
 function skipToContent(event: MouseEvent<HTMLAnchorElement>) {
   const target = document.getElementById("conteudo");
@@ -36,7 +26,7 @@ export function AppShell() {
     (location.pathname.startsWith("/configuracoes")
       ? "Configurações"
       : "Página não encontrada");
-  const tenantId = useSessionStore((state) => state.tenantId);
+  const [menuOpen, setMenuOpen] = useState(false);
   const displayName = useSessionStore((state) => state.displayName);
   const principal = useSessionStore((state) => state.principal);
   const endSession = useEndSession();
@@ -52,7 +42,7 @@ export function AppShell() {
   }
 
   return (
-    <div className="min-h-svh bg-background text-foreground">
+    <div className="app-shell" data-area={area?.id ?? "settings"}>
       <a
         href="#conteudo"
         onClick={skipToContent}
@@ -60,26 +50,26 @@ export function AppShell() {
       >
         Ir para o conteúdo
       </a>
-      <div className="md:grid md:min-h-svh md:grid-cols-[16rem_minmax(0,1fr)]">
-        <aside className="border-b border-sidebar-border bg-sidebar text-sidebar-foreground md:border-r md:border-b-0">
+      <div className="app-layout">
+        <aside id="app-navigation" className="app-sidebar" data-open={menuOpen}>
           <ProviderMark />
-          <AreaNav />
- <OperatorPresence />
+          <div onClick={(event) => { if ((event.target as HTMLElement).closest("a")) setMenuOpen(false); }}><AreaNav /></div>
+          <div className="sidebar-bottom"><OperatorPresence /><p className="sidebar-caption"><Headphones size={14} aria-hidden="true" /> Central de atendimento</p></div>
         </aside>
-        <div className="flex min-w-0 flex-col">
-          <header className="border-b px-4 py-3 md:px-8">
-            <p className="min-w-0 text-sm break-words text-foreground">
-              {sessionSummary(tenantId, displayName)}
-            </p>
+        <div className="app-body">
+          <header className="app-topbar">
+            <button type="button" className="mobile-menu icon-button" aria-label={menuOpen ? "Fechar menu" : "Abrir menu"} aria-expanded={menuOpen} aria-controls="app-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button>
+            <div className="topbar-location"><span>{brand.name}</span><span aria-hidden="true">/</span><strong>{heading}</strong></div>
+            <div className="topbar-session">{displayName && <span>{displayName}</span>}
             {principal ? (
               <button
                 type="button"
-                className="mt-2 h-11 rounded-lg px-3 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+                className="session-exit"
                 onClick={() => {
                   void endSession();
                 }}
               >
-                Sair
+                <LogOut size={15} aria-hidden="true" /> Sair
               </button>
             ) : (
               <Link
@@ -89,11 +79,12 @@ export function AppShell() {
                 Entrar
               </Link>
             )}
+            </div>
           </header>
           <main
             id="conteudo"
             tabIndex={-1}
-            className="flex-1 px-4 py-6 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-foreground md:px-8"
+            className="app-content"
           >
             <Outlet />
           </main>

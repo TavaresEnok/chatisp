@@ -674,7 +674,7 @@ function ComposerSession({
   return (
     <form
       aria-label="Compositor de mensagem"
-      className="flex flex-col gap-3"
+      className="message-composer"
       noValidate
       onDragOver={(event) => {
         if ([...event.dataTransfer.types].includes("Files")) event.preventDefault();
@@ -746,7 +746,7 @@ function ComposerSession({
             </Button>
           </div>
         ) : null}
-        <div className="flex flex-col gap-2">
+        <details className="composer-attachments"><summary>Anexos, áudio e formatação</summary><div className="flex flex-col gap-2">
           <Label htmlFor={fileId}>Anexar arquivo</Label>
           <input
             id={fileId}
@@ -808,8 +808,9 @@ function ComposerSession({
               : undefined
           }
         />
+        </details>
         <p id={helpId} className="text-sm text-muted-foreground">
-          O rascunho fica neste dispositivo. Ctrl+Enter envia; o conector ainda não confirmou.
+          Ctrl+Enter envia · Rascunho salvo neste dispositivo. Entrega sujeita à confirmação do canal.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">

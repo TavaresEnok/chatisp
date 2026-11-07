@@ -209,14 +209,14 @@ function TimelineSession({ scope, protocol, status, entries, onReply, loadDownlo
   }
 
   return (
-    <section className="flex flex-col gap-3" data-scope={conversationScopeKey(scope)}>
+    <section className="message-timeline" data-scope={conversationScopeKey(scope)}>
       <h2 className="text-base font-medium text-foreground">Protocolo {protocolLabel}</h2>
       <div
         ref={parentRef}
         role="region"
         aria-label="Histórico da conversa"
         aria-busy={status === "loading" ? true : undefined}
-        className="max-h-96 overflow-auto rounded-xl ring-1 ring-foreground/10"
+        className="timeline-scroll"
         onScroll={handleScroll}
       >
         {status === "loading" ? (
@@ -251,6 +251,8 @@ function TimelineSession({ scope, protocol, status, entries, onReply, loadDownlo
               return (
                 <li
                   key={entry.id}
+                  data-kind={entry.kind}
+                  data-outgoing={(entry.kind === "text" || entry.kind === "media") && entry.direction === "outbound"}
                   data-index={virtualRow.index}
                   ref={(node) => {
                     virtualizer.measureElement(node);
@@ -267,7 +269,7 @@ function TimelineSession({ scope, protocol, status, entries, onReply, loadDownlo
                   onFocus={() => setFocusedIndex(virtualRow.index)}
                   onKeyDown={(event) => onItemKeyDown(event, virtualRow.index)}
                 >
-                  <EntryContent entry={entry} onReply={onReply} onQuoteJump={jumpToMessage} loadDownload={loadDownload} />
+                  <div className="message-bubble"><EntryContent entry={entry} onReply={onReply} onQuoteJump={jumpToMessage} loadDownload={loadDownload} /></div>
                 </li>
               );
             })}

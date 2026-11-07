@@ -31,6 +31,7 @@ export type MessageReactionView = {
 };
 
 export type TextTimelineEntry = {
+  direction?: "inbound" | "outbound";
   kind: "text";
   id: string;
   author: string;
@@ -59,6 +60,7 @@ export type UnsupportedTimelineEntry = {
 };
 
 export type MediaTimelineEntry = {
+  direction?: "inbound" | "outbound";
   kind: "media";
   id: string;
   author: string;

@@ -33,14 +33,14 @@ export function ConversationHeader({
   const open = phase !== "closed";
 
   return (
-    <header className="flex flex-col gap-3">
+    <header className="conversation-header">
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           <ContactAvatar label={contact} size={40} />
           <h2 className="text-base font-medium text-foreground">{contact}</h2>
         </div>
         <p className="text-sm text-foreground">{`Protocolo ${protocolLabel}`}</p>
-        <p className="text-sm text-muted-foreground">{`Estado: ${ATTENDANCE_PHASE_LABEL[phase]}`}</p>
+        <p className="conversation-phase" data-phase={phase}>{`Estado: ${ATTENDANCE_PHASE_LABEL[phase]}`}</p>
         <p className="text-sm text-muted-foreground">{`Responsável: ${assignee}`}</p>
       </div>
       {open ? (
