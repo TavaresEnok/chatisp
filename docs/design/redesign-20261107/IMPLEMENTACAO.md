@@ -48,3 +48,25 @@ A conta administrativa consultada na instalação pública não possui caixa dis
 ## Limites
 
 Não é uma nova homologação do produto inteiro. Meta, ERP, Evolution, notificações de navegador, gravação com microfone físico e dispositivos móveis físicos não foram homologados nesta alteração de apresentação. Os controles existentes foram preservados; integrações ausentes continuam ausentes. O aviso pré-existente de tamanho do bundle Vite permanece e não impede o build.
+
+## Reproduzir a jornada isolada
+
+No servidor NexoISP, com as dependências de desenvolvimento instaladas, use três terminais. Não aponte a fixture para banco existente.
+
+Terminal 1:
+
+```sh
+export PATH=/home/enok/.local/share/go1.27.3/bin:/home/enok/.local/share/node24/bin:$PATH
+cd /home/enok/Documentos/projetos/chatisp
+mkdir -p /home/enok/.local/share/chatisp/redesign-20261107
+umask 077
+go -C backend build -mod=vendor -o /home/enok/.local/share/chatisp/redesign-20261107/fixture ./cmd/m2demo
+cd backend
+CHATISP_E2E_API_PORT=28080 /home/enok/.local/share/chatisp/redesign-20261107/fixture m4a > /home/enok/.local/share/chatisp/redesign-20261107/fixture.json
+```
+
+Terminal 2: no diretório `web`, execute `CHATISP_E2E_API_PORT=28080 npm run dev -- --host 127.0.0.1 --port 5173 --strictPort` usando Node 24.
+
+Terminal 3: após a fixture escrever o JSON, na raiz do projeto execute `python3 docs/design/redesign-20261107/popular-bancada.py` e `node docs/design/redesign-20261107/verificar-ui.mjs`. O Chromium usado está fixado no script; ajuste apenas o caminho do executável caso a revisão local seja diferente. As portas 28080, 9090, 18081, 5173 e 5174 precisam estar livres; o programa recusa conflito em vez de parar serviços existentes.
+
+Ao terminar, Ctrl+C nos terminais 1 e 2. A fixture remove seu PostgreSQL descartável. Remova o JSON de credenciais efêmeras. Nesta execução a bancada foi encerrada após as capturas; não permanece nenhum agente ou fila trabalhando.
