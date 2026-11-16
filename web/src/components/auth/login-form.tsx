@@ -76,6 +76,32 @@ export function LoginForm() {
         navigate("/painel", { replace: true });
       })}
     >
+      {import.meta.env.VITE_DEVELOPMENT_LOGIN_SHORTCUTS === "true" && (
+        <fieldset className="rounded-lg border p-3" disabled={pending}>
+          <legend className="px-1 text-sm font-medium">Acessos de desenvolvimento</legend>
+          <p className="mb-3 text-sm text-muted-foreground">Escolha o perfil para preencher o e-mail. A senha continua obrigatória.</p>
+          <div className="flex flex-wrap gap-2">
+            {([
+              ["Administrador do SaaS", "saas.dev@chatisp.local"],
+              ["Dono da empresa", "admin@chatisp.local"],
+              ["Atendimento", "ana.suporte.demo@chatisp.local"],
+              ["Supervisão", "sofia.supervisao.demo@chatisp.local"],
+            ] as const).map(([label, email]) => (
+              <Button key={email} type="button" variant="outline" onClick={() => {
+                form.setValue("email", email);
+                form.setValue("password", "");
+                form.setValue("tenantId", "");
+                form.setValue("code", "");
+                form.clearErrors();
+                setServerError(null);
+                setNeedsCode(false);
+                setNeedsTenant(false);
+                form.setFocus("password");
+              }}>{label}</Button>
+            ))}
+          </div>
+        </fieldset>
+      )}
       {endedReason ? (
         <p role="status" className="text-sm text-foreground">
           Sua sessão expirou ou foi revogada. Entre novamente.
