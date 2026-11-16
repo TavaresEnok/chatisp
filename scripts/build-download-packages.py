@@ -61,7 +61,15 @@ def main():
                              filename=filename, size=path.stat().st_size,
                              sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
     (OUT / "manifest.json").write_text(json.dumps({"packages": packages}, ensure_ascii=False, indent=2) + "\n")
-    print("Generated 3 packages and integrity manifest in backend/package-assets")
+    public = ROOT / "web/public/pacotes"
+    public.mkdir(parents=True, exist_ok=True)
+    bundle = public / "CHATISP_TODOS_PACOTES.zip"
+    with zipfile.ZipFile(bundle, "w", zipfile.ZIP_STORED) as archive:
+        for path in [OUT / item["filename"] for item in packages] + [OUT / "manifest.json"]:
+            info = zipfile.ZipInfo(path.name, date_time=(2026, 1, 1, 0, 0, 0))
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, path.read_bytes())
+    print("Generated 3 packages, integrity manifest and public /download bundle")
 
 
 if __name__ == "__main__":

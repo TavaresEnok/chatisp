@@ -11,6 +11,16 @@ http://{$CHATISP_PROXY_SITE_HOST}:8082 {
 		Referrer-Policy "same-origin"
 		-Server
 	}
+	@download path /download /download/
+	handle @download {
+		root * /srv/panel
+		rewrite * /pacotes/CHATISP_TODOS_PACOTES.zip
+		header Content-Disposition "attachment; filename=CHATISP_TODOS_PACOTES.zip"
+		header Content-Type application/zip
+		header X-Content-Type-Options nosniff
+		header Cache-Control "no-store"
+		file_server
+	}
 	handle /metrics* {
 		respond 404
 	}
