@@ -8,6 +8,13 @@ import axe from "axe-core";
 
 const expect = playwrightExpect.configure({ timeout: 20_000 });
 const ORIGIN = "https://localhost:5174";
+const theme = process.env.UX_THEME ?? "dark";
+if (theme !== "dark" && theme !== "light") throw new Error("UX_THEME deve ser dark ou light");
+async function setTheme(context: BrowserContext) {
+  await context.addInitScript(({ origin, theme }) => {
+    if (location.origin === origin) localStorage.setItem("chatisp-interface-theme", theme);
+  }, { origin: ORIGIN, theme });
+}
 
 type Actor = { Token: string; CSRF: string; User: string; Member: string; Role: string };
 type Fixture = {
@@ -37,6 +44,7 @@ const reactKeyDefects: string[] = [];
 
 async function openPanel(browser: Browser, actor: Actor, opts: { init?: string; permissions?: string[]; viewport?: { width: number; height: number }; path?: string } = {}): Promise<Panel> {
   const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: opts.viewport ?? { width: 1280, height: 800 } });
+  await setTheme(context);
   await context.addCookies([{ name: "__Host-session", value: actor.Token, url: ORIGIN, secure: true, httpOnly: true, sameSite: "Strict" }]);
   if (opts.permissions) await context.grantPermissions(opts.permissions, { origin: ORIGIN });
   if (opts.init) await context.addInitScript({ content: opts.init });
@@ -211,6 +219,7 @@ export async function runUx(browser: Browser, testInfo: { attach(name: string, o
   const admin = fixture.M4A.Admin;
   const inbox = fixture.M3B.Inbox;
   const evidence: Record<string, unknown> = {};
+  evidence.theme = theme;
   const discover = process.env.UX_DISCOVER === "1";
   const failures: string[] = [];
 
@@ -329,6 +338,7 @@ export async function runUx(browser: Browser, testInfo: { attach(name: string, o
       ];
       for (const stop of stops) {
         if (stop.path) { await go(stop.page, stop.csrf, stop.path); await stop.page.waitForTimeout(900); }
+        await expect(stop.page.locator("html")).toHaveClass(theme === "dark" ? /\bdark\b/ : /^(?!.*\bdark\b).*$/);
         for (const dup of await duplicateKeys(stop.page)) failures.push(`${vp.name} / ${stop.label}: ${dup}`);
         const violations = await runAxe(stop.page, WCAG);
         const over = await overflow(stop.page);
@@ -352,6 +362,7 @@ export async function runUx(browser: Browser, testInfo: { attach(name: string, o
   ];
   for (const vp of viewports) {
     const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: vp.width, height: vp.height } });
+    await setTheme(context);
     const page = await context.newPage();
     try {
       for (const pub of publicPages) {
@@ -360,6 +371,7 @@ export async function runUx(browser: Browser, testInfo: { attach(name: string, o
         if (pub.heading) await expect(page.getByRole("heading", { name: pub.heading, level: 1 })).toBeVisible();
         else await expect(h1.first()).toBeVisible();
         await page.waitForTimeout(400);
+        await expect(page.locator("html")).toHaveClass(theme === "dark" ? /\bdark\b/ : /^(?!.*\bdark\b).*$/);
         const shown = (await h1.first().textContent())?.trim() ?? "";
         const violations = await runAxe(page, WCAG);
         const over = await overflow(page);

@@ -3986,3 +3986,20 @@ li:focus > .message-line > .entry-reply,
 .auth-screen a {
   font-size: 12.5px;
 }
+
+/* At 400% zoom the viewport can be only 256px high. Let the queue's
+   controls scroll as a unit instead of shrinking beneath the occupancy footer. */
+@media (max-height: 450px) {
+  .workspace-queue > div,
+  .welcome-queue {
+    overflow-y: auto;
+  }
+  .queue-controls {
+    flex: 0 0 auto;
+  }
+  .queue-results {
+    flex: none;
+    min-height: 48px;
+    max-height: 50vh;
+  }
+}
