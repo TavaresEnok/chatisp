@@ -1,6 +1,5 @@
 import { MessagesSquare } from "lucide-react";
 import type { ReactNode } from "react";
-import { Link } from "react-router";
 
 type AuthScreenProps = {
   title: string;
@@ -20,14 +19,6 @@ export function AuthScreen({ title, children }: AuthScreenProps) {
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
       </header>
       {children}
-      <p>
-        <Link
-          to="/painel"
-          className="text-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
-        >
-          Ir para o Painel
-        </Link>
-      </p>
     </main>
   );
 }

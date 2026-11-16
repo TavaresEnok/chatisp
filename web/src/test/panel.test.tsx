@@ -52,6 +52,11 @@ function expectPortugueseUi() {
 }
 
 describe("painel", () => {
+  it.each(["/entrar", "/recuperar-senha", "/recuperar-senha/confirmar", "/convite", "/mfa"])("não oferece atalho ao painel na autenticação: %s", (path) => {
+    renderPanel(path);
+    expect(screen.queryByRole("link", { name: "Ir para o Painel" })).not.toBeInTheDocument();
+    expect(document.querySelector('a[href="/painel"]')).not.toBeInTheDocument();
+  });
   afterEach(() => {
     resetSessionStore();
     vi.unstubAllGlobals();
