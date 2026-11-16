@@ -1,6 +1,6 @@
 # Revisão do PR 1 — bf4563a sobre 696dd67
 
-Revisão estática do diff de produção em `web/src`; o teste de ponta a ponta com API real e a verificação de CI ficam com a integração.
+Revisão estática do diff de produção em `web/src`, seguida das correções indicadas abaixo. Na rodada atual passaram 307 testes em 64 arquivos, `make lint`, build e os E2E M3B, M4A, M4B–M6 e M7-OPS com API Go e PostgreSQL reais. Os fornecedores são sintéticos e não foram homologados externamente. A UX passou em 52 vistas por tema, sem falhas; os relatórios JSON estão em `evidencias/`. O CI verde no cabeçalho final continua sendo condição para mesclar, com registro nos Checks do PR. Evidências em `VERIFICACAO.md` e `.tmp/grafite-review/`.
 
 ## Achados
 
@@ -15,3 +15,5 @@ Os painéis de detalhes inativos usam `display: none`, e as abas usam seleção 
 As correções 2–4 foram verificadas nos testes direcionados de interface e relatório (10 testes passaram).
 
 Os fluxos 1 e 5 foram corrigidos com ação administrativa Novo setor na lista e alerta de abertura na lista de contatos; três testes dedicados passaram sem alterar as permissões.
+
+A revisão também ajustou os seletores para “Caixa de atendimento” sem enfraquecer os testes, as abas usadas pelos E2E, a área acionável de 24 px do menu, o recorte do topo, o reflow com altura de 256 px e a fixture de teclado para iniciar no corpo e limpar o foco entre auditorias, preservando o desenho aprovado.

@@ -1,11 +1,11 @@
 # ChatISP — nova identidade visual (preto azul-grafite, menu em pílula)
 
 Data: 15/11/2026. Base: `696dd6785f2acdba3156c308fba917d1259f980d` (`main`).
-Ramo local: `redesign/grafite-20261115`. Nada foi enviado ao remoto nem publicado.
+Ramo de revisão: `redesign/grafite-20261115`. Alterações enviadas no [PR 1](https://github.com/TavaresEnok/chatisp/pull/1). A instalação de produção foi preservada durante a revisão.
 
 ## O que mudou
 
-Só a apresentação do frontend (`web/`). Regras, permissões, contratos, chamadas à API, WebSocket, rascunhos, estados de envio e textos da interface continuam os mesmos.
+O redesenho altera a apresentação do frontend (`web/`). A revisão também corrige os estados de aparência, os fluxos móveis e a representação dos relatórios descritos adiante. Regras de negócio, permissões, contratos, chamadas à API, WebSocket, rascunhos e estados de envio foram preservados.
 
 - **Tokens** (`web/src/index.css`): tema escuro em preto azul-grafite (fundo `#06070A`, painéis `#0E1116`, superfícies até `#252C39`) e tema claro em branco neutro. Uma única cor viva, `--hot` (laranja), para o que pede atenção. Novos tokens: `--soft`, `--hot`, `--ok`.
 - **Tema claro e escuro**: botão no topo. O escuro é o padrão. A preferência fica no dispositivo (`web/src/stores/interface-store.ts`) e é apagada junto com o restante do armazenamento ao sair da sessão.
@@ -46,7 +46,15 @@ Ver `VERIFICACAO.md` nesta pasta: verificação de tipos, ESLint, testes do Vite
 
 Conferência visual feita na bancada, em Chrome, nos temas escuro e claro: Conversas (fila, conversa aberta, detalhes, menu recolhido e expandido), Painel, Relatórios, Configurações, Contatos e Entrar, além de Conversas em largura de celular.
 
-## Limites
+## Revisão atual — 16/11/2026
+
+A revisão preserva o desenho aprovado. Foram corrigidos os seletores dos testes para o nome acessível “Caixa de atendimento”, sem retirar as verificações; a abertura de novo setor e o aviso de erro de contato no celular; a limpeza de tema e menu em memória ao sair; e a indicação de registros fora da amostra e a altura das barras com valor zero. Os roteiros E2E foram adaptados às abas de detalhes. A área acionável da aba do menu tem 24 px, o topo contém o texto na área disponível, as telas passaram por ajuste de reflow com altura de 256 px e a fixture de teclado inicia no corpo do documento e limpa o foco entre auditorias.
+
+A execução atual registrou 307 testes em 64 arquivos, `make lint` e build aprovados, além de M3B, M4A, M4B–M6 e M7-OPS com API Go e PostgreSQL reais. Os fornecedores continuam sintéticos, sem homologação externa. UX passou em 52 vistas por tema, sem falhas. A mesclagem exige CI verde no cabeçalho final do PR; o resultado está nos Checks. Consulte `VERIFICACAO.md` para as evidências.
+
+## Limites históricos da primeira execução
+
+As observações abaixo descrevem a primeira execução e não o estado da revisão atual.
 
 - Não houve jornada com API Go e PostgreSQL reais: esta máquina não tem PostgreSQL nem Docker. A bancada usa dados sintéticos e não comprova fluxo de ponta a ponta.
 - Os roteiros Playwright (`web/e2e`) não foram executados, pelo mesmo motivo.
@@ -55,6 +63,6 @@ Conferência visual feita na bancada, em Chrome, nos temas escuro e claro: Conve
 - Dentro de Configurações, cada painel (horários, automação, respostas prontas, integrações etc.) mantém o formulário que já existia; só a moldura mudou.
 - A tela de Contatos não mostra o histórico de atendimentos do contato: a página atual do produto não o tem, e nada foi acrescentado.
 
-## Reverter
+## Histórico de reversão
 
-A alteração está toda no ramo `redesign/grafite-20261115`. Para descartar, basta voltar ao `main`.
+A orientação inicial de voltar ao `main` dizia respeito à cópia local daquela execução; o estado atual do ramo e eventuais alterações devem ser conferidos antes de qualquer reversão.

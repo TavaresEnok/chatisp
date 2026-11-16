@@ -49,6 +49,8 @@ def main():
     visual = []
     for name in ["redesign-20261106", "redesign-20261107", "demonstracao-20261107", "redesign-20261115"]:
         visual.extend(files_under(ROOT / "docs/design" / name, {".png", ".md"}))
+    visual.extend(ROOT / "docs/design/redesign-20261115/evidencias" / name
+                  for name in ["ux-dark.json", "ux-light.json"])
     specs = [
         ("inventario-funcional", "Inventário funcional completo", "Páginas, módulos, checklist de 142 itens e matriz dos 257 requisitos.", "CHATISP_PACOTE_FUNCIONAL_PARA_DESIGN.zip", inventory),
         ("briefing-tecnico", "Briefing técnico e código do frontend", "Stack, fontes React/TypeScript, manifests e contratos OpenAPI para outra IA trabalhar no frontend.", "CHATISP_BRIEFING_TECNICO_E_FRONTEND.zip", inventory + briefing + manifests + source),

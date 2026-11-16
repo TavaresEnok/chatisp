@@ -154,18 +154,30 @@ async function enableBrowserPreference(panel: Panel, actor: Actor, inbox: string
 const notes = (page: Page) => page.evaluate(() => (window as unknown as { __notes: string[] }).__notes);
 const permissionText = (page: Page) => page.getByRole("region", { name: "Preferências de notificações" }).locator("p").first();
 
-type Violation = { id: string; impact: string | null; help: string; nodes: number; targets: string[]; html: string[] };
+type Violation = { id: string; impact: string | null; help: string; nodes: number; targets: string[]; html: string[]; details: { failureSummary: string | undefined; rect: string }[] };
 async function runAxe(page: Page, tags: string[]): Promise<Violation[]> {
   await page.addScriptTag({ content: axe.source });
   return page.evaluate(async (tags) => {
-    const result = await (window as unknown as { axe: { run: (c: Document, o: unknown) => Promise<{ violations: { id: string; impact: string | null; help: string; nodes: { target: unknown[] }[] }[] }> } }).axe.run(document, { runOnly: { type: "tag", values: tags } });
-    return result.violations.map((v) => ({ id: v.id, impact: v.impact, help: v.help, nodes: v.nodes.length, targets: v.nodes.slice(0, 4).map((n) => n.target.join(" ")), html: v.nodes.slice(0, 2).map((n) => (n as unknown as { html: string }).html.slice(0, 200)) }));
+    const result = await (window as unknown as { axe: { run: (c: Document, o: unknown) => Promise<{ violations: { id: string; impact: string | null; help: string; nodes: { target: string[]; html: string; failureSummary?: string }[] }[] }> } }).axe.run(document, { runOnly: { type: "tag", values: tags } });
+    return result.violations.map((v) => ({ id: v.id, impact: v.impact, help: v.help, nodes: v.nodes.length, targets: v.nodes.slice(0, 4).map((n) => n.target.join(" ")), html: v.nodes.slice(0, 2).map((n) => n.html.slice(0, 200)), details: v.nodes.slice(0, 4).map((n) => {
+      const el = n.target.length === 1 ? document.querySelector(n.target[0]!) : null;
+      const r = el?.getBoundingClientRect();
+      const center = r && document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return { failureSummary: n.failureSummary, rect: r ? `${r.x},${r.y} ${r.width}x${r.height}; center=${center?.outerHTML.slice(0, 200)}` : "unavailable" };
+    }) }));
   }, tags);
 }
 
 async function keyboardWalk(page: Page, max = 70) {
   await page.addStyleTag({ content: "*,*::before,*::after{transition:none !important;animation:none !important}" });
-  await page.evaluate(() => { document.querySelectorAll("[data-ux-seen]").forEach((e) => e.removeAttribute("data-ux-seen")); (document.activeElement as HTMLElement | null)?.blur(); });
+  await page.evaluate(() => {
+    document.querySelectorAll("[data-ux-seen]").forEach((e) => e.removeAttribute("data-ux-seen"));
+    // Blurring retains Chromium's sequential focus starting point from the
+    // previous SPA page. Start each audit at the beginning of this document.
+    document.body.setAttribute("tabindex", "-1");
+    document.body.focus();
+    document.body.removeAttribute("tabindex");
+  });
   const problems: string[] = [];
   const order: string[] = [];
   for (let i = 0; i < max; i++) {
@@ -189,6 +201,8 @@ async function keyboardWalk(page: Page, max = 70) {
     if (!info.visible) problems.push(`foco em elemento invisível: <${info.tag}> "${info.name}"`);
     if (!info.name) problems.push(`foco em controle sem nome: <${info.tag}>`);
   }
+  // Do not carry a focused skip link into the next SPA page's axe audit.
+  await page.evaluate(() => { (document.activeElement as HTMLElement | null)?.blur(); });
   return { reached: order.length, problems, order };
 }
 

@@ -293,6 +293,7 @@ button:disabled {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  overflow: hidden;
   font-size: 12.5px;
   color: var(--muted-foreground);
 }
@@ -560,9 +561,9 @@ button:disabled {
 }
 .nav-handle-button {
   position: absolute;
-  left: -6px;
+  left: -11px;
   top: 32px;
-  width: 14px;
+  width: 24px;
   height: 32px;
   display: grid;
   place-items: center;
