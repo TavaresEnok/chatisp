@@ -2,6 +2,8 @@ module chatisp
 
 go 1.27
 
+toolchain go1.27.4
+
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.5
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.97.3

@@ -1,0 +1,28 @@
+{
+  "packages": [
+    {
+      "id": "inventario-funcional",
+      "title": "Inventário funcional completo",
+      "description": "Páginas, módulos, checklist de 142 itens e matriz dos 257 requisitos.",
+      "filename": "CHATISP_PACOTE_FUNCIONAL_PARA_DESIGN.zip",
+      "size": 60192,
+      "sha256": "13903b27e2bd756a06be736b05eda09b74d2827660b1f02997bc1adc82a570c6"
+    },
+    {
+      "id": "briefing-tecnico",
+      "title": "Briefing técnico e código do frontend",
+      "description": "Stack, fontes React/TypeScript, manifests e contratos OpenAPI para outra IA trabalhar no frontend.",
+      "filename": "CHATISP_BRIEFING_TECNICO_E_FRONTEND.zip",
+      "size": 550258,
+      "sha256": "bc04663fb3c8719a741b4a9da5acc94dc8640d87cdb5538f4ca918a24c8fa593"
+    },
+    {
+      "id": "referencias-visuais",
+      "title": "Referências e propostas visuais",
+      "description": "Capturas demonstrativas, propostas e documentação visual; conceitos não representam recursos novos já implementados.",
+      "filename": "CHATISP_REFERENCIAS_VISUAIS.zip",
+      "size": 4852171,
+      "sha256": "f1a9cc8cb2ff79aa88f2c99fb7e7a410c97b689d5aa79e364beec76c9c373b3f"
+    }
+  ]
+}

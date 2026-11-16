@@ -11,7 +11,7 @@ COPY web/ ./
 COPY backend/api/openapi.json /src/backend/api/openapi.json
 RUN npm run build
 
-FROM golang:1.27.3-alpine AS api
+FROM golang:1.27.4-alpine AS api
 WORKDIR /src/backend
 COPY backend/ ./
 ENV CGO_ENABLED=0
@@ -22,6 +22,7 @@ RUN apk add --no-cache ca-certificates curl ffmpeg \
 	&& adduser -D -u 1000 -s /sbin/nologin chatisp
 COPY --from=api /out/chatisp /usr/local/bin/chatisp
 COPY backend/db/migrations /usr/share/chatisp/migrations
+COPY backend/package-assets /usr/share/chatisp/packages
 USER 1000
 EXPOSE 8080 9090
 ENTRYPOINT ["chatisp"]

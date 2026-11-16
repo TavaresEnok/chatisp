@@ -72,6 +72,8 @@ type ReadyFunc func(context.Context) error
 // Dependencies wires the HTTP API. Nil metrics are created internally.
 // A nil Auth still registers the panel routes and answers 503.
 type Dependencies struct {
+	// PackageDir contains the generated package manifest and ZIP files.
+	PackageDir     string
 	Ready          ReadyFunc
 	Metrics        *metrics.Metrics
 	Logger         *slog.Logger
@@ -224,6 +226,7 @@ func New(deps Dependencies) *API {
 		return &readyOutput{Body: readyBody{Status: "ready"}}, nil
 	})
 	registerPanel(api, deps)
+	registerPackages(api, deps)
 	registerPlatform(api, deps)
 	attendanceHttpAPI.Register(api, attendanceHttpAPI.Dependencies{
 		Auth:           deps.Auth,

@@ -11,7 +11,7 @@ A instalação persistente existente foi configurada para `https://chatisp.tokst
 
 ## Ambiente
 
-- Go 1.27.3, com o módulo em `backend/`.
+- Go 1.27.4, com o módulo em `backend/`.
 - Node.js 24 e npm 11.19.1, o npm que acompanha esse Node. O npm 10 de `/usr/local/bin` não deve gravar o lockfile. Os scripts colocam o npm 11 à frente no `PATH` quando ele está instalado ao lado de um Node 24.
 - gcc para o que o toolchain Go pedir.
 - GNU make é opcional: `make test` executa `scripts/test.sh` e os outros alvos seguem a mesma regra.

@@ -2847,6 +2847,57 @@
         ],
         "type": "object"
       },
+      "PackageMetadata": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "filename",
+          "size",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "PackagesOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "packages": {
+            "items": {
+              "$ref": "#/components/schemas/PackageMetadata"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "packages"
+        ],
+        "type": "object"
+      },
       "Patch": {
         "additionalProperties": false,
         "properties": {
@@ -15297,6 +15348,197 @@
           }
         },
         "summary": "Redefine o MFA",
+        "tags": [
+          "painel"
+        ]
+      }
+    },
+    "/api/panel/packages": {
+      "get": {
+        "description": "Somente administradores.",
+        "operationId": "list-panel-packages",
+        "parameters": [
+          {
+            "description": "Cookie de sessão do painel.",
+            "in": "cookie",
+            "name": "__Host-session",
+            "schema": {
+              "description": "Cookie de sessão do painel.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Token de CSRF vinculado à sessão.",
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "schema": {
+              "description": "Token de CSRF vinculado à sessão.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackagesOutputBody"
+                }
+              }
+            },
+            "description": "Sucesso",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Não autenticado"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Acesso negado"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Dados inválidos"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Erro interno"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Serviço indisponível"
+          }
+        },
+        "summary": "Lista pacotes",
+        "tags": [
+          "painel"
+        ]
+      }
+    },
+    "/api/panel/packages/{id}/download": {
+      "get": {
+        "description": "Somente administradores.",
+        "operationId": "download-panel-package",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "__Host-session",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Não autenticado"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Acesso negado"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Recurso não encontrado"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Dados inválidos"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Erro interno"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Serviço indisponível"
+          }
+        },
+        "summary": "Baixa pacote",
         "tags": [
           "painel"
         ]

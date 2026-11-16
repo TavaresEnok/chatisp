@@ -1,0 +1,33 @@
+{
+  "url": "https://chatisp.tokstiloesporte.com/painel",
+  "links": [
+    {
+      "text": "Ir para o conteúdo",
+      "href": "#conteudo"
+    },
+    {
+      "text": "Painel",
+      "href": "/painel"
+    },
+    {
+      "text": "Conversas",
+      "href": "/conversas"
+    },
+    {
+      "text": "Contatos",
+      "href": "/contatos"
+    },
+    {
+      "text": "Equipes",
+      "href": "/equipes"
+    },
+    {
+      "text": "Relatórios",
+      "href": "/relatorios"
+    },
+    {
+      "text": "Configurações",
+      "href": "/configuracoes"
+    }
+  ]
+}

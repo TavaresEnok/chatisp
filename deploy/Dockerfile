@@ -7,7 +7,7 @@ COPY web/ ./
 COPY backend/api/openapi.json /src/backend/api/openapi.json
 RUN npm run build
 
-FROM golang:1.27.3-bookworm AS api
+FROM golang:1.27.4-bookworm AS api
 WORKDIR /src/backend
 COPY backend/ ./
 ENV CGO_ENABLED=0
@@ -20,6 +20,7 @@ RUN apt-get update \
 	&& useradd --uid 1000 --create-home --shell /usr/sbin/nologin chatisp
 COPY --from=api /out/chatisp /usr/local/bin/chatisp
 COPY backend/db/migrations /usr/share/chatisp/migrations
+COPY backend/package-assets /usr/share/chatisp/packages
 USER 1000
 EXPOSE 8080 9090
 ENTRYPOINT ["chatisp"]
