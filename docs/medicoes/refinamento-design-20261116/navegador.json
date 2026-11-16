@@ -1,0 +1,265 @@
+{
+  "preview": false,
+  "views": [
+    {
+      "name": "painel-escuro",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "painel-claro",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "historico-desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "conversa-dark-1440",
+      "viewport": {
+        "width": 1440,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "detalhes-dark-1440",
+      "viewport": {
+        "width": 1440,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "conversa-dark-1280",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "detalhes-dark-1280",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "conversa-dark-1024",
+      "viewport": {
+        "width": 1024,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "detalhes-dark-1024",
+      "viewport": {
+        "width": 1024,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "conversa-dark-768",
+      "viewport": {
+        "width": 768,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "detalhes-dark-768",
+      "viewport": {
+        "width": 768,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "conversa-dark-390",
+      "viewport": {
+        "width": 390,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "detalhes-dark-390",
+      "viewport": {
+        "width": 390,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "conversa-dark-320",
+      "viewport": {
+        "width": 320,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "detalhes-dark-320",
+      "viewport": {
+        "width": 320,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "conversa-light-1440",
+      "viewport": {
+        "width": 1440,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "detalhes-light-1440",
+      "viewport": {
+        "width": 1440,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "conversa-light-1280",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "detalhes-light-1280",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "conversa-light-1024",
+      "viewport": {
+        "width": 1024,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "detalhes-light-1024",
+      "viewport": {
+        "width": 1024,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "conversa-light-768",
+      "viewport": {
+        "width": 768,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "detalhes-light-768",
+      "viewport": {
+        "width": 768,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "conversa-light-390",
+      "viewport": {
+        "width": 390,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "detalhes-light-390",
+      "viewport": {
+        "width": 390,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "conversa-light-320",
+      "viewport": {
+        "width": 320,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "detalhes-light-320",
+      "viewport": {
+        "width": 320,
+        "height": 800
+      },
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "altura-curta",
+      "viewport": {
+        "width": 1024,
+        "height": 400
+      },
+      "violations": [],
+      "overflow": false
+    }
+  ],
+  "checks": [
+    "pacotes acessíveis por expansão",
+    "3 downloads autenticados com tamanho e SHA-256 conferidos",
+    "histórico 4 protocolos e formulário ERP recolhível",
+    "recolher amplia conversa e preferências persistem após reload",
+    "logout e bloqueio anônimo preservados"
+  ],
+  "errors": []
+}

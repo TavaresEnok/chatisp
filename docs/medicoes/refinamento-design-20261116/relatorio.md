@@ -1,6 +1,6 @@
 # Refinamento do design grafite — 16/11/2026
 
-Melhorias autorizadas pelo proprietário após a revisão visual. Base: `5857600`. O tema grafite e a arquitetura React/Go foram preservados.
+Melhorias autorizadas pelo proprietário após a revisão visual. Base: `5857600`. Código da atualização: `b30010f`. O tema grafite e a arquitetura React/Go foram preservados.
 
 ## Alterações
 
@@ -18,7 +18,7 @@ Candidato compilado verificado em Chromium com a API Go e o PostgreSQL da instal
 
 Login por atalho (incluindo senha), painel, pacotes, conversa demonstrativa, quatro protocolos do histórico, expansão do ERP, recolhimento de detalhes, ajuste/restauração de largura, persistência após reload, foco ao mudar breakpoint, logout e bloqueio anônimo fazem parte da prova.
 
-Resultados finais de testes, publicação e imagens ficam registrados no recibo privado e na atualização deste relatório. Os roteiros antigos M3B/M4A/M4B-M6 receberam os cliques de abertura necessários à nova apresentação; a validação desta mudança prioriza o fluxo autenticado real e os testes proporcionais, sem declarar nova homologação de fornecedores.
+Validação de código: 335 testes em 65 arquivos aprovados, lint e build aprovados, além da compilação TypeScript dos roteiros E2E. O build mantém o aviso já existente de chunk JavaScript acima de 500 kB. Uma execução intermediária da suíte terminou com SIGTERM sem resultado; a execução final completa passou em 73,92 s com dois workers. As primeiras falhas de seletores e a rolagem dos detalhes por teclado foram corrigidas antes da publicação. Os roteiros antigos M3B/M4A/M4B-M6 receberam os cliques de abertura necessários à nova apresentação; a validação desta mudança prioriza o fluxo autenticado real e os testes proporcionais, sem declarar nova homologação de fornecedores.
 
 ## Reversão
 
@@ -33,3 +33,13 @@ python3 /home/enok/.local/share/chatisp/pronto-hoje-20261106/controle.py up -d -
 Configurações e credenciais continuam em `/home/enok/.local/share/chatisp/pronto-hoje-20261106`, com acesso privado. Identidade de PostgreSQL/Garage e hashes das credenciais foram registrados antes da troca para comparação posterior. O snapshot completo anterior permanece em `/home/enok/.local/share/chatisp/backups-publicacao/snapshot-20261116T162340Z-WkdK0QNG`; esta alteração de apresentação usa reversão de imagens, sem restaurar dados sobre interações posteriores.
 
 Provas privadas: `.tmp/design-refinement-release/`. O nome público é resolvido ao Nginx `10.10.0.10`, com TLS normal; não se trata de uma nova prova por rede externa. WhatsApp, ERP, Evolution, SMTP real e expurgo não foram ativados. As pendências de integração permanecem em [dependências externas](../../dependencias-externas.md).
+
+## Publicação concluída
+
+Instalada em https://chatisp.tokstiloesporte.com/conversas. A verificação foi repetida com os assets servidos pela instalação: **28 telas/estados aprovados**, sem violações detectadas pelo axe nem rolagem horizontal. [Resultados do navegador](navegador.json).
+
+Os três downloads autenticados tiveram tamanho e SHA-256 conferidos; `/download` corresponde ao bundle atualizado. Credenciais mantidas byte a byte e contêineres PostgreSQL/Garage preservados. API, worker e Caddy reiniciados saudáveis; cinco serviços saudáveis ao final.
+
+Recibo privado: `/home/enok/.local/share/chatisp/pronto-hoje-20261106/publicacao-refinamento-design-20261116.json`.
+
+Runtime: `sha256:3e49fefa5205a635a4703716e61e910dd6cbb53319b952a7b9e9414d83914526`. Edge: `sha256:f18033eaa02bcd55f22c8366625f8a2f79f77cbe5c13c44dad4c576ff8329a01`.
