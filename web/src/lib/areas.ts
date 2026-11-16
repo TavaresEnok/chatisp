@@ -1,5 +1,14 @@
 export const areas = [
   {
+    id: "conversations",
+    path: "/conversas",
+    label: "Conversas",
+    emptyTitle: "Nenhuma conversa",
+    signedOut:
+      "Nenhum provedor em sessão. A lista mostra somente conversas reais depois do acesso.",
+    empty: "Nenhuma conversa registrada para este provedor.",
+  },
+  {
     id: "dashboard",
     path: "/painel",
     label: "Painel",
@@ -8,15 +17,6 @@ export const areas = [
       "Nenhum provedor em sessão. Fila, espera, presença e volume aparecem aqui apenas quando houver atendimento real.",
     empty:
       "Não há fila, espera nem presença registradas para este provedor.",
-  },
-  {
-    id: "conversations",
-    path: "/conversas",
-    label: "Conversas",
-    emptyTitle: "Nenhuma conversa",
-    signedOut:
-      "Nenhum provedor em sessão. A lista mostra somente conversas reais depois do acesso.",
-    empty: "Nenhuma conversa registrada para este provedor.",
   },
   {
     id: "contacts",

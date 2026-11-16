@@ -23,8 +23,8 @@ function switchNotificationMembership(membershipId: string) {
 }
 
 const areaLabels = [
-  "Painel",
   "Conversas",
+  "Painel",
   "Contatos",
   "Equipes",
   "Relatórios",
