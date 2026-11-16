@@ -39,12 +39,12 @@ function DocumentBody({ principal, contactId }: { principal: PanelPrincipal; con
       }
     } finally { if (!active.signal.aborted) setBusy(false); }
   }
-  return <section aria-label="Documento do contato"><h3>CPF/CNPJ</h3>
-    {view ? <p>{view.present ? documentMask(view.kind) : "Documento não informado"}</p> : !error && <p role="status">Carregando documento…</p>}
-    {canWrite && view && <><form onSubmit={(e: FormEvent) => { e.preventDefault(); void run("save"); }}><label>Definir CPF/CNPJ <input type="password" autoComplete="off" value={input} onChange={e => setInput(e.target.value)} /></label><button disabled={busy || !input}>Salvar documento</button></form>
-      {view.present && <><button type="button" disabled={busy} onClick={() => void run("clear")}>Limpar documento</button><button type="button" disabled={busy} onClick={() => void run("reveal")}>Revelar por 15 segundos</button></>}
+  return <section aria-label="Documento do contato" className="document-card"><h3>CPF/CNPJ</h3>
+    {view ? <p className="document-mask" data-present={view.present ? "true" : undefined}>{view.present ? documentMask(view.kind) : "Documento não informado"}</p> : !error && <p role="status">Carregando documento…</p>}
+    {canWrite && view && <><form className="document-form" onSubmit={(e: FormEvent) => { e.preventDefault(); void run("save"); }}><label>Definir CPF/CNPJ <input type="password" autoComplete="off" value={input} onChange={e => setInput(e.target.value)} /></label><button disabled={busy || !input}>Salvar documento</button></form>
+      {view.present && <div className="document-actions"><button type="button" disabled={busy} onClick={() => void run("reveal")}>Revelar por 15 segundos</button><button type="button" className="document-clear" disabled={busy} onClick={() => void run("clear")}>Limpar documento</button></div>}
     </>}
-    {revealed && <div aria-label="Documento revelado"><output>{revealed}</output><button type="button" onClick={() => setRevealed("")}>Ocultar documento</button></div>}
+    {revealed && <div aria-label="Documento revelado" className="document-revealed"><output>{revealed}</output><button type="button" onClick={() => setRevealed("")}>Ocultar documento</button></div>}
     {error && <p role="alert">{error}</p>}
   </section>;
 }
@@ -65,5 +65,5 @@ function SearchBody({ onFound }: { onFound: (id: string) => void }) {
     catch { if (!active.signal.aborted) setError("Documento não encontrado ou acesso indisponível."); }
     finally { if (!active.signal.aborted) setBusy(false); }
   }
-  return <form onSubmit={e => void search(e)} aria-label="Busca exata por documento"><label>Buscar CPF/CNPJ exato <input type="password" autoComplete="off" value={value} onChange={e => setValue(e.target.value)} /></label><button disabled={!value || busy}>Buscar documento</button>{error && <p role="alert">{error}</p>}</form>;
+  return <form className="document-search" onSubmit={e => void search(e)} aria-label="Busca exata por documento"><label>Buscar CPF/CNPJ exato <input type="password" autoComplete="off" placeholder="CPF/CNPJ exato" value={value} onChange={e => setValue(e.target.value)} /></label><button disabled={!value || busy}>Buscar documento</button>{error && <p role="alert">{error}</p>}</form>;
 }

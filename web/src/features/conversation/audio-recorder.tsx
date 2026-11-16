@@ -1,3 +1,4 @@
+import { Mic } from "lucide-react";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -121,41 +122,41 @@ export function AudioRecorder({
 
   const canRecord = !disabled && phase !== "recording" && phase !== "sending";
   return (
-    <div className="flex flex-col gap-2" aria-label="Gravação de áudio" data-conversion-state={conversion}>
-      <div className="flex flex-wrap gap-2">
+    <div className="audio-recorder" aria-label="Gravação de áudio" data-conversion-state={conversion} data-phase={phase}>
+      <div className="audio-controls">
         {phase === "recording" ? (
-          <Button type="button" variant="outline" className="h-11 w-fit px-3" onClick={stop}>
+          <Button type="button" variant="outline" className="audio-stop" onClick={stop}>
             Parar gravação
           </Button>
         ) : (
-          <Button type="button" variant="outline" className="h-11 w-fit px-3" disabled={!canRecord} onClick={() => void start()}>
-            Gravar áudio
+          <Button type="button" variant="outline" className="composer-icon" title="Gravar áudio" disabled={!canRecord} onClick={() => void start()}>
+            <Mic aria-hidden="true" />
+            <span className="visually-hidden">Gravar áudio</span>
           </Button>
         )}
         {phase === "ready" || phase === "sending" ? (
           <>
-            <Button type="button" className="h-11 w-fit px-3" disabled={disabled || !onSend || phase === "sending"} onClick={() => void send()}>
+            <Button type="button" className="audio-send" disabled={disabled || !onSend || phase === "sending"} onClick={() => void send()}>
               Enviar áudio original
             </Button>
-            <Button type="button" variant="outline" className="h-11 w-fit px-3" disabled={phase === "sending"} onClick={discard}>
+            <Button type="button" variant="outline" className="audio-discard" disabled={phase === "sending"} onClick={discard}>
               Descartar áudio
             </Button>
           </>
         ) : null}
       </div>
-      <div className="flex flex-col gap-1">
+      <div className="audio-reply">
         <Label htmlFor="citacao-mensagem">Responder à mensagem</Label>
         <input
           id="citacao-mensagem"
           value={reply}
           autoComplete="off"
           placeholder="ID interno da mensagem"
-          className="h-11 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
           onChange={(event) => setReply(event.target.value)}
         />
       </div>
       {notice ? (
-        <p role={conversion === "refused" ? "alert" : "status"} className="text-sm text-foreground">
+        <p role={conversion === "refused" ? "alert" : "status"} className="audio-notice">
           {notice}
         </p>
       ) : null}

@@ -2,6 +2,7 @@ import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { ContactAvatar } from "@/components/ui/contact-avatar";
 import { conversationScopeKey } from "@/features/conversation/send-intent";
 import { formattedText } from "@/features/conversation/text-format";
 import type {
@@ -51,7 +52,33 @@ export type MessageTimelineProps = {
   entries: readonly TimelineEntry[];
   onReply?: (target: ReplyTarget) => void;
   loadDownload?: DownloadMedia;
+  /** Nome do contato desta conversa: identifica as mensagens recebidas no lugar do rótulo genérico. */
+  contactLabel?: string;
 };
+
+const GROUP_WINDOW_MS = 5 * 60_000;
+
+function isBubble(entry: TimelineEntry): entry is Extract<TimelineEntry, { kind: "text" | "media" }> {
+  return entry.kind === "text" || entry.kind === "media";
+}
+
+/** Mensagens seguidas do mesmo autor, no mesmo sentido e em poucos minutos dispensam repetir o cabeçalho. */
+function continuesPrevious(entry: TimelineEntry, previous: TimelineEntry | undefined): boolean {
+  if (!previous || !isBubble(entry) || !isBubble(previous)) return false;
+  if (entry.direction !== previous.direction || entry.author !== previous.author) return false;
+  const now = entry.occurredAt ? new Date(entry.occurredAt).getTime() : Number.NaN;
+  const before = previous.occurredAt ? new Date(previous.occurredAt).getTime() : Number.NaN;
+  return Number.isFinite(now) && Number.isFinite(before) && Math.abs(now - before) <= GROUP_WINDOW_MS;
+}
+
+/** Hoje mostra só a hora; em outros dias, dia, mês e hora. A data completa fica na dica do elemento. */
+function compactWhen(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return formatWhen(value);
+  const now = new Date();
+  const sameDay = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+  return new Intl.DateTimeFormat("pt-BR", sameDay ? { hour: "2-digit", minute: "2-digit" } : { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
+}
 
 function isAwayFromTail(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight > TAIL_THRESHOLD_PX;
@@ -96,7 +123,7 @@ export function MessageTimeline(props: MessageTimelineProps) {
   return <TimelineSession key={conversationScopeKey(props.scope)} {...props} />;
 }
 
-function TimelineSession({ scope, protocol, status, entries, onReply, loadDownload }: MessageTimelineProps) {
+function TimelineSession({ scope, protocol, status, entries, onReply, loadDownload, contactLabel }: MessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef(new Map<number, HTMLElement>());
   const pendingFocus = useRef<number | null>(null);
@@ -253,6 +280,7 @@ function TimelineSession({ scope, protocol, status, entries, onReply, loadDownlo
                   key={entry.id}
                   data-kind={entry.kind}
                   data-outgoing={(entry.kind === "text" || entry.kind === "media") && entry.direction === "outbound"}
+                  data-grouped={continuesPrevious(entry, readyEntries[virtualRow.index - 1]) ? "true" : undefined}
                   data-index={virtualRow.index}
                   ref={(node) => {
                     virtualizer.measureElement(node);
@@ -269,7 +297,7 @@ function TimelineSession({ scope, protocol, status, entries, onReply, loadDownlo
                   onFocus={() => setFocusedIndex(virtualRow.index)}
                   onKeyDown={(event) => onItemKeyDown(event, virtualRow.index)}
                 >
-                  <div className="message-bubble"><EntryContent entry={entry} onReply={onReply} onQuoteJump={jumpToMessage} loadDownload={loadDownload} /></div>
+                  <EntryContent entry={entry} onReply={onReply} onQuoteJump={jumpToMessage} loadDownload={loadDownload} contactLabel={contactLabel} />
                 </li>
               );
             })}
@@ -277,7 +305,7 @@ function TimelineSession({ scope, protocol, status, entries, onReply, loadDownlo
         ) : null}
       </div>
       {away ? (
-        <div className="flex items-center gap-3">
+        <div className="timeline-tail">
           {unseen > 0 ? (
             <p role="status" className="text-sm text-foreground">
               {unseenLabel(unseen)}
@@ -313,7 +341,7 @@ function entryLabel(entry: TimelineEntry, protocol: string): string {
 function DeliveryMarks({ localState, receipt }: { localState?: LocalSendState; receipt?: DeliveryReceipt }) {
   if (!localState && !receipt) return null;
   return (
-    <p className="flex flex-wrap gap-2">
+    <p className="entry-delivery">
       {localState ? (
         <span data-local-state={localState} className={localStateClass[localState]}>
           {localStateLabel[localState]}
@@ -333,54 +361,79 @@ function EntryContent({
   onReply,
   onQuoteJump,
   loadDownload,
+  contactLabel,
 }: {
   entry: TimelineEntry;
   onReply?: (target: ReplyTarget) => void;
   onQuoteJump: (id: string) => void;
   loadDownload?: DownloadMedia;
+  contactLabel?: string;
 }) {
   const author = authorLabel(entry.author);
+  const inbound = isBubble(entry) && entry.direction === "inbound";
+  const shownAuthor = inbound && contactLabel ? contactLabel : author;
+  const when = entry.occurredAt ? (
+    <time className="entry-time" dateTime={entry.occurredAt} title={formatWhen(entry.occurredAt)}>
+      {compactWhen(entry.occurredAt)}
+    </time>
+  ) : null;
+  // O tipo e o autor continuam anunciados por extenso; na tela aparecem o nome e a hora.
+  const spoken = (
+    <>
+      <span className="visually-hidden">{kindLabel(entry)}</span>
+      <span className="visually-hidden">{`Autor: ${author}`}</span>
+    </>
+  );
+  if (entry.kind === "event") {
+    return (
+      <p className="entry-event">
+        {spoken}
+        <span className="entry-event-text">{entry.summary}</span>
+        {when}
+      </p>
+    );
+  }
   return (
     <>
-      <p className="text-muted-foreground">
-        <span className="font-medium text-foreground">{kindLabel(entry)}</span>
-        {" · "}
-        <span>{`Autor: ${author}`}</span>
-        {entry.occurredAt ? ` · ${formatWhen(entry.occurredAt)}` : null}
+      <p className="entry-meta">
+        {inbound && contactLabel ? <ContactAvatar label={contactLabel} size={22} /> : null}
+        {spoken}
+        <span className="entry-author" aria-hidden="true">{shownAuthor}</span>
+        {when}
       </p>
-      {entry.kind === "text" ? (
-        <>
-          <QuoteButton replyTo={entry.replyTo} onJump={onQuoteJump} />
-          <p className="whitespace-pre-wrap break-words text-foreground">{formattedText(entry.text)}</p>
-          <ReactionList reactions={entry.reactions} />
-          <DeliveryMarks localState={entry.localState} receipt={entry.receipt} />
-        </>
-      ) : null}
-      {entry.kind === "event" ? (
-        <p className="whitespace-pre-wrap break-words text-foreground">{entry.summary}</p>
-      ) : null}
-      {entry.kind === "media" ? (
-        <>
-          <MediaMessage entry={entry} loadDownload={loadDownload} onQuoteJump={onQuoteJump} />
-          <DeliveryMarks localState={entry.localState} receipt={entry.receipt} />
-        </>
-      ) : null}
-      {entry.kind === "unsupported" ? (
-        <>
-          <p className="text-foreground">Referência: {entry.reference}</p>
-          <p className="text-muted-foreground">O painel não interpreta este conteúdo.</p>
-        </>
-      ) : null}
-      {onReply && entry.kind !== "event" && entry.kind !== "unsupported" ? (
-        <Button
-          type="button"
-          variant="outline"
-          className="h-11 w-fit px-3"
-          onClick={() => onReply({ id: entry.id, preview: entryPreview(entry) })}
-        >
-          Responder
-        </Button>
-      ) : null}
+      <div className="message-line">
+        <div className="message-bubble" data-unsupported={entry.kind === "unsupported" ? "true" : undefined}>
+          {entry.kind === "text" ? (
+            <>
+              <QuoteButton replyTo={entry.replyTo} onJump={onQuoteJump} />
+              <p className="whitespace-pre-wrap break-words text-foreground">{formattedText(entry.text)}</p>
+              <ReactionList reactions={entry.reactions} />
+            </>
+          ) : null}
+          {entry.kind === "media" ? (
+            <MediaMessage entry={entry} loadDownload={loadDownload} onQuoteJump={onQuoteJump} />
+          ) : null}
+          {entry.kind === "unsupported" ? (
+            <>
+              <p className="entry-unsupported">Tipo não suportado</p>
+              <p className="text-foreground">Referência: {entry.reference}</p>
+              <p className="text-muted-foreground">O painel não interpreta este conteúdo.</p>
+            </>
+          ) : null}
+        </div>
+        {onReply && entry.kind !== "unsupported" ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="entry-reply"
+            title="Responder citando esta mensagem"
+            onClick={() => onReply({ id: entry.id, preview: entryPreview(entry) })}
+          >
+            <span className="visually-hidden">Responder</span>
+          </Button>
+        ) : null}
+      </div>
+      {isBubble(entry) ? <DeliveryMarks localState={entry.localState} receipt={entry.receipt} /> : null}
     </>
   );
 }

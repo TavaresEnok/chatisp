@@ -1,3 +1,4 @@
+import { Flag, Lock } from "lucide-react";
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/api/annotations";
@@ -40,17 +41,19 @@ export function AnnotationPanel({ principal, inbox, conversation, cursor, onChan
   }
   if (state.isPending) return <p>Carregando anotações…</p>;
   if (state.isError || !data) return <p role="alert">Não foi possível carregar as anotações.</p>;
-  return <section aria-label="Anotações privadas" className="space-y-3 border p-3">
-    <h2>Anotações privadas</h2>
-    <p>Prioridade: {data.priority === "urgent" ? "Urgente" : "Normal"}</p>
-    {["admin", "supervisor"].includes(principal.role) && <button type="button" disabled={busy} onClick={() => void update("priority", data.priority === "urgent" ? "normal" : "urgent")}>Alterar prioridade</button>}
-    <div>Tags: {(data.tags ?? []).map(tag => <button type="button" disabled={busy} key={tag.id} onClick={() => void update("tag_remove", "", tag.id)}>{tag.name} ×</button>)}</div>
-    <label>Adicionar tag <select disabled={busy} value="" onChange={e => { if (e.target.value) void update("tag_add", "", e.target.value); }}><option value="">Selecione</option>{(catalog.data ?? []).filter(tag => !(data.tags ?? []).some(t => t.id === tag.id)).map(tag => <option key={tag.id} value={tag.id}>{tag.name}</option>)}</select></label>
-    <ul>{(data.notes ?? []).map(item => <li key={item.id}>{item.body} — {labels?.get(item.author_id) ?? (item.author_id === principal.membershipId ? principal.email : "Atendente indisponível")}</li>)}</ul>
-    <label>Nova nota privada <textarea value={note} onChange={e => setNote(e.target.value)} /></label>
-    <button type="button" disabled={busy || !note.trim()} onClick={() => void update("note", note)}>Salvar nota</button>
-    <button type="button" disabled={busy} onClick={() => void read(false)}>Marcar como lida</button>
-    <button type="button" disabled={busy} onClick={() => void read(true)}>Marcar como não lida</button>
+  return <section aria-label="Anotações privadas" className="annotation-panel">
+    <p className="context-fact" data-priority={data.priority}><span>Prioridade<span className="visually-hidden">: </span></span><b>{data.priority === "urgent" && <Flag size={12} strokeWidth={2} aria-hidden="true" />}{data.priority === "urgent" ? "Urgente" : "Normal"}</b></p>
+    <div className="context-links">
+      {["admin", "supervisor"].includes(principal.role) && <button type="button" disabled={busy} onClick={() => void update("priority", data.priority === "urgent" ? "normal" : "urgent")}>Alterar prioridade</button>}
+      <button type="button" disabled={busy} onClick={() => void read(false)}>Marcar como lida</button>
+      <button type="button" disabled={busy} onClick={() => void read(true)}>Marcar como não lida</button>
+    </div>
+    <div className="tag-list"><span className="context-label">Tags<span className="visually-hidden">: </span></span>{(data.tags ?? []).map(tag => <button type="button" className="tag-chip" title={`Remover a tag ${tag.name}`} disabled={busy} key={tag.id} onClick={() => void update("tag_remove", "", tag.id)}>{tag.name} ×</button>)}</div>
+    <label className="tag-add">Adicionar tag <select disabled={busy} value="" onChange={e => { if (e.target.value) void update("tag_add", "", e.target.value); }}><option value="">Selecione</option>{(catalog.data ?? []).filter(tag => !(data.tags ?? []).some(t => t.id === tag.id)).map(tag => <option key={tag.id} value={tag.id}>{tag.name}</option>)}</select></label>
+    <h2 className="context-label"><Lock size={11} strokeWidth={2} aria-hidden="true" />Anotações privadas</h2>
+    <ul className="note-list">{(data.notes ?? []).map(item => <li key={item.id}><span className="note-body">{item.body}</span> <span className="note-author">— {labels?.get(item.author_id) ?? (item.author_id === principal.membershipId ? principal.email : "Atendente indisponível")}</span></li>)}</ul>
+    <label className="note-new">Nova nota privada <textarea rows={2} placeholder="Visível só para a equipe" value={note} onChange={e => setNote(e.target.value)} /></label>
+    <button type="button" className="note-save" disabled={busy || !note.trim()} onClick={() => void update("note", note)}>Salvar nota</button>
     {message && <p role="status">{message}</p>}
   </section>;
 }

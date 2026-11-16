@@ -81,21 +81,15 @@ export function AreaNav() {
         {areas.map((area) => {
           const Icon = areaIcons[area.id];
           return (
-            <li key={area.id} className="shrink-0 md:shrink">
+            <li key={area.id}>
               <NavLink
                 to={area.path}
                 end
-                className={({ isActive }) =>
-                  cn(
-                    "flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground",
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted",
-                  )
-                }
+                title={area.label}
+                className={({ isActive }) => cn("rail-item", isActive && "is-current")}
               >
-                <Icon aria-hidden="true" className="size-4 shrink-0" />
-                {area.label}
+                <Icon aria-hidden="true" />
+                <span className="rail-label">{area.label}</span>
               </NavLink>
             </li>
           );

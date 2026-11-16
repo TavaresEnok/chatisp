@@ -1,8 +1,9 @@
-import { ArrowLeft, PanelRight, MessagesSquare } from "lucide-react";
+import { ArrowLeft, PanelRight, MessagesSquare, RotateCcw, X } from "lucide-react";
 import { ContactDocument } from "@/features/contactdocs/contact-document";
 import { ConversationSidebar } from "@/features/conversation/conversation-sidebar";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import { useCallback, useContext, useEffect, useId, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { QueryClientContext, type QueryClient } from "@tanstack/react-query";
 import { downloadAttachment } from "@/api/attachments";
 import { AttachmentDesk } from "@/features/attachments/attachment-desk";
@@ -17,7 +18,7 @@ import type { ReplyTarget, SendAudioCommand, SendMediaCommand, SendTextCommand, 
 import { audioFileName } from "@/features/media/model";
 import { deliverOutboundMedia, UnconfirmedMediaSend } from "@/features/media/send-media";
 import { attendanceQueryBase, invalidateAttendanceQueries } from "@/features/conversation/use-attendance";
-import { readAttendanceResult } from "@/features/conversation/workspace-types";
+import { ATTENDANCE_PHASE_LABEL, presentationText, readAttendanceResult } from "@/features/conversation/workspace-types";
 import type {
   AttendanceScope,
   CloseAttendanceCommand,
@@ -65,6 +66,14 @@ type Session = {
   opened: readonly ConversationCard[];
   card: ConversationCard | null;
 };
+
+/** Os três grupos de sempre: responsável/setor/notas, contato/canal/anexos e cadastro/integrações. */
+const contextGroups = [
+  { key: "attendance", label: "Atendimento", title: "Responsável, setor e notas" },
+  { key: "contact", label: "Contato", title: "Contato, canal e anexos" },
+  { key: "integrations", label: "Integrações", title: "Cadastro e integrações" },
+] as const;
+type ContextGroup = (typeof contextGroups)[number]["key"];
 
 type AssumeState = {
   conversationId: string;
@@ -161,6 +170,8 @@ function WorkspaceSession({
 }: ConversationWorkspaceProps) {
   const [mobileConversation, setMobileConversation] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
+  const [contextGroup, setContextGroup] = useState<ContextGroup>("attendance");
+  const contextId = useId();
   const [session, setSession] = useState<Session>({
     selectedId: null,
     opened: [],
@@ -203,6 +214,7 @@ function WorkspaceSession({
     [inboxId, selectedId],
   );
   const detailMatches = card !== null && detailConversationId === card.id;
+  const hasContext = Boolean(principal || renderSide || renderActions);
   const timelineStatus = detailMatches ? detailStatus : "loading";
   const timelineEntries = detailMatches && detailStatus === "ready" ? entries : [];
 
@@ -220,7 +232,7 @@ function WorkspaceSession({
     onSelect(next.id);
   }
 
-  function handleShortcut(event: React.KeyboardEvent<HTMLDivElement>) {
+  function handleShortcut(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (closeOpen || event.defaultPrevented || event.nativeEvent.isComposing || !(event.ctrlKey || event.metaKey) || !event.altKey) return;
     const target = event.target as HTMLElement;
     if (target.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
@@ -237,7 +249,15 @@ function WorkspaceSession({
       if (onSearch || field) { event.preventDefault(); if (onSearch) onSearch(); else field?.focus(); }
     } else if (event.key.toLowerCase() === "n" && card) {
       const field = workspace.current?.querySelector<HTMLTextAreaElement>('[aria-label="Anotações privadas"] textarea');
-      if (onNote || field) { event.preventDefault(); if (onNote) onNote(card.id); else field?.focus(); }
+      if (onNote || field) {
+        event.preventDefault();
+        if (onNote) onNote(card.id);
+        else {
+          // As notas ficam no primeiro grupo dos detalhes: ele precisa estar à vista para receber o foco.
+          flushSync(() => { setContextGroup("attendance"); setContextOpen(true); });
+          field?.focus();
+        }
+      }
     }
   }
 
@@ -282,6 +302,22 @@ function WorkspaceSession({
     throw new Error(result.detail);
   }
 
+  function changeContextGroup(event: ReactKeyboardEvent<HTMLButtonElement>, index: number) {
+    let next: number;
+    switch (event.key) {
+      case "ArrowRight": next = (index + 1) % contextGroups.length; break;
+      case "ArrowLeft": next = (index + contextGroups.length - 1) % contextGroups.length; break;
+      case "Home": next = 0; break;
+      case "End": next = contextGroups.length - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    const group = contextGroups[next];
+    if (!group) return;
+    setContextGroup(group.key);
+    event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+  }
+
   async function assume() {
     if (!card || card.phase === "closed") return;
     const conversationId = card.id;
@@ -317,7 +353,6 @@ function WorkspaceSession({
       <div className="workspace-conversation">
         {card ? (
           <>
-            <div className="conversation-view-tools"><button type="button" className="mobile-back" onClick={() => setMobileConversation(false)}><ArrowLeft size={16} aria-hidden="true" /> Fila de conversas</button>{(principal || renderSide || renderActions) && <button type="button" className="context-toggle" aria-expanded={contextOpen} aria-controls="conversation-context" onClick={() => setContextOpen(!contextOpen)}><PanelRight size={16} aria-hidden="true" /> {contextOpen ? "Fechar detalhes" : "Detalhes"}</button>}</div>
             <ConversationHeader
               contactLabel={card.contactLabel}
               protocol={card.protocol}
@@ -327,6 +362,8 @@ function WorkspaceSession({
               notice={assumeNotice}
               onAssume={() => void assume()}
               onClose={() => setCloseOpen(true)}
+              leading={<button type="button" className="mobile-back" title="Fila de conversas" onClick={() => setMobileConversation(false)}><ArrowLeft size={16} aria-hidden="true" /><span className="visually-hidden">Fila de conversas</span></button>}
+              trailing={hasContext ? <button type="button" className="context-toggle" title={contextOpen ? "Fechar detalhes" : "Detalhes"} aria-expanded={contextOpen} aria-controls="conversation-context" onClick={() => setContextOpen(!contextOpen)}><PanelRight size={16} strokeWidth={1.6} aria-hidden="true" /><span className="visually-hidden">{contextOpen ? "Fechar detalhes" : "Detalhes"}</span></button> : null}
             />
             <MessageTimeline
               scope={{ ...scope, conversationId: card.id }}
@@ -335,14 +372,15 @@ function WorkspaceSession({
               entries={timelineEntries}
               onReply={setReplyTo}
               loadDownload={inboxId ? loadDownload : undefined}
+              contactLabel={presentationText(card.contactLabel, "")}
             />
             {card.phase === "closed" ? (
-              <div><p className="text-sm text-muted-foreground">
+              <div className="conversation-blocked"><p>
                 O compositor fica indisponível após o encerramento.
-              </p>{onReopen ? <button type="button" onClick={async () => { const result = readAttendanceResult(await onReopen(card.id)); if (result.outcome !== "done") setAssumeStates((states) => ({ ...states, [card.id]: { conversationId: card.id, pending: false, notice: result.detail } })); }}>Reabrir</button> : null}</div>
+              </p>{onReopen ? <button type="button" onClick={async () => { const result = readAttendanceResult(await onReopen(card.id)); if (result.outcome !== "done") setAssumeStates((states) => ({ ...states, [card.id]: { conversationId: card.id, pending: false, notice: result.detail } })); }}><RotateCcw size={14} strokeWidth={1.8} aria-hidden="true" />Reabrir</button> : null}</div>
             ) : null}
             {synced.opened.map((item) => (
-              <div key={item.id} hidden={item.id !== card.id || card.phase === "closed"}>
+              <div key={item.id} className="composer-slot" hidden={item.id !== card.id || card.phase === "closed"}>
                 <MessageComposer
                   scope={{ ...scope, conversationId: item.id }}
                   offline={offline}
@@ -363,26 +401,44 @@ function WorkspaceSession({
           <div className="conversation-empty"><span><MessagesSquare size={36} aria-hidden="true" /></span><h2>Seu próximo atendimento começa aqui</h2><p>Selecione uma conversa para ver o protocolo e o histórico.</p><small>Assuma o atendimento, converse e acompanhe cada etapa.</small></div>
         )}
       </div>
-      {card && (principal || renderSide || renderActions) ? (
+      {card && hasContext ? (
         <aside id="conversation-context" className="workspace-context" aria-label="Detalhes do atendimento">
-          <div className="context-heading"><h2>Detalhes do atendimento</h2><button type="button" onClick={() => setContextOpen(false)} className="context-close">Fechar detalhes</button></div>
-          {renderActions && <details open className="context-section"><summary>Responsável, setor e notas</summary><div>{renderActions(card.id)}</div></details>}
-          <details className="context-section"><summary>Contato, canal e anexos</summary><div>
-            {principal && inboxId ? (
-              <>
-                {contactId && detailMatches && <ContactDocument key={`document:${card.id}:${contactId}`} principal={principal} contactId={contactId} />}
- <WindowIndicator connectorType={connectorType} />
-                <TemplateCatalog key={`templates:${card.id}`} principal={principal} inboxId={inboxId} conversationId={card.id} connectorType={connectorType} version={detailMatches ? conversationVersion : null} />
-                {contactId && detailMatches ? <ConsentForm key={`consent:${card.id}:${contactId}`} principal={principal} inboxId={inboxId} contactId={contactId} /> : null}
-                <AttachmentDesk key={`attachments:${card.id}`} principal={principal} inboxId={inboxId} conversationId={card.id} closed={card.phase === "closed"} />
-              </>
-            ) : null}
-          </div></details>
-          <details className="context-section"><summary>Cadastro e integrações</summary><div>
-            <ConversationSidebar principal={principal} conversationId={card.id} protocol={card.protocol}>
-              {renderSide?.(card.id)}
-            </ConversationSidebar>
-          </div></details>
+          <div className="context-heading"><h2>Detalhes<span className="visually-hidden"> do atendimento</span></h2><button type="button" onClick={() => setContextOpen(false)} className="context-close" title="Fechar detalhes"><X size={16} aria-hidden="true" /><span className="visually-hidden">Fechar detalhes</span></button></div>
+          <div role="tablist" aria-label="Grupo de detalhes" className="context-tabs">
+            {contextGroups.map((group, index) => (
+              <button key={group.key} type="button" role="tab" id={`${contextId}-tab-${group.key}`} title={group.title}
+                aria-selected={contextGroup === group.key} aria-controls={`${contextId}-${group.key}`} tabIndex={contextGroup === group.key ? 0 : -1}
+                onClick={() => setContextGroup(group.key)} onKeyDown={(event) => changeContextGroup(event, index)}>
+                {group.label}
+              </button>
+            ))}
+          </div>
+          <div className="context-scroll">
+            <div role="tabpanel" id={`${contextId}-attendance`} aria-labelledby={`${contextId}-tab-attendance`} className="context-section" data-active={contextGroup === "attendance"}>
+              <dl className="context-facts">
+                <div><dt>Protocolo</dt><dd className="context-protocol">{presentationText(card.protocol, "indisponível")}</dd></div>
+                <div><dt>Estado</dt><dd>{ATTENDANCE_PHASE_LABEL[card.phase]}</dd></div>
+                <div><dt>Responsável</dt><dd title={presentationText(card.assigneeLabel, "Sem responsável")}>{presentationText(card.assigneeLabel, "Sem responsável")}</dd></div>
+              </dl>
+              {renderActions?.(card.id)}
+            </div>
+            <div role="tabpanel" id={`${contextId}-contact`} aria-labelledby={`${contextId}-tab-contact`} className="context-section" data-active={contextGroup === "contact"}>
+              {principal && inboxId ? (
+                <>
+                  {contactId && detailMatches && <ContactDocument key={`document:${card.id}:${contactId}`} principal={principal} contactId={contactId} />}
+                  <WindowIndicator connectorType={connectorType} />
+                  <TemplateCatalog key={`templates:${card.id}`} principal={principal} inboxId={inboxId} conversationId={card.id} connectorType={connectorType} version={detailMatches ? conversationVersion : null} />
+                  {contactId && detailMatches ? <ConsentForm key={`consent:${card.id}:${contactId}`} principal={principal} inboxId={inboxId} contactId={contactId} /> : null}
+                  <AttachmentDesk key={`attachments:${card.id}`} principal={principal} inboxId={inboxId} conversationId={card.id} closed={card.phase === "closed"} />
+                </>
+              ) : null}
+            </div>
+            <div role="tabpanel" id={`${contextId}-integrations`} aria-labelledby={`${contextId}-tab-integrations`} className="context-section" data-active={contextGroup === "integrations"}>
+              <ConversationSidebar principal={principal} conversationId={card.id} protocol={card.protocol}>
+                {renderSide?.(card.id)}
+              </ConversationSidebar>
+            </div>
+          </div>
         </aside>
       ) : null}
       {closeOpen && card ? (
