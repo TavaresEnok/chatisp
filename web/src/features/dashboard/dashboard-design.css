@@ -1,35 +1,20 @@
 /* O painel usa os mesmos dados do relatório, com leitura voltada à operação. */
-.dashboard-page .dashboard-header { margin-bottom: 28px; }
-.dashboard-page .dashboard-eyebrow { margin: 0 0 6px; color: var(--muted-foreground); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-.dashboard-page .dashboard-header h1 { margin: 0; font-size: clamp(26px, 3vw, 34px); font-weight: 650; letter-spacing: -.04em; line-height: 1.15; }
-.dashboard-page .dashboard-description { margin: 8px 0 0; color: var(--muted-foreground); font-size: 14px; }
-.dashboard-page .live-board { padding: 24px; border: 1px solid var(--border); border-radius: 18px; background: var(--card); }
-.dashboard-page .section-heading { align-items: center; gap: 12px; padding-bottom: 20px; }
-.dashboard-page .section-heading h2 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.02em; }
-.dashboard-page .section-heading > span { color: var(--ok); font-weight: 700; }
-.dashboard-page .live-metrics { gap: 10px; }
-.app-content > article.dashboard-page .live-metrics > li { min-width: 0; min-height: 124px; gap: 16px; padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--muted); }
-.dashboard-page .live-metrics strong { font-size: clamp(27px, 3vw, 36px); overflow-wrap: anywhere; }
-/* Os indicadores de espera, distribuição e disponibilidade recebem maior contraste. */
-.app-content > article.dashboard-page .live-metrics > li:nth-child(1),
-.app-content > article.dashboard-page .live-metrics > li:nth-child(n+5) { background: var(--secondary); }
-.dashboard-page .live-metrics > li:nth-child(1) strong,
-.dashboard-page .live-metrics > li:nth-child(5) strong,
-.dashboard-page .live-metrics > li:nth-child(7) strong,
-.dashboard-page .live-metrics > li:nth-child(8) strong { color: var(--hot); }
-.dashboard-page .dashboard-packages { margin-top: 22px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); }
-.dashboard-page .dashboard-packages > summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; cursor: pointer; list-style: none; }
+.dashboard-page .dashboard-header { margin-bottom: 16px; }
+.dashboard-page .dashboard-eyebrow { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.dashboard-page .dashboard-description { margin: 4px 0 0; color: var(--muted-foreground); font-size: 12.5px; }
+.dashboard-page .section-heading { align-items: center; gap: 12px; }
+/* Uma única cor viva: só o alerta de espera aceso recebe laranja. */
+.dashboard-page .live-metrics > li[data-attention] strong { color: var(--hot); }
+.app-content > article.dashboard-page .live-metrics > li { min-width: 0; }
+.dashboard-page .live-metrics strong { overflow-wrap: anywhere; }
+.dashboard-page .dashboard-packages { margin-top: 8px; border-radius: 16px; background: var(--muted); }
+.dashboard-page .dashboard-packages > summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; cursor: pointer; list-style: none; }
 .dashboard-page .dashboard-packages > summary::-webkit-details-marker { display: none; }
-.dashboard-page .dashboard-packages > summary::after { content: "+"; color: var(--muted-foreground); font-size: 22px; line-height: 1; }
+.dashboard-page .dashboard-packages > summary::after { content: "+"; color: var(--muted-foreground); font-size: 20px; line-height: 1; }
 .dashboard-page .dashboard-packages[open] > summary::after { content: "−"; }
 .dashboard-page .dashboard-packages summary strong, .dashboard-page .dashboard-packages summary small { display: block; }
-.dashboard-page .dashboard-packages summary strong { font-size: 14px; }
-.dashboard-page .dashboard-packages summary small { margin-top: 4px; color: var(--muted-foreground); font-size: 12px; }
+.dashboard-page .dashboard-packages summary strong { font-size: 14px; font-weight: 600; }
+.dashboard-page .dashboard-packages summary small { margin-top: 2px; color: var(--muted-foreground); font-size: 12px; }
 .dashboard-page .dashboard-packages summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 12px; }
 .dashboard-page .dashboard-packages-content { padding: 0 20px 20px; border-top: 1px solid var(--border); }
 .dashboard-page .dashboard-packages-content > * { margin-top: 16px; }
-@media (max-width: 600px) {
-  .dashboard-page .live-board { padding: 16px; }
-  .app-content > article.dashboard-page .live-metrics > li { min-height: 105px; padding: 14px; }
-  .dashboard-page .live-metrics strong { font-size: 27px; }
-}

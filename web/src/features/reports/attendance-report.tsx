@@ -90,7 +90,7 @@ function LiveBoard({ report }: { report: AttendanceReport }) {
         ["Aguardando o cliente", live.waiting_customer], ["Adiadas", live.snoozed],
         ["Sem responsável", live.unassigned], ["Atendentes online", live.online_attendants],
         ["Maior espera", formatDuration(live.longest_queue_wait_seconds)], ["Alertas de espera", live.wait_alerts],
-      ] as const).map(([label, value]) => <li key={label}><span className="sr-only">{label}: {value}</span><span aria-hidden="true">{label}</span><strong aria-hidden="true">{value}</strong></li>)}
+      ] as const).map(([label, value]) => <li key={label} data-attention={label === "Alertas de espera" && Number(value) > 0 ? "true" : undefined}><span className="sr-only">{label}: {value}</span><span aria-hidden="true">{label}</span><strong aria-hidden="true">{value}</strong></li>)}
     </ul>
   </section>;
 }

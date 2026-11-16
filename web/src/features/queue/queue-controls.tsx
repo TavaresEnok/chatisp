@@ -167,15 +167,15 @@ export function QueueControls(props: QueueControlsProps) {
                       <strong title={item.contactLabel}>{item.contactLabel}</strong>
                       {messageTime(item.lastMessageAt) && <time className="queue-message-time" dateTime={item.lastMessageAt} title={`Última mensagem: ${messageTime(item.lastMessageAt)}`}>{compactTime(item.lastMessageAt)}</time>}
                     </span>
-                    <span className="queue-details">
+                    <span className="queue-line">
                       <span className="visually-hidden">Protocolo {item.protocol}</span><span className="queue-protocol" aria-hidden="true" title={`Protocolo ${item.protocol}`}>{item.protocol}</span>
                       {item.sectorLabel && <span className="queue-sector" title={item.sectorLabel}>{item.sectorLabel}</span>}
+                      {(item.priorityLabel || item.waitAlert || item.unreadCount > 0) && <span className="queue-flags">
+                        {item.priorityLabel && <span className="queue-flag"><Flag size={12} strokeWidth={2} aria-hidden="true" /><span className="visually-hidden">Prioridade: </span>{item.priorityLabel}</span>}
+                        {item.waitAlert && <span className="queue-wait" title="Passou do tempo de espera"><Clock size={14} strokeWidth={1.8} aria-hidden="true" /><span className="visually-hidden">Passou do tempo de espera.</span></span>}
+                        {item.unreadCount > 0 && <span className="unread-count" title={`${item.unreadCount} não lida(s)`}>{item.unreadCount}<span className="visually-hidden"> não lida(s)</span></span>}
+                      </span>}
                     </span>
-                    {(item.priorityLabel || item.waitAlert || item.unreadCount > 0) && <span className="queue-flags">
-                      {item.priorityLabel && <span className="queue-flag"><Flag size={12} strokeWidth={2} aria-hidden="true" /><span className="visually-hidden">Prioridade: </span>{item.priorityLabel}</span>}
-                      {item.waitAlert && <span className="queue-wait"><Clock size={14} strokeWidth={1.8} aria-hidden="true" />Passou do tempo de espera.</span>}
-                      {item.unreadCount > 0 && <span className="unread-count">{item.unreadCount} não lida(s)</span>}
-                    </span>}
                     {(item.statusLabel || item.assigneeLabel) && (
                       <span className="queue-line">
                         {item.statusLabel && <span className="queue-state" data-state={stateMark[item.statusLabel]}>{item.statusLabel}</span>}
