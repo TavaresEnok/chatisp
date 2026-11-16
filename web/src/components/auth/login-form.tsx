@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { emailSchema, passwordSchema } from "@/components/auth/password";
 import { useSessionStore } from "@/stores/session-store";
+import { DevelopmentAccess } from "@/components/auth/development-access";
 
 const loginSchema = z.object({
   email: emailSchema,
@@ -77,30 +78,17 @@ export function LoginForm() {
       })}
     >
       {import.meta.env.VITE_DEVELOPMENT_LOGIN_SHORTCUTS === "true" && (
-        <fieldset className="rounded-lg border p-3" disabled={pending}>
-          <legend className="px-1 text-sm font-medium">Acessos de desenvolvimento</legend>
-          <p className="mb-3 text-sm text-muted-foreground">Escolha o perfil para preencher o e-mail. A senha continua obrigatória.</p>
-          <div className="flex flex-wrap gap-2">
-            {([
-              ["Administrador do SaaS", "saas.dev@chatisp.local"],
-              ["Dono da empresa", "admin@chatisp.local"],
-              ["Atendimento", "ana.suporte.demo@chatisp.local"],
-              ["Supervisão", "sofia.supervisao.demo@chatisp.local"],
-            ] as const).map(([label, email]) => (
-              <Button key={email} type="button" variant="outline" onClick={() => {
+        <DevelopmentAccess disabled={pending} onSelect={(email, password) => {
                 form.setValue("email", email);
-                form.setValue("password", "");
+                form.setValue("password", password);
                 form.setValue("tenantId", "");
                 form.setValue("code", "");
                 form.clearErrors();
                 setServerError(null);
                 setNeedsCode(false);
                 setNeedsTenant(false);
-                form.setFocus("password");
-              }}>{label}</Button>
-            ))}
-          </div>
-        </fieldset>
+                form.setFocus(email ? "password" : "email");
+              }} />
       )}
       {endedReason ? (
         <p role="status" className="text-sm text-foreground">
