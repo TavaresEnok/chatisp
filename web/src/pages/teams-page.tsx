@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "react-router";
@@ -25,7 +25,7 @@ function Sectors({ principal }: { principal: PanelPrincipal }) {
   const list = sectors.data?.sectors ?? [];
   return <article className="split-page teams-page" data-detail={detailOpen}>
     <section className="split-list" aria-label="Setores da equipe">
-      <header className="split-list-head"><div><h1>Equipes</h1><h2 className="split-count">Setores{sectors.isSuccess ? <> · <b>{list.length}</b></> : null}</h2></div></header>
+      <header className="split-list-head"><div><h1>Equipes</h1><h2 className="split-count">Setores{sectors.isSuccess ? <> · <b>{list.length}</b></> : null}</h2></div>{principal.role === "admin" && <button type="button" className="split-new" disabled={busy} onClick={() => { setSelected(""); setName(""); setTarget(""); setError(""); setDetailOpen(true); }}><Plus size={16} strokeWidth={1.8} aria-hidden="true" />Novo setor</button>}</header>
       <div className="split-results">
         {sectors.isPending ? <p role="status">Carregando setores…</p> : sectors.isError ? <div role="alert" className="split-alert">Não foi possível carregar os setores. <button type="button" onClick={() => void sectors.refetch()}>Tentar novamente setores</button></div> : !list.length ? <p>Nenhum setor disponível.</p> : <ul className="split-rows sector-rows">{list.map(s => <li key={s.id} data-current={selected === s.id ? "true" : undefined} data-active={s.active ? "true" : "false"}><button type="button" disabled={busy} onClick={() => { setSelected(s.id); setName(s.name); setTarget(""); setError(""); setDetailOpen(true); }}>{s.name} — {s.active ? "Ativo" : "Inativo"}</button></li>)}</ul>}
       </div>

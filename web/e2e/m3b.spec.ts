@@ -61,7 +61,7 @@ async function session(browser: Browser, actor: Actor, inbox: string) {
     window.dispatchEvent(new PopStateEvent("popstate"));
   }, actor.CSRF);
   // The visible label wraps the select, so its full text includes the options.
-  // The accessible name stays "Caixa"; match that instead of getByLabel exact.
+  // Match the principal inbox by its exact accessible name, not the separate filter.
   await page.getByRole("combobox", { name: "Caixa de atendimento", exact: true }).selectOption(inbox);
   await page.getByRole("tab", { name: "Todas", exact: true }).click();
   await expect.poll(() => frames.some(frame => JSON.parse(frame).type === "snapshot")).toBe(true);

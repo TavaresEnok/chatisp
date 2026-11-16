@@ -47,6 +47,10 @@ export const useInterfaceStore = create<InterfaceState>((set, get) => ({
   },
 }));
 
+export function resetInterfaceStore() {
+  useInterfaceStore.setState({ theme: "dark", menuExpanded: false });
+}
+
 function apply(state: InterfaceState) {
   const root = document.documentElement;
   root.classList.toggle("dark", state.theme === "dark");

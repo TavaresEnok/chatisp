@@ -372,3 +372,19 @@ it.each([
   expect(blobs).toHaveLength(1);
   await expect(blobs[0]?.text()).resolves.toBe("csv-recuperado\n");
 });
+
+it("exibe exclusões da amostra e não desenha barra positiva para zero", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo) => {
+    if (requestUrl(input).includes("/api/panel/reports")) return json({
+      ...report,
+      close_total: { ...report.close_total, not_applicable: 3 },
+      buckets: [{ ...report.buckets[0], cycles: 0 }],
+    });
+    return json({}, 503);
+  }));
+  const view = renderPanel("/relatorios");
+  expect(await screen.findByText(/3 fora da amostra/)).toBeVisible();
+  const bar = view.container.querySelector<HTMLElement>(".report-chart-bar");
+  expect(bar).not.toBeNull();
+  expect(bar?.style.height).toBe("0%");
+});

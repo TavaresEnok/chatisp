@@ -185,6 +185,7 @@ export async function runM4A(browser: Browser, testInfo: { attach(name: string, 
     expect(protocol).toBeTruthy();
     await rows(agent.page).first().click();
     await expect(composer(agent.page)).toBeVisible();
+    await agent.page.getByRole("tab", { name: "Contato", exact: true }).click();
     await expect(agent.page.getByText("Janela oficial de 24 horas: indisponível neste painel")).toBeVisible();
     const session = await api<{ email: string }>(agent.page, "/api/panel/session", agentActor.CSRF);
     expect(session.status).toBe(200);
@@ -326,6 +327,7 @@ export async function runM4A(browser: Browser, testInfo: { attach(name: string, 
     await admin.page.getByRole("link", { name: "Conversas", exact: true }).click();
     await bindInbox(admin.page, inbox);
     await rows(admin.page).filter({ hasText: protocol! }).click();
+    await admin.page.getByRole("tab", { name: "Contato", exact: true }).click();
     await admin.page.getByRole("button", { name: "Sincronizar catálogo" }).click();
     await expect(admin.page.getByText("não está aprovado por driver")).toBeVisible();
     const rejected = await api<{ detail?: string; title?: string }>(agent.page, `${item}/template-messages`, agentActor.CSRF, "POST", {

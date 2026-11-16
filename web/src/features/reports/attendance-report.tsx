@@ -45,7 +45,7 @@ function TimeRow({ title, stats, empty }: { title: string; stats: ReportStats; e
     <span>{title}</span>
     {stats.sample === 0
       ? <span className="report-times-empty">{stats.not_applicable > 0 ? "não aplicável" : empty}</span>
-      : <><b>{formatDuration(stats.average_seconds)}</b><b>{formatDuration(stats.median_seconds)}</b><span>{numberFormat.format(stats.sample)}</span></>}
+      : <><b>{formatDuration(stats.average_seconds)}</b><b>{formatDuration(stats.median_seconds)}</b><span>{numberFormat.format(stats.sample)}{stats.not_applicable > 0 && <small> · {numberFormat.format(stats.not_applicable)} fora da amostra</small>}</span></>}
   </div>;
 }
 
@@ -73,7 +73,7 @@ function BucketChart({ buckets }: { buckets: AttendanceReport["buckets"] }) {
     <div className="report-chart-plot">
       {buckets.map((row) => <div key={row.key} className="report-chart-column" title={`${row.key}: ${numberFormat.format(row.cycles)} ciclos, ${numberFormat.format(row.messages)} mensagens, ${numberFormat.format(row.closed)} encerrados`}>
         <span className="report-chart-value">{numberFormat.format(row.cycles)}</span>
-        <span className="report-chart-bar" style={{ height: `${Math.max(2, (row.cycles / max) * 100)}%` }} />
+        <span className="report-chart-bar" style={{ height: `${(row.cycles / max) * 100}%` }} />
       </div>)}
     </div>
     <div className="report-chart-axis"><span>{first?.key}</span>{last && last !== first ? <span>{last.key}</span> : null}</div>

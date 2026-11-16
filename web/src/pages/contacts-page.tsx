@@ -22,6 +22,7 @@ function Directory({ principal }: { principal: PanelPrincipal }) {
   const [name, setName] = useState(""); const [phone, setPhone] = useState(""); const [email, setEmail] = useState(""); const [notes, setNotes] = useState(""); const [reason, setReason] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
   // Em telas estreitas a lista e a ficha se alternam; em telas largas ficam lado a lado.
   const [detailOpen, setDetailOpen] = useState(false);
+  const [searchError, setSearchError] = useState("");
   const query = useQuery({ queryKey: ["m3", scope, "contacts", q, offset], queryFn: () => api.list(q, offset), retry: false });
   function edit(c: components["schemas"]["DirectoryContact"] | null) { setEditing(c); setName(c?.name ?? ""); setPhone(c?.phone ?? ""); setEmail(c?.email ?? ""); setNotes(c?.notes ?? ""); setReason(""); setError(""); }
   async function run(fn: () => Promise<unknown>) { setBusy(true); setError(""); try { await fn(); await client.invalidateQueries({ queryKey: ["m3", scope, "contacts"] }); return true; } catch { setError("Não foi possível concluir a operação."); return false; } finally { setBusy(false); } }
@@ -35,7 +36,8 @@ function Directory({ principal }: { principal: PanelPrincipal }) {
       </header>
       <div className="split-tools">
         <label className="split-search"><Search size={16} strokeWidth={1.6} aria-hidden="true" /><span className="visually-hidden">Buscar contatos</span> <input type="search" placeholder="Buscar no diretório" value={q} onChange={e => { setQ(e.target.value); setOffset(0); }} /></label>
-        <DocumentSearch onFound={id => { void api.get(id).then(c => { edit(c); setDetailOpen(true); }).catch(() => setError("Não foi possível abrir o contato.")); }} />
+        <DocumentSearch onFound={id => { setSearchError(""); void api.get(id).then(c => { edit(c); setDetailOpen(true); }).catch(() => setSearchError("Não foi possível abrir o contato.")); }} />
+        {searchError && <p role="alert" className="split-error">{searchError}</p>}
       </div>
       <div className="split-results">
         {query.isPending ? <p role="status">Carregando contatos…</p> : query.isError ? <p role="alert">Não foi possível carregar os contatos.</p> : <>

@@ -211,6 +211,7 @@ export async function runM4BM6(browser: Browser, testInfo: { attach(name: string
     await expect(history.getByText("Áudio", { exact: true }).first()).toBeVisible();
     evidence.audio = "gravação simulada em audio/mpeg (tom sintético de 0,6 s) enviada pelo compositor; o servidor a converteu com o ffmpeg limitado";
 
+    await agent.page.getByRole("tab", { name: "Contato", exact: true }).click();
     const consent = agent.page.getByRole("form", { name: "Consentimento do contato" });
     await consent.getByLabel("Finalidade do consentimento").fill("cobranca");
     await consent.getByLabel("Origem").fill("painel");
@@ -218,6 +219,7 @@ export async function runM4BM6(browser: Browser, testInfo: { attach(name: string
     await consent.getByRole("button", { name: "Registrar consentimento" }).click();
     await expect(consent.getByText("Concessão registrada.")).toBeVisible();
 
+    await agent.page.getByRole("tab", { name: "Integrações", exact: true }).click();
     const erp = agent.page.getByRole("region", { name: "ERP" });
     await erp.getByLabel("Cliente no ERP").fill(fixture.M4B.CustomerID);
     await erp.getByLabel("Contrato no ERP").fill(fixture.M4B.ContractID);
