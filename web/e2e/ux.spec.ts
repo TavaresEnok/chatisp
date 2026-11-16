@@ -8,6 +8,13 @@ import axe from "axe-core";
 
 const expect = playwrightExpect.configure({ timeout: 20_000 });
 const ORIGIN = "https://localhost:5174";
+const theme = process.env.UX_THEME ?? "dark";
+if (theme !== "dark" && theme !== "light") throw new Error("UX_THEME deve ser dark ou light");
+async function setTheme(context: BrowserContext) {
+  await context.addInitScript(({ origin, theme }) => {
+    if (location.origin === origin) localStorage.setItem("chatisp-interface-theme", theme);
+  }, { origin: ORIGIN, theme });
+}
 
 type Actor = { Token: string; CSRF: string; User: string; Member: string; Role: string };
 type Fixture = {
@@ -37,6 +44,7 @@ const reactKeyDefects: string[] = [];
 
 async function openPanel(browser: Browser, actor: Actor, opts: { init?: string; permissions?: string[]; viewport?: { width: number; height: number }; path?: string } = {}): Promise<Panel> {
   const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: opts.viewport ?? { width: 1280, height: 800 } });
+  await setTheme(context);
   await context.addCookies([{ name: "__Host-session", value: actor.Token, url: ORIGIN, secure: true, httpOnly: true, sameSite: "Strict" }]);
   if (opts.permissions) await context.grantPermissions(opts.permissions, { origin: ORIGIN });
   if (opts.init) await context.addInitScript({ content: opts.init });
@@ -146,18 +154,30 @@ async function enableBrowserPreference(panel: Panel, actor: Actor, inbox: string
 const notes = (page: Page) => page.evaluate(() => (window as unknown as { __notes: string[] }).__notes);
 const permissionText = (page: Page) => page.getByRole("region", { name: "Preferências de notificações" }).locator("p").first();
 
-type Violation = { id: string; impact: string | null; help: string; nodes: number; targets: string[]; html: string[] };
+type Violation = { id: string; impact: string | null; help: string; nodes: number; targets: string[]; html: string[]; details: { failureSummary: string | undefined; rect: string }[] };
 async function runAxe(page: Page, tags: string[]): Promise<Violation[]> {
   await page.addScriptTag({ content: axe.source });
   return page.evaluate(async (tags) => {
-    const result = await (window as unknown as { axe: { run: (c: Document, o: unknown) => Promise<{ violations: { id: string; impact: string | null; help: string; nodes: { target: unknown[] }[] }[] }> } }).axe.run(document, { runOnly: { type: "tag", values: tags } });
-    return result.violations.map((v) => ({ id: v.id, impact: v.impact, help: v.help, nodes: v.nodes.length, targets: v.nodes.slice(0, 4).map((n) => n.target.join(" ")), html: v.nodes.slice(0, 2).map((n) => (n as unknown as { html: string }).html.slice(0, 200)) }));
+    const result = await (window as unknown as { axe: { run: (c: Document, o: unknown) => Promise<{ violations: { id: string; impact: string | null; help: string; nodes: { target: string[]; html: string; failureSummary?: string }[] }[] }> } }).axe.run(document, { runOnly: { type: "tag", values: tags } });
+    return result.violations.map((v) => ({ id: v.id, impact: v.impact, help: v.help, nodes: v.nodes.length, targets: v.nodes.slice(0, 4).map((n) => n.target.join(" ")), html: v.nodes.slice(0, 2).map((n) => n.html.slice(0, 200)), details: v.nodes.slice(0, 4).map((n) => {
+      const el = n.target.length === 1 ? document.querySelector(n.target[0]!) : null;
+      const r = el?.getBoundingClientRect();
+      const center = r && document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return { failureSummary: n.failureSummary, rect: r ? `${r.x},${r.y} ${r.width}x${r.height}; center=${center?.outerHTML.slice(0, 200)}` : "unavailable" };
+    }) }));
   }, tags);
 }
 
 async function keyboardWalk(page: Page, max = 70) {
   await page.addStyleTag({ content: "*,*::before,*::after{transition:none !important;animation:none !important}" });
-  await page.evaluate(() => { document.querySelectorAll("[data-ux-seen]").forEach((e) => e.removeAttribute("data-ux-seen")); (document.activeElement as HTMLElement | null)?.blur(); });
+  await page.evaluate(() => {
+    document.querySelectorAll("[data-ux-seen]").forEach((e) => e.removeAttribute("data-ux-seen"));
+    // Blurring retains Chromium's sequential focus starting point from the
+    // previous SPA page. Start each audit at the beginning of this document.
+    document.body.setAttribute("tabindex", "-1");
+    document.body.focus();
+    document.body.removeAttribute("tabindex");
+  });
   const problems: string[] = [];
   const order: string[] = [];
   for (let i = 0; i < max; i++) {
@@ -181,6 +201,8 @@ async function keyboardWalk(page: Page, max = 70) {
     if (!info.visible) problems.push(`foco em elemento invisível: <${info.tag}> "${info.name}"`);
     if (!info.name) problems.push(`foco em controle sem nome: <${info.tag}>`);
   }
+  // Do not carry a focused skip link into the next SPA page's axe audit.
+  await page.evaluate(() => { (document.activeElement as HTMLElement | null)?.blur(); });
   return { reached: order.length, problems, order };
 }
 
@@ -211,6 +233,7 @@ export async function runUx(browser: Browser, testInfo: { attach(name: string, o
   const admin = fixture.M4A.Admin;
   const inbox = fixture.M3B.Inbox;
   const evidence: Record<string, unknown> = {};
+  evidence.theme = theme;
   const discover = process.env.UX_DISCOVER === "1";
   const failures: string[] = [];
 
@@ -329,6 +352,7 @@ export async function runUx(browser: Browser, testInfo: { attach(name: string, o
       ];
       for (const stop of stops) {
         if (stop.path) { await go(stop.page, stop.csrf, stop.path); await stop.page.waitForTimeout(900); }
+        await expect(stop.page.locator("html")).toHaveClass(theme === "dark" ? /\bdark\b/ : /^(?!.*\bdark\b).*$/);
         for (const dup of await duplicateKeys(stop.page)) failures.push(`${vp.name} / ${stop.label}: ${dup}`);
         const violations = await runAxe(stop.page, WCAG);
         const over = await overflow(stop.page);
@@ -352,6 +376,7 @@ export async function runUx(browser: Browser, testInfo: { attach(name: string, o
   ];
   for (const vp of viewports) {
     const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: vp.width, height: vp.height } });
+    await setTheme(context);
     const page = await context.newPage();
     try {
       for (const pub of publicPages) {
@@ -360,6 +385,7 @@ export async function runUx(browser: Browser, testInfo: { attach(name: string, o
         if (pub.heading) await expect(page.getByRole("heading", { name: pub.heading, level: 1 })).toBeVisible();
         else await expect(h1.first()).toBeVisible();
         await page.waitForTimeout(400);
+        await expect(page.locator("html")).toHaveClass(theme === "dark" ? /\bdark\b/ : /^(?!.*\bdark\b).*$/);
         const shown = (await h1.first().textContent())?.trim() ?? "";
         const violations = await runAxe(page, WCAG);
         const over = await overflow(page);

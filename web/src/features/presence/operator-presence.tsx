@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { create } from "zustand";
 import * as api from "@/api/presence";
 import { useSessionStore, type PanelPrincipal } from "@/stores/session-store";
 
@@ -7,6 +8,9 @@ export function occupancyDetail(m: { open?: number; waiting?: number; snoozed?: 
   const parts = [`${m.open ?? 0} ${m.open === 1 ? "aberta" : "abertas"}`, `${m.waiting ?? 0} aguardando`];
   return ` (${parts.join(", ")}${m.snoozed ? ` · ${m.snoozed} ${m.snoozed === 1 ? "adiada" : "adiadas"}` : ""})`;
 }
+/** Vagas do atendente desta sessão, só em memória: o rodapé da fila mostra a mesma leitura do topo. */
+export type Occupancy = { occupied: number; capacity: number; open?: number; waiting?: number; snoozed?: number };
+export const useOccupancyStore = create<{ occupancy: Occupancy | null }>(() => ({ occupancy: null }));
 export function presenceScope(p: PanelPrincipal) { return JSON.stringify([p.tenantId, p.userId, p.membershipId, p.sessionId, p.role]); }
 export function OperatorPresence() {
   const principal = useSessionStore(s => s.principal);
@@ -32,13 +36,13 @@ function PresenceBody({ principal }: { principal: PanelPrincipal }) {
         const value = await api.heartbeat(tab, active.signal);
         if (!active.signal.aborted && same()) { setSnapshot(value); setError(""); }
         const slots = await api.occupancy(undefined, active.signal);
-        if (!active.signal.aborted && same()) setOccupied(slots.members?.find(m => m.membership_id === principal.membershipId) ?? null);
+        if (!active.signal.aborted && same()) { const mine = slots.members?.find(m => m.membership_id === principal.membershipId) ?? null; setOccupied(mine); useOccupancyStore.setState({ occupancy: mine }); }
       } catch { if (!active.signal.aborted && same()) setError("Presença indisponível. A disponibilidade não foi confirmada."); }
       finally { running = false; }
     }
     void tick();
     const timer = window.setInterval(() => void tick(), 10_000);
-    const stop = () => { active.abort(); window.clearInterval(timer); };
+    const stop = () => { active.abort(); window.clearInterval(timer); useOccupancyStore.setState({ occupancy: null }); };
     const unsubscribe = useSessionStore.subscribe(() => { if (!same()) stop(); });
     // pagehide covers navigation/closing; another tab retains its own heartbeat.
     const leave = () => { stop(); void api.closeTab(tab).catch(() => undefined); };
@@ -56,7 +60,7 @@ function PresenceBody({ principal }: { principal: PanelPrincipal }) {
   }
   return <section aria-label="Minha presença" className="operator-presence">
     <label>Minha presença <select aria-label="Minha presença" value={snapshot?.manual ?? "available"} disabled={!snapshot || busy} onChange={e => void change(e.target.value as "available" | "busy")}><option value="available">Disponível</option><option value="busy">Ocupado</option></select></label>
-    <p role="status">{error ? "Presença não confirmada" : snapshot?.connected ? "Conectado" : "Verificando presença…"}{occupied && ` · Vagas: ${occupied.occupied}/${occupied.capacity}`}{occupied && occupancyDetail(occupied)}</p>
+    <p role="status" data-connected={!error && snapshot?.connected ? "true" : undefined} title={occupied ? `Vagas: ${occupied.occupied}/${occupied.capacity}${occupancyDetail(occupied)}` : undefined}><span>{error ? "Presença não confirmada" : snapshot?.connected ? "Conectado" : "Verificando presença…"}</span>{occupied && <span className="presence-slots">{` · Vagas: ${occupied.occupied}/${occupied.capacity}`}</span>}{occupied && <span className="presence-detail">{occupancyDetail(occupied)}</span>}</p>
     {error && <p role="alert">{error}</p>}
   </section>;
 }

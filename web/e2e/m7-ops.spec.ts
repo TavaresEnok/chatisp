@@ -159,7 +159,7 @@ export async function runM7Ops(browser: Browser, testInfo: { attach(name: string
     await expect(restricted.page.getByRole("heading", { name: "Configurações", level: 1 })).toBeVisible();
     await expect(restricted.page.getByRole("heading", { name: "Identidade do provedor" })).toHaveCount(0);
     await expect(restricted.page.getByLabel("Nome exibido do provedor")).toHaveCount(0);
-    await expect(restricted.page.getByText(brandName).first()).toBeVisible();
+    await expect(restricted.page.locator(".app-topbar .topbar-location").getByText(brandName, { exact: true })).toBeVisible();
     const denied = await restricted.page.evaluate(async (csrf) => {
       const response = await fetch("/api/panel/branding", {
         method: "PUT",

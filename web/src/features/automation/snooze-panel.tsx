@@ -1,3 +1,4 @@
+import { AlarmClock } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import * as automation from "@/api/automation";
 import { PanelRequestError } from "@/api/problems";
@@ -49,7 +50,7 @@ function SnoozeSession({ principal, inbox, conversation, version, status, onChan
   const eligible = status === "open" || status === "waiting_customer";
   if (active === undefined || (!eligible && !active)) return null;
   if (active) {
-    return <section aria-label="Adiamento" className="text-sm">
+    return <section aria-label="Adiamento" className="snooze-active">
       <p role="status">Adiada até {formatter.format(new Date(active.snoozed_until))} · {active.reason}. Volta à fila no horário ou quando o cliente responder.</p>
     </section>;
   }
@@ -75,14 +76,14 @@ function SnoozeSession({ principal, inbox, conversation, version, status, onChan
       } else setMessage("A resposta não chegou. Repita para confirmar o mesmo adiamento.");
     } finally { setBusy(false); }
   }
-  if (!open) return <button type="button" onClick={() => setOpen(true)}>Adiar</button>;
-  return <section aria-label="Adiar conversa" className="space-y-1">
+  if (!open) return <button type="button" className="context-action" onClick={() => setOpen(true)}><AlarmClock size={15} strokeWidth={1.6} aria-hidden="true" />Adiar</button>;
+  return <section aria-label="Adiar conversa" className="context-dialog">
     <h2>Adiar conversa</h2>
-    <div className="space-x-1">{presets.map(preset => <button type="button" key={preset.label} onClick={() => setUntil(localInput(presetUntil(preset.minutes)))}>{preset.label}</button>)}</div>
+    <div className="snooze-presets">{presets.map(preset => <button type="button" key={preset.label} onClick={() => setUntil(localInput(presetUntil(preset.minutes)))}>{preset.label}</button>)}</div>
     <label>Retornar em <input type="datetime-local" value={until} onChange={e => setUntil(e.target.value)} /></label>
     <label>Motivo <input value={reason} maxLength={500} onChange={e => setReason(e.target.value)} /></label>
-    <button type="button" disabled={!valid || busy} onClick={() => void submit()}>Confirmar adiamento</button>{" "}
-    <button type="button" disabled={busy} onClick={() => { setOpen(false); setMessage(""); intent.current = null; }}>Cancelar</button>
+    <div className="context-dialog-actions"><button type="button" className="context-confirm" disabled={!valid || busy} onClick={() => void submit()}>Confirmar adiamento</button>{" "}
+    <button type="button" disabled={busy} onClick={() => { setOpen(false); setMessage(""); intent.current = null; }}>Cancelar</button></div>
     {message && <p role="alert">{message}</p>}
   </section>;
 }

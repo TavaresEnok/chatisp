@@ -1,3 +1,4 @@
+import { Bot, CalendarClock, Phone, Plug, Reply, SlidersHorizontal, Tag, UserCog, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router";
 import { useSessionStore } from "@/stores/session-store";
 
@@ -13,11 +14,17 @@ const sections = [
   { title: "Integrações", description: "API, webhooks e estado dos conectores.", to: "#config-integracoes", roles: ["admin"] },
 ] as const;
 
+const icons: Record<(typeof sections)[number]["title"], LucideIcon> = {
+  "Usuários": UserCog, "Caixas e números": Phone, "Equipes e setores": Users, "Horários": CalendarClock, "Respostas prontas": Reply,
+  "Etiquetas e notas": Tag, "Distribuição": SlidersHorizontal, "Automação": Bot, "Integrações": Plug,
+};
+
 export function SettingsSections() {
   const role = useSessionStore(s => s.principal?.role);
   return <nav aria-label="Partes das configurações" className="settings-shortcuts">
     {sections.filter(section => role && (section.roles as readonly string[]).includes(role)).map(section => {
-      const content = <><strong>{section.title}</strong><span>{section.description}</span></>;
+      const Icon = icons[section.title];
+      const content = <><i aria-hidden="true"><Icon size={16} strokeWidth={1.6} /></i><strong>{section.title}</strong><span>{section.description}</span></>;
       return section.to.startsWith("#") ? <a key={section.title} href={section.to}>{content}</a> : <Link key={section.title} to={section.to}>{content}</Link>;
     })}
   </nav>;

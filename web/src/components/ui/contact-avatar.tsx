@@ -1,6 +1,7 @@
 // Deterministic initials avatar. The spec (Avatar, V1 simples) shows a photo only if WhatsApp
 // supplies one; the Cloud API does not, and no authorized image source exists, so every
-// contact gets initials plus a colour derived from the name. It never loads a remote URL.
+// contact gets initials on a neutral surface. contactHue stays available as a stable,
+// deterministic value per name, but the avatar no longer paints with it. It never loads a remote URL.
 // It is decorative: the contact name next to it is the accessible name.
 
 export function contactInitials(label: string): string {
@@ -22,7 +23,6 @@ export function contactHue(label: string): number {
 }
 
 export function ContactAvatar({ label, size = 32 }: { label: string; size?: number }) {
-  const hue = contactHue(label);
   return (
     <span
       aria-hidden="true"
@@ -31,9 +31,9 @@ export function ContactAvatar({ label, size = 32 }: { label: string; size?: numb
       style={{
         width: size,
         height: size,
-        // Light tint with dark text of the same hue: contrast ≥ 7:1 for every hue.
-        backgroundColor: `hsl(${hue} 55% 88%)`,
-        color: `hsl(${hue} 60% 20%)`,
+        // Neutral surface from the theme tokens: readable in the light and dark themes.
+        backgroundColor: "var(--secondary)",
+        color: "var(--soft, var(--foreground))",
       }}
     >
       {contactInitials(label)}

@@ -13,16 +13,16 @@
       "title": "Briefing técnico e código do frontend",
       "description": "Stack, fontes React/TypeScript, manifests e contratos OpenAPI para outra IA trabalhar no frontend.",
       "filename": "CHATISP_BRIEFING_TECNICO_E_FRONTEND.zip",
-      "size": 550258,
-      "sha256": "bc04663fb3c8719a741b4a9da5acc94dc8640d87cdb5538f4ca918a24c8fa593"
+      "size": 579606,
+      "sha256": "39df92696c79d662cc98d1ffe6ea8d8ad3940dd7980a9f6a88f5f3c07095eb13"
     },
     {
       "id": "referencias-visuais",
       "title": "Referências e propostas visuais",
       "description": "Capturas demonstrativas, propostas e documentação visual; conceitos não representam recursos novos já implementados.",
       "filename": "CHATISP_REFERENCIAS_VISUAIS.zip",
-      "size": 4852171,
-      "sha256": "f1a9cc8cb2ff79aa88f2c99fb7e7a410c97b689d5aa79e364beec76c9c373b3f"
+      "size": 4864240,
+      "sha256": "ec2230739974b5379601f4f3cba0328e0dbdb4bd6b92ffbe829498e2b43575f1"
     }
   ]
 }

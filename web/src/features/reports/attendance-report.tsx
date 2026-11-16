@@ -1,3 +1,4 @@
+import { Download } from "lucide-react";
 import { useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { getReport, listReportInboxes, listReportSectors, reportDirectoryKey, reportQueryKey, type AttendanceReport, type ReportOption, type ReportQuery, type ReportStats } from "@/api/reports";
@@ -33,7 +34,50 @@ function metric(title: string, stats: ReportStats, empty: string) {
   const value = stats.sample === 0
     ? (stats.not_applicable > 0 ? "não aplicável" : empty)
     : `${formatDuration(stats.average_seconds)} (mediana ${formatDuration(stats.median_seconds)}, amostra ${stats.sample}${stats.not_applicable ? `, fora da amostra ${stats.not_applicable}` : ""})`;
-  return <p>{title}: {value}</p>;
+  return <p className="sr-only">{title}: {value}</p>;
+}
+
+const numberFormat = new Intl.NumberFormat("pt-BR");
+
+/** Linha da tabela de tempos: a mesma leitura da frase por extenso, em colunas. */
+function TimeRow({ title, stats, empty }: { title: string; stats: ReportStats; empty: string }) {
+  return <div className="report-times-row">
+    <span>{title}</span>
+    {stats.sample === 0
+      ? <span className="report-times-empty">{stats.not_applicable > 0 ? "não aplicável" : empty}</span>
+      : <><b>{formatDuration(stats.average_seconds)}</b><b>{formatDuration(stats.median_seconds)}</b><span>{numberFormat.format(stats.sample)}{stats.not_applicable > 0 && <small> · {numberFormat.format(stats.not_applicable)} fora da amostra</small>}</span></>}
+  </div>;
+}
+
+type BarRow = { key: string; label: string; value: number; detail?: string };
+
+/** Barras proporcionais ao maior valor da lista. É só reforço visual: os números por extenso ficam na lista ao lado. */
+function Bars({ rows, unit }: { rows: BarRow[]; unit?: string }) {
+  const max = Math.max(1, ...rows.map((row) => row.value));
+  return <div className="report-bars" aria-hidden="true">
+    {rows.map((row) => <div key={row.key} className="report-bar" title={`${row.label}: ${numberFormat.format(row.value)}${unit ? ` ${unit}` : ""}`}>
+      <span className="report-bar-label">{row.label}</span>
+      <b>{numberFormat.format(row.value)}</b>
+      <span className="report-bar-track"><span style={{ width: `${Math.max(0, Math.min(100, (row.value / max) * 100))}%` }} /></span>
+      {row.detail ? <small>{row.detail}</small> : null}
+    </div>)}
+  </div>;
+}
+
+/** Ciclos por agrupamento (dia, semana ou mês), uma barra por período. */
+function BucketChart({ buckets }: { buckets: AttendanceReport["buckets"] }) {
+  const max = Math.max(1, ...buckets.map((row) => row.cycles));
+  const first = buckets[0];
+  const last = buckets[buckets.length - 1];
+  return <div className="report-chart" aria-hidden="true">
+    <div className="report-chart-plot">
+      {buckets.map((row) => <div key={row.key} className="report-chart-column" title={`${row.key}: ${numberFormat.format(row.cycles)} ciclos, ${numberFormat.format(row.messages)} mensagens, ${numberFormat.format(row.closed)} encerrados`}>
+        <span className="report-chart-value">{numberFormat.format(row.cycles)}</span>
+        <span className="report-chart-bar" style={{ height: `${(row.cycles / max) * 100}%` }} />
+      </div>)}
+    </div>
+    <div className="report-chart-axis"><span>{first?.key}</span>{last && last !== first ? <span>{last.key}</span> : null}</div>
+  </div>;
 }
 
 function LiveBoard({ report }: { report: AttendanceReport }) {
@@ -156,8 +200,8 @@ export function AttendanceReportView({ principal, mode }: { principal: PanelPrin
   const report = directoryDenied || !reportQuery.isSuccess || (mode === "full" && reportQuery.isFetching) ? undefined : reportQuery.data;
   const waitingReport = report === undefined && !directoryDenied && (reportQuery.isPending || reportQuery.isFetching);
   const failedReport = !directoryDenied && reportQuery.isError && !reportQuery.isFetching;
-  return <div className="space-y-4">
-    {mode === "full" && <form className="flex flex-wrap gap-3" onSubmit={(event) => event.preventDefault()}>
+  return <div className="report-view" data-mode={mode}>
+    {mode === "full" && <form className="report-filters" onSubmit={(event) => event.preventDefault()}>
       <label>Início <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
       <label>Fim <input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label>
       <label>Agrupamento <select aria-label="Agrupamento" value={group} onChange={(event) => setGroup(event.target.value as "day" | "week" | "month")}><option value="day">Dia</option><option value="week">Semana</option><option value="month">Mês</option></select></label>
@@ -181,33 +225,78 @@ export function AttendanceReportView({ principal, mode }: { principal: PanelPrin
 function ReportBody({ report, mode }: { report: AttendanceReport; mode: "live" | "full" }) {
   const quiet = report.conversations === 0 && report.cycles === 0 && report.messages === 0;
   return <>
+    {mode === "full" && <>
+      <section aria-label="Totais do período" className="report-totals">
+        <p className="sr-only">Fuso {report.timezone}. Conversas {report.conversations}, ciclos {report.cycles}, mensagens {report.messages}.</p>
+        <ul className="live-metrics" aria-hidden="true">
+          <li><span>Conversas</span><strong>{numberFormat.format(report.conversations)}</strong></li>
+          <li><span>Ciclos</span><strong>{numberFormat.format(report.cycles)}</strong></li>
+          <li><span>Mensagens</span><strong>{numberFormat.format(report.messages)}</strong></li>
+        </ul>
+        <div className="report-totals-foot">
+          <p aria-hidden="true">Fuso {report.timezone}</p>
+          <button type="button" className="report-download" onClick={() => download(report.csv)}><Download size={15} strokeWidth={1.8} aria-hidden="true" />Baixar CSV</button>
+        </div>
+        {quiet && <p className="report-quiet">Nenhum ciclo, conversa ou mensagem neste recorte.</p>}
+      </section>
+    </>}
     <LiveBoard report={report} />
     {mode === "full" && <>
-      <ul>{report.definitions.map((line) => <li key={line}>{line}</li>)}</ul>
-      <p>Fuso {report.timezone}. Conversas {report.conversations}, ciclos {report.cycles}, mensagens {report.messages}.</p>
-      {quiet && <p>Nenhum ciclo, conversa ou mensagem neste recorte.</p>}
-      {metric("Primeira resposta humana", report.first_response, "sem dado no período")}
-      {metric("Tempo até o encerramento", report.close_total, "sem encerramento no período")}
-      {metric("Tempo operacional", report.close_operational, "sem encerramento no período")}
-      {metric("Espera na fila", report.queue_wait, "sem espera encerrada no período")}
-      {report.results.length > 0 && <section aria-label="Resultados"><h2>Resultados</h2><ul>{report.results.map((row) => <li key={`${row.result}-${row.author_kind}`}>{row.label}: {row.count}</li>)}</ul></section>}
-      <section aria-label="Por setor">
-        <h2>Por setor</h2>
-        {report.sectors.length === 0 ? <p>Nenhum setor neste recorte.</p> : <ul>{report.sectors.map((row) => <li key={row.sector_id}>{row.name}: {row.cycles} ciclos, {row.queue_waits} esperas, mediana {formatDuration(row.queue_wait_median_seconds)}, responsabilidade {formatDuration(row.responsibility_seconds)}</li>)}</ul>}
-      </section>
-      <section aria-label="Por atendente">
-        <h2>Por atendente</h2>
-        {report.attendants.length === 0 ? <p>Nenhum atendente neste recorte.</p> : <ul>{report.attendants.map((row) => <li key={row.membership_id}>{row.label}: responsabilidade {formatDuration(row.responsibility_seconds)}, {row.messages} {row.messages === 1 ? "mensagem" : "mensagens"}, {row.closures} {row.closures === 1 ? "encerramento" : "encerramentos"}</li>)}</ul>}
-      </section>
-      <section aria-label="Por caixa">
-        <h2>Por caixa</h2>
-        {report.inboxes.length === 0 ? <p>Nenhuma caixa neste recorte.</p> : <ul>{report.inboxes.map((row) => <li key={row.inbox_id}>{row.name}: {row.cycles} ciclos, {row.messages} mensagens</li>)}</ul>}
-      </section>
-      {report.reasons.length > 0 && <section aria-label="Motivos"><h2>Motivo principal</h2><ul>{report.reasons.map((row) => <li key={row.name}>{row.name}: {row.count}</li>)}</ul></section>}
-      {report.tags.length > 0 && <section aria-label="Etiquetas"><h2>Etiquetas adicionais</h2><p>Estas contagens se sobrepõem e não fecham o total.</p><ul>{report.tags.map((row) => <li key={row.name}>{row.name}: {row.count}</li>)}</ul></section>}
+      <div className="report-grid">
+        <section aria-label="Tempos" className="report-card">
+          <h2>Tempos</h2>
+          <p className="report-note">Média, mediana e tamanho da amostra de cada indicador.</p>
+          <div className="report-times" aria-hidden="true">
+            <div className="report-times-row report-times-head"><span>Indicador</span><span>Média</span><span>Mediana</span><span>Amostra</span></div>
+            <TimeRow title="Primeira resposta humana" stats={report.first_response} empty="sem dado no período" />
+            <TimeRow title="Tempo até o encerramento" stats={report.close_total} empty="sem encerramento no período" />
+            <TimeRow title="Tempo operacional" stats={report.close_operational} empty="sem encerramento no período" />
+            <TimeRow title="Espera na fila" stats={report.queue_wait} empty="sem espera encerrada no período" />
+          </div>
+          {metric("Primeira resposta humana", report.first_response, "sem dado no período")}
+          {metric("Tempo até o encerramento", report.close_total, "sem encerramento no período")}
+          {metric("Tempo operacional", report.close_operational, "sem encerramento no período")}
+          {metric("Espera na fila", report.queue_wait, "sem espera encerrada no período")}
+        </section>
+        {report.buckets.length > 0 && <section aria-label="Agrupamento" className="report-card">
+          <h2>Agrupamento</h2>
+          <p className="report-note">Ciclos iniciados em cada período. Passe o ponteiro sobre uma barra para ver os números.</p>
+          <BucketChart buckets={report.buckets} />
+          <ul className="sr-only">{report.buckets.map((row) => <li key={row.key}>{row.key}: {row.cycles} ciclos, {row.messages} mensagens, {row.closed} encerrados. Primeira resposta humana: {row.first_response_sample === 0 ? "sem amostra" : `${formatDuration(row.first_response_average_seconds)} (amostra ${row.first_response_sample})`}. Tempo operacional do agrupamento: {row.operational_sample === 0 ? "sem amostra" : `${formatDuration(row.operational_average_seconds)} (amostra ${row.operational_sample})`}.</li>)}</ul>
+        </section>}
+        {report.results.length > 0 && <section aria-label="Resultados" className="report-card"><h2>Resultados</h2>
+          <Bars rows={report.results.map((row) => ({ key: `${row.result}-${row.author_kind}`, label: row.label, value: row.count }))} />
+          <ul className="sr-only">{report.results.map((row) => <li key={`${row.result}-${row.author_kind}`}>{row.label}: {row.count}</li>)}</ul></section>}
+        <section aria-label="Por setor" className="report-card">
+          <h2>Por setor</h2>
+          {report.sectors.length === 0 ? <p className="report-note">Nenhum setor neste recorte.</p> : <>
+            <Bars unit="ciclos" rows={report.sectors.map((row) => ({ key: row.sector_id, label: row.name, value: row.cycles, detail: `${numberFormat.format(row.queue_waits)} esperas · mediana ${formatDuration(row.queue_wait_median_seconds)} · responsabilidade ${formatDuration(row.responsibility_seconds)}` }))} />
+            <ul className="sr-only">{report.sectors.map((row) => <li key={row.sector_id}>{row.name}: {row.cycles} ciclos, {row.queue_waits} esperas, mediana {formatDuration(row.queue_wait_median_seconds)}, responsabilidade {formatDuration(row.responsibility_seconds)}</li>)}</ul>
+          </>}
+        </section>
+        <section aria-label="Por atendente" className="report-card">
+          <h2>Por atendente</h2>
+          {report.attendants.length === 0 ? <p className="report-note">Nenhum atendente neste recorte.</p> : <>
+            <Bars unit="mensagens" rows={report.attendants.map((row) => ({ key: row.membership_id, label: row.label, value: row.messages, detail: `${numberFormat.format(row.closures)} ${row.closures === 1 ? "encerramento" : "encerramentos"} · responsabilidade ${formatDuration(row.responsibility_seconds)}` }))} />
+            <ul className="sr-only">{report.attendants.map((row) => <li key={row.membership_id}>{row.label}: responsabilidade {formatDuration(row.responsibility_seconds)}, {row.messages} {row.messages === 1 ? "mensagem" : "mensagens"}, {row.closures} {row.closures === 1 ? "encerramento" : "encerramentos"}</li>)}</ul>
+          </>}
+        </section>
+        <section aria-label="Por caixa" className="report-card">
+          <h2>Por caixa</h2>
+          {report.inboxes.length === 0 ? <p className="report-note">Nenhuma caixa neste recorte.</p> : <>
+            <Bars unit="ciclos" rows={report.inboxes.map((row) => ({ key: row.inbox_id, label: row.name, value: row.cycles, detail: `${numberFormat.format(row.messages)} mensagens` }))} />
+            <ul className="sr-only">{report.inboxes.map((row) => <li key={row.inbox_id}>{row.name}: {row.cycles} ciclos, {row.messages} mensagens</li>)}</ul>
+          </>}
+        </section>
+        {report.reasons.length > 0 && <section aria-label="Motivos" className="report-card"><h2>Motivo principal</h2>
+          <Bars rows={report.reasons.map((row) => ({ key: row.name, label: row.name, value: row.count }))} />
+          <ul className="sr-only">{report.reasons.map((row) => <li key={row.name}>{row.name}: {row.count}</li>)}</ul></section>}
+        {report.tags.length > 0 && <section aria-label="Etiquetas" className="report-card"><h2>Etiquetas adicionais</h2><p className="report-note">Estas contagens se sobrepõem e não fecham o total.</p>
+          <Bars rows={report.tags.map((row) => ({ key: row.name, label: row.name, value: row.count }))} />
+          <ul className="sr-only">{report.tags.map((row) => <li key={row.name}>{row.name}: {row.count}</li>)}</ul></section>}
+      </div>
       <Heatmap timezone={report.timezone} cells={report.heatmap} />
-      {report.buckets.length > 0 && <section aria-label="Agrupamento"><h2>Agrupamento</h2><ul>{report.buckets.map((row) => <li key={row.key}>{row.key}: {row.cycles} ciclos, {row.messages} mensagens, {row.closed} encerrados. Primeira resposta humana: {row.first_response_sample === 0 ? "sem amostra" : `${formatDuration(row.first_response_average_seconds)} (amostra ${row.first_response_sample})`}. Tempo operacional do agrupamento: {row.operational_sample === 0 ? "sem amostra" : `${formatDuration(row.operational_average_seconds)} (amostra ${row.operational_sample})`}.</li>)}</ul></section>}
-      <button type="button" onClick={() => download(report.csv)}>Baixar CSV</button>
+      {report.definitions.length > 0 && <section aria-label="Definições" className="report-card report-definitions"><h2>Como ler</h2><ul>{report.definitions.map((line) => <li key={line}>{line}</li>)}</ul></section>}
     </>}
   </>;
 }

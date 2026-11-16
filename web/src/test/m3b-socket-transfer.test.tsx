@@ -76,7 +76,7 @@ function setup(deferred = false) {
 
 it("transferência com socket ativo preserva sessão, outro rascunho e a intenção perdida", async () => {
   const h = setup();
-  await h.user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
+  await h.user.selectOptions(await screen.findByRole("combobox", { name: "Caixa de atendimento" }), "i1");
   act(() => { h.sockets[0]?.onopen?.(); h.sockets[0]?.onmessage?.({ data: JSON.stringify({ type: "snapshot", inbox_id: "i1" }) }); });
   await h.user.type(await h.select("P2"), "Pendente");
   await h.user.click(screen.getByRole("button", { name: "Enviar" }));
@@ -104,15 +104,15 @@ it("transferência com socket ativo preserva sessão, outro rascunho e a intenç
 
 it.each(["conversation", "inbox"])("transferência tardia após mudança de %s preserva seleção e controles", async change => {
   const h = setup(true);
-  await h.user.selectOptions(await screen.findByLabelText("Caixa"), "i1");
+  await h.user.selectOptions(await screen.findByRole("combobox", { name: "Caixa de atendimento" }), "i1");
   await h.select("P1"); await h.transfer();
-  if (change === "inbox") await h.user.selectOptions(screen.getAllByLabelText("Caixa")[0]!, "i2");
+  if (change === "inbox") await h.user.selectOptions(screen.getByRole("combobox", { name: "Caixa de atendimento" }), "i2");
   const composer = await h.select("P2");
   await h.user.type(composer, "Rascunho atual");
   await act(async () => h.finish());
   await waitFor(() => expect(screen.queryByRole("button", { name: /Protocolo P1/ })).not.toBeInTheDocument());
   expect(screen.getByRole("textbox", { name: "Mensagem" })).toBe(composer);
   expect(composer).toHaveValue("Rascunho atual");
-  expect(screen.getAllByLabelText("Caixa")[0]).toHaveValue(change === "inbox" ? "i2" : "i1");
+  expect(screen.getByRole("combobox", { name: "Caixa de atendimento" })).toHaveValue(change === "inbox" ? "i2" : "i1");
   h.unmount(); h.client.clear();
 });

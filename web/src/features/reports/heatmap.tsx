@@ -23,10 +23,11 @@ function cellLabel(day: string, hour: number, cycles: number | undefined): strin
 
 export function Heatmap({ timezone, cells }: { timezone: string; cells: HeatCell[] }) {
   const known = cellCycles(cells);
+  const peak = Math.max(0, ...known.values());
   const zone = timezone.trim().length > 0 ? timezone : "fuso não informado";
-  return <section aria-label="Mapa de calor">
+  return <section aria-label="Mapa de calor" className="report-card heatmap">
     <h2>Mapa de calor</h2>
-    <p>
+    <p className="report-note">
       {known.size === 0
         ? "O cálculo não devolveu células. Nenhuma hora deste mapa vira zero por conta própria."
         : `O cálculo devolveu ${known.size} ${known.size === 1 ? "hora" : "horas"} no fuso ${zone}.`}
@@ -37,7 +38,7 @@ export function Heatmap({ timezone, cells }: { timezone: string; cells: HeatCell
       <li>Sem registro: a resposta não trouxe esta hora. O painel não transforma isso em zero.</li>
     </ul>
     <div className="overflow-x-auto" role="region" aria-label="Horas por dia, rolagem horizontal" tabIndex={0}>
-      <table className="border-collapse text-sm">
+      <table className="heatmap-table">
         <caption>Mapa de calor no fuso {zone}. Sete dias por vinte e quatro horas. Domingo é o dia 0 do cálculo.</caption>
         <thead>
           <tr>
@@ -55,7 +56,7 @@ export function Heatmap({ timezone, cells }: { timezone: string; cells: HeatCell
                 key={hour}
                 aria-label={cellLabel(day, hour, cycles)}
                 className={cycles === undefined ? "border border-dashed px-1 text-center" : "border px-1 text-center"}
-                style={present ? { background: "rgb(14 116 144 / 0.25)" } : undefined}
+                data-level={cycles === undefined ? "none" : present ? String(Math.min(4, Math.max(1, Math.ceil((cycles / peak) * 4)))) : "0"}
               >{cycles === undefined ? "sem registro" : String(cycles)}</td>;
             })}
           </tr>)}

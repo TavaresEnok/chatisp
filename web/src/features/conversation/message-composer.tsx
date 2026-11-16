@@ -1,6 +1,7 @@
 import { useContext, useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { QueryClientContext } from "@tanstack/react-query";
+import { Paperclip, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cannedScopeToken, denyCannedScope, subscribeCannedDenial } from "@/features/cannedreplies/cache";
@@ -688,18 +689,42 @@ function ComposerSession({
       data-scope={conversationScopeKey(scope)}
       onSubmit={onSubmit}
     >
-      <div className="flex flex-col gap-2">
-        <Label htmlFor={fieldId}>Mensagem</Label>
+      <div className="composer-head">
+        <Label htmlFor={fieldId} className="composer-tab">Mensagem</Label>
+        <p id={helpId} className="composer-hint">
+          Ctrl+Enter envia · Rascunho salvo neste dispositivo. Entrega sujeita à confirmação do canal.
+        </p>
+      </div>
+      {replyTo ? (
+        <div className="composer-reply">
+          <p>Respondendo a: {replyTo.preview}</p>
+          <Button type="button" variant="outline" className="composer-dismiss" title="Cancelar resposta" onClick={onClearReply}>
+            <X aria-hidden="true" />
+            <span className="visually-hidden">Cancelar resposta</span>
+          </Button>
+        </div>
+      ) : null}
+      {file ? (
+        <div className="composer-file">
+          <Paperclip size={14} strokeWidth={1.8} aria-hidden="true" />
+          <p>Anexo pronto: {file.name}</p>
+          <Button type="button" variant="outline" className="composer-dismiss" title="Remover anexo" disabled={outboundBusy || mediaPhase === "submitting"} onClick={removeFile}>
+            <X aria-hidden="true" />
+            <span className="visually-hidden">Remover anexo</span>
+          </Button>
+        </div>
+      ) : null}
+      <div className="composer-body">
         <textarea
           ref={field}
           id={fieldId}
           value={state.draft}
-          rows={3}
+          rows={2}
           autoComplete="off"
           aria-invalid={state.phase === "failed" ? true : undefined}
           aria-describedby={describedBy}
           placeholder="Escreva a mensagem"
-          className="min-h-24 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-base text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-foreground disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive md:text-sm dark:bg-input/30"
+          className="composer-field"
           aria-controls={slashOpen ? slashListId : undefined}
           aria-owns={slashOpen ? slashListId : undefined}
           aria-autocomplete={slashOpen ? "list" : undefined}
@@ -736,40 +761,24 @@ function ComposerSession({
             }}
           />
         ) : null}
-        {slashNotice ? <p>{slashNotice}</p> : null}
+        {slashNotice ? <p className="composer-note">{slashNotice}</p> : null}
         {prefixBlocksDraft ? <button type="button" onClick={removeRepeatedPrefix}>Retirar prefixo repetido</button> : null}
-        {replyTo ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm text-foreground">Respondendo a: {replyTo.preview}</p>
-            <Button type="button" variant="outline" className="h-11 w-fit px-3" onClick={onClearReply}>
-              Cancelar resposta
-            </Button>
-          </div>
-        ) : null}
-        <details className="composer-attachments"><summary>Anexos, áudio e formatação</summary><div className="flex flex-col gap-2">
-          <Label htmlFor={fileId}>Anexar arquivo</Label>
+      </div>
+      <div className="composer-bar">
+        <span className="composer-attach" title="Anexar arquivo: escolha, arraste ou cole na mensagem">
+          <Paperclip size={16} strokeWidth={1.6} aria-hidden="true" />
+          <Label htmlFor={fileId} className="visually-hidden">Anexar arquivo</Label>
           <input
             id={fileId}
             type="file"
             disabled={outboundBusy || mediaPhase === "submitting"}
-            className="block w-full text-sm text-foreground"
             onChange={(event) => {
               const selected = event.target.files?.[0];
               if (selected) takeFile(selected);
               event.target.value = "";
             }}
           />
-          <p className="text-sm text-muted-foreground">Arraste um arquivo ou cole na mensagem para enviar com a legenda.</p>
-          {file ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm text-foreground">Anexo pronto: {file.name}</p>
-              <Button type="button" variant="outline" className="h-11 w-fit px-3" disabled={outboundBusy || mediaPhase === "submitting"} onClick={removeFile}>
-                Remover anexo
-              </Button>
-            </div>
-          ) : null}
-        </div>
-        <ComposerTools field={field} value={state.draft} onChange={changeDraft} />
+        </span>
         <AudioRecorder
           disabled={offline || state.phase === "submitting" || mediaPhase === "submitting" || outboundBusy}
           onSend={
@@ -808,33 +817,28 @@ function ComposerSession({
               : undefined
           }
         />
-        </details>
-        <p id={helpId} className="text-sm text-muted-foreground">
-          Ctrl+Enter envia · Rascunho salvo neste dispositivo. Entrega sujeita à confirmação do canal.
-        </p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" className="h-11 w-fit px-3" disabled={!canSubmit}>
-          Enviar
-        </Button>
-        {canStartNewDecision ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="h-11 w-fit px-3"
-            onClick={() => void send("new-decision")}
-          >
-            Enviar como nova mensagem
+        <span className="composer-sep" aria-hidden="true" />
+        <ComposerTools field={field} value={state.draft} onChange={changeDraft} />
+        <div className="composer-send">
+          {canStartNewDecision ? (
+            <Button type="button" variant="outline" className="composer-new" onClick={() => void send("new-decision")}>
+              Enviar como nova mensagem
+            </Button>
+          ) : null}
+          <Button type="submit" className="composer-submit" disabled={!canSubmit}>
+            Enviar
+            <kbd aria-hidden="true">Ctrl ↵</kbd>
           </Button>
-        ) : null}
+        </div>
       </div>
+      <p className="visually-hidden">Arraste um arquivo ou cole na mensagem para enviar com a legenda.</p>
       {state.notice ? (
-        <p id={noticeId} role="status" className="text-sm text-foreground">
+        <p id={noticeId} role="status" className="composer-note">
           {localQueue && state.phase === "accepted" ? "Mensagem enfileirada localmente; a entrega ainda não foi confirmada." : state.notice}
         </p>
       ) : null}
       {mediaNotice ? (
-        <p role={mediaPhase === "failed" ? "alert" : "status"} className="text-sm text-foreground">
+        <p role={mediaPhase === "failed" ? "alert" : "status"} className="composer-note">
           {mediaNotice}
         </p>
       ) : null}

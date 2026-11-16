@@ -1,4 +1,7 @@
+import { resetInterfaceStore } from "@/stores/interface-store";
+
 export function clearBrowserStorage() {
+  resetInterfaceStore();
   try {
     localStorage.clear();
   } catch {

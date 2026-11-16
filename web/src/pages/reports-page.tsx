@@ -6,7 +6,7 @@ import { useSessionStore } from "@/stores/session-store";
 export function ReportsPage() {
   const principal = useSessionStore((state) => state.principal);
   if (!principal || principal.mfaEnrollmentRequired) return <AreaPage areaId="reports" />;
-  return <article className="flex max-w-3xl flex-col gap-6">
+  return <article className="reports-page">
     <h1 className="text-2xl font-semibold tracking-tight">Relatórios</h1>
     <AttendanceReportView principal={principal} mode="full" />
     {principal.role !== "agent" && <MetaUsageView scope={[principal.tenantId, principal.sessionId, principal.membershipId].join(":")} />}

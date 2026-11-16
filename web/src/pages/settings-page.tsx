@@ -32,7 +32,12 @@ export function SettingsPage() {
   if (!principal || principal.mfaEnrollmentRequired) return <AreaPage areaId="settings"><LocalDisplayNameForm /></AreaPage>;
 
   return (
-    <article className="settings-page"><h1>Configurações</h1><p className="settings-intro">Administre sua equipe, os canais e as regras do atendimento.</p>
+    <article className="split-page settings-page">
+      <section className="split-list" aria-label="Seções das configurações">
+        <header className="split-list-head"><div><h1>Configurações</h1><p className="settings-intro">Administre sua equipe, os canais e as regras do atendimento.</p></div></header>
+        <SettingsSections />
+      </section>
+      <section className="split-detail" aria-label="Painéis de configuração"><div className="settings-scroll">
       {principal && !principal.mfaEnrollmentRequired && (
         <section aria-labelledby="seguranca-conta" className="flex flex-col gap-2">
           <h2 id="seguranca-conta" className="font-medium">Segurança da conta</h2>
@@ -50,7 +55,6 @@ export function SettingsPage() {
           )}
         </section>
       )}
-      <SettingsSections />
  {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <div id="config-distribuicao"><DistributionSettings key={`distribution:${principal.sessionId}`} principal={principal} /></div>}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor"].includes(principal.role) && <div id="config-automacao"><AutomationSettings key={`automation:${principal.sessionId}`} principal={principal} /></div>}
       {principal && !principal.mfaEnrollmentRequired && ["admin", "supervisor", "agent"].includes(principal.role) && <Preferences key={`preferences:${JSON.stringify(queryKeys.notificationPreferences(principal))}`} principal={principal} />}
@@ -67,6 +71,7 @@ export function SettingsPage() {
       <ProviderAdmin />
       <PlatformAdmin />
       <LocalDisplayNameForm />
+      </div></section>
     </article>
   );
 }
