@@ -47,7 +47,11 @@ http://{$CHATISP_PROXY_SITE_HOST}:8082 {
 	}
 	handle {
 		root * /srv/panel
-		try_files {path} /index.html
-		file_server
+		route {
+			try_files {path} /index.html
+			header / Cache-Control "no-store"
+			header /index.html Cache-Control "no-store"
+			file_server
+		}
 	}
 }

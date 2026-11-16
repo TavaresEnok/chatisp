@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router";
 import { AppShell } from "@/components/layout/app-shell";
+import { RequireSession } from "@/components/auth/require-session";
 import { AcceptInvitePage } from "@/pages/accept-invite-page";
 import { LoginPage } from "@/pages/login-page";
 import { MfaPage } from "@/pages/mfa-page";
@@ -24,7 +25,7 @@ export function AppRoutes() {
       <Route path="/convite" element={<AcceptInvitePage />} />
       <Route path="/recuperar-senha" element={<PasswordResetPage />} />
       <Route path="/recuperar-senha/confirmar" element={<PasswordResetConfirmPage />} />
-      <Route element={<AppShell />}>
+      <Route element={<RequireSession><AppShell /></RequireSession>}>
         <Route index element={<Navigate to="/painel" replace />} />
         <Route path="painel" element={<DashboardPage />} />
         <Route path="conversas" element={<ConversationsPage />} />

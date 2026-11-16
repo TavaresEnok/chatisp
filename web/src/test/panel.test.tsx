@@ -1,4 +1,4 @@
-import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { areas } from "@/lib/areas";
@@ -192,6 +192,8 @@ describe("painel", () => {
     expect(first.close).toHaveBeenCalledOnce();
   });
   it("abre o Painel a partir da raiz", async () => {
+    switchNotificationMembership("m1");
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({})));
     renderPanel("/");
     expect(
       await screen.findByRole("heading", { level: 1, name: "Painel" }),
@@ -267,42 +269,19 @@ describe("painel", () => {
     expect(links[5]).toHaveFocus();
   });
 
-  it("mostra estado vazio honesto nas áreas genéricas", () => {
-    for (const area of areas.filter((item) => !["conversations", "contacts", "teams"].includes(item.id))) {
-      renderPanel(area.path);
-      expect(
-        screen.getByRole("heading", { level: 1, name: area.label }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("heading", { level: 2, name: area.emptyTitle }),
-      ).toBeInTheDocument();
-      expect(screen.getByText(area.signedOut)).toBeInTheDocument();
-      expect(
-        screen.queryByRole("list", { name: "Registros da área" }),
-      ).not.toBeInTheDocument();
-      expect(document.body.textContent ?? "").not.toMatch(/\d/);
-      expectPortugueseUi();
-      cleanup();
-    }
-  });
-
-  it.each(["/contatos", "/equipes"])("nega acesso anônimo a %s", async (path) => {
-    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch); renderPanel(path);
-    expect(await screen.findByRole("heading", { name: "Entrar" })).toBeInTheDocument(); expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it("encaminha acesso anônimo às conversas para entrar", async () => {
+  it.each(["/", "/painel", "/conversas", "/contatos", "/equipes", "/relatorios", "/configuracoes", "/configuracoes/canais", "/configuracoes/usuarios", "/configuracoes/provedores", "/fora-do-painel"])("redireciona acesso anônimo a %s sem montar o painel ou consultar APIs", async (path) => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
-    renderPanel("/conversas");
+    renderPanel(path);
     expect(await screen.findByRole("heading", { level: 1, name: "Entrar" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { level: 1, name: "Conversas" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Caixa")).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Áreas do painel" })).not.toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
     expectPortugueseUi();
   });
 
   it("explica um endereço desconhecido em português", () => {
+    switchNotificationMembership("m1");
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({})));
     renderPanel("/fora-do-painel");
     expect(
       screen.getByRole("heading", { level: 1, name: "Página não encontrada" }),
@@ -312,26 +291,28 @@ describe("painel", () => {
   });
 
   it("valida o nome local e não envia dado ao servidor", async () => {
+    switchNotificationMembership("m1");
+    vi.stubGlobal("fetch", vi.fn(async (request: Request) => jsonResponse(request.url.endsWith("/preferences/notifications") ? m1Preferences : {})));
     const user = userEvent.setup();
     renderPanel("/configuracoes");
 
     const field = screen.getByLabelText("Nome de exibição nesta aba");
     await user.click(screen.getByRole("button", { name: "Guardar nesta aba" }));
-    expect(screen.getByRole("alert")).toHaveTextContent(
+    expect(within(field.closest("form")!).getByRole("alert")).toHaveTextContent(
       "Informe pelo menos 2 caracteres.",
     );
     expect(field).toHaveAttribute("aria-invalid", "true");
 
     await user.type(field, "   ");
     await user.click(screen.getByRole("button", { name: "Guardar nesta aba" }));
-    expect(screen.getByRole("alert")).toHaveTextContent(
+    expect(within(field.closest("form")!).getByRole("alert")).toHaveTextContent(
       "Informe pelo menos 2 caracteres.",
     );
 
     await user.clear(field);
     await user.type(field, "Ana");
     await user.click(screen.getByRole("button", { name: "Guardar nesta aba" }));
-    expect(screen.getByRole("status")).toHaveTextContent(
+    expect(within(field.closest("form")!).getByRole("status")).toHaveTextContent(
       "Nome guardado nesta aba.",
     );
     expect(
