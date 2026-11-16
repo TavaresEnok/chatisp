@@ -47,7 +47,7 @@ def main():
     ]]
     source = files_under(ROOT / "web/src", {".ts", ".tsx", ".css"})
     visual = []
-    for name in ["redesign-20261106", "redesign-20261107", "demonstracao-20261107"]:
+    for name in ["redesign-20261106", "redesign-20261107", "demonstracao-20261107", "redesign-20261115"]:
         visual.extend(files_under(ROOT / "docs/design" / name, {".png", ".md"}))
     specs = [
         ("inventario-funcional", "Inventário funcional completo", "Páginas, módulos, checklist de 142 itens e matriz dos 257 requisitos.", "CHATISP_PACOTE_FUNCIONAL_PARA_DESIGN.zip", inventory),
