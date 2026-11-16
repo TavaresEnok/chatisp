@@ -1,0 +1,71 @@
+{
+  "anonymous": [
+    {
+      "path": "/",
+      "redirect": "/entrar",
+      "privateShell": false
+    },
+    {
+      "path": "/painel",
+      "redirect": "/entrar",
+      "privateShell": false
+    },
+    {
+      "path": "/conversas",
+      "redirect": "/entrar",
+      "privateShell": false
+    },
+    {
+      "path": "/contatos",
+      "redirect": "/entrar",
+      "privateShell": false
+    },
+    {
+      "path": "/equipes",
+      "redirect": "/entrar",
+      "privateShell": false
+    },
+    {
+      "path": "/relatorios",
+      "redirect": "/entrar",
+      "privateShell": false
+    },
+    {
+      "path": "/configuracoes",
+      "redirect": "/entrar",
+      "privateShell": false
+    },
+    {
+      "path": "/configuracoes/canais",
+      "redirect": "/entrar",
+      "privateShell": false
+    },
+    {
+      "path": "/configuracoes/usuarios",
+      "redirect": "/entrar",
+      "privateShell": false
+    },
+    {
+      "path": "/configuracoes/provedores",
+      "redirect": "/entrar",
+      "privateShell": false
+    },
+    {
+      "path": "/fora-do-painel",
+      "redirect": "/entrar",
+      "privateShell": false
+    }
+  ],
+  "checks": [
+    "cookie inválido recusado",
+    "login válido e reload preservados",
+    "escrita sem CSRF recusada",
+    "logout e voltar não reabrem painel",
+    "replay de cookie revogado recusado",
+    "sessão própria expirada recusada"
+  ],
+  "websocket": {
+    "status": 401,
+    "cache": "no-store"
+  }
+}

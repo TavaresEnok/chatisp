@@ -1,0 +1,497 @@
+[
+  {
+    "path": "/api/panel/annotation-tags",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/attendant-signature",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/canned-replies",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/channels/meta",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/channels/meta/health",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/channels/meta/inspection",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/contacts",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/contacts/00000000-0000-4000-8000-000000000000",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/contacts/00000000-0000-4000-8000-000000000000/document",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/contacts/00000000-0000-4000-8000-000000000000/history",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/conversations/00000000-0000-4000-8000-000000000000/snooze",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/business-hours",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/business-hours/evaluation?instant=2026-11-01T00%3A00%3A00Z",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/channel-policy/templates",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/conversations",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/conversations/00000000-0000-4000-8000-000000000000/annotations",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/conversations/00000000-0000-4000-8000-000000000000/assignment-candidates",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/conversations/00000000-0000-4000-8000-000000000000/attachments/00000000-0000-4000-8000-000000000000",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/conversations/00000000-0000-4000-8000-000000000000/collision",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/conversations/00000000-0000-4000-8000-000000000000/history",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/conversations/00000000-0000-4000-8000-000000000000/media/00000000-0000-4000-8000-000000000000",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/conversations/00000000-0000-4000-8000-000000000000/transfer-sectors",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/directory",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/events",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/reopen-window",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/inboxes/00000000-0000-4000-8000-000000000000/triage-menu",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/lifecycle/inactivity",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/memberships",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/packages",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/packages/00000000-0000-4000-8000-000000000000/download",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/preferences/notifications",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/presence",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/presence/occupancy",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/presence/settings",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/queue",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/reports",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/sectors",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/sectors/00000000-0000-4000-8000-000000000000",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/sectors/00000000-0000-4000-8000-000000000000/distribution",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/sectors/00000000-0000-4000-8000-000000000000/presence",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/session",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/panel/sessions",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/platform/tenants",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  },
+  {
+    "path": "/api/platform/tenants/00000000-0000-4000-8000-000000000000",
+    "status": 401,
+    "cache": "no-store",
+    "keys": [
+      "type",
+      "title",
+      "status",
+      "detail"
+    ]
+  }
+]

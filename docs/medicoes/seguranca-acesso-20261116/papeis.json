@@ -1,0 +1,28 @@
+{
+  "checks": [
+    {
+      "perfil": "Administrador do SaaS",
+      "role": "admin",
+      "platform": 200,
+      "logout": 204
+    },
+    {
+      "perfil": "Dono da empresa",
+      "role": "admin",
+      "platform": 403,
+      "logout": 204
+    },
+    {
+      "perfil": "Atendimento",
+      "role": "agent",
+      "platform": 403,
+      "logout": 204
+    },
+    {
+      "perfil": "Supervisão",
+      "role": "supervisor",
+      "platform": 403,
+      "logout": 204
+    }
+  ]
+}
