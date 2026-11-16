@@ -23,6 +23,7 @@ it("lista pacotes e links de download para administradores", async () => {
   const fetcher = vi.fn().mockResolvedValue(json({ packages: [{ id: "docs", title: "Documentação", description: "Guias", filename: "docs.zip", size: 2048, sha256: "abc" }] }));
   vi.stubGlobal("fetch", fetcher);
   view();
+  await userEvent.click(screen.getByText("Pacotes para download"));
   const link = await screen.findByRole("link", { name: "Baixar Documentação" });
   expect(link).toHaveAttribute("href", "/api/panel/packages/docs/download");
   expect(link).toHaveAttribute("download");
@@ -34,6 +35,7 @@ it("permite tentar novamente e mostra catálogo vazio", async () => {
   session("admin");
   vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json({}, 503)).mockResolvedValueOnce(json({ packages: [] })));
   view();
+  await userEvent.click(screen.getByText("Pacotes para download"));
   await userEvent.click(await screen.findByRole("button", { name: "Tentar novamente" }));
   expect(await screen.findByText("Nenhum pacote disponível no momento.")).toBeInTheDocument();
 });

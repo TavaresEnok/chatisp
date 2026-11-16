@@ -4,6 +4,12 @@ export type InterfaceTheme = "dark" | "light";
 
 const themeKey = "chatisp-interface-theme";
 const menuKey = "chatisp-interface-menu";
+const queueWidthKey = "chatisp-interface-queue-width";
+const detailsKey = "chatisp-interface-details";
+
+function validQueueWidth(value: number) {
+  return Number.isFinite(value) && value >= 280 && value <= 400 ? value : 320;
+}
 
 function read(key: string): string | null {
   try {
@@ -24,6 +30,10 @@ function write(key: string, value: string) {
 type InterfaceState = {
   theme: InterfaceTheme;
   menuExpanded: boolean;
+  queueWidth: number;
+  detailsExpanded: boolean;
+  setQueueWidth: (width: number) => void;
+  setDetailsExpanded: (expanded: boolean) => void;
   toggleTheme: () => void;
   setMenuExpanded: (expanded: boolean) => void;
 };
@@ -36,6 +46,17 @@ type InterfaceState = {
 export const useInterfaceStore = create<InterfaceState>((set, get) => ({
   theme: read(themeKey) === "light" ? "light" : "dark",
   menuExpanded: read(menuKey) === "expanded",
+  queueWidth: validQueueWidth(Number(read(queueWidthKey))),
+  detailsExpanded: read(detailsKey) !== "collapsed",
+  setQueueWidth: (width) => {
+    const queueWidth = validQueueWidth(width);
+    write(queueWidthKey, String(queueWidth));
+    set({ queueWidth });
+  },
+  setDetailsExpanded: (detailsExpanded) => {
+    write(detailsKey, detailsExpanded ? "expanded" : "collapsed");
+    set({ detailsExpanded });
+  },
   toggleTheme: () => {
     const theme = get().theme === "dark" ? "light" : "dark";
     write(themeKey, theme);
@@ -48,7 +69,7 @@ export const useInterfaceStore = create<InterfaceState>((set, get) => ({
 }));
 
 export function resetInterfaceStore() {
-  useInterfaceStore.setState({ theme: "dark", menuExpanded: false });
+  useInterfaceStore.setState({ theme: "dark", menuExpanded: false, queueWidth: 320, detailsExpanded: true });
 }
 
 function apply(state: InterfaceState) {

@@ -347,6 +347,17 @@ export function ErpPanel({ principal, conversationId, localProtocol }: Props) {
             ))}
           </ul>
           {(links.data?.links ?? []).length === 0 ? <p className="text-sm">Nenhum vínculo nesta conversa.</p> : null}
+          <section aria-label="Resumo do cliente" className={selected ? "flex flex-col gap-1" : "hidden"}>
+            <h3 className="text-sm font-medium">Resumo do cliente</h3>
+            {selected && summary.isPending ? <p>Carregando resumo…</p> : null}
+            {selected && customerLine(summary.data) ? <p>{customerLine(summary.data)}</p> : null}
+            {selected && summary.data?.outcome === "not_found" ? <p>Cadastro não encontrado.</p> : null}
+            {selected && summary.isError && !denied(summary.error) && !connectorMessage(summary.error) ? <p role="status">{errorText(summary.error)}</p> : null}
+          </section>
+          {!selected ? <p className="text-sm text-muted-foreground">{(links.data?.links ?? []).length > 0 ? "Escolha um vínculo para ver o resumo." : "Vincule um cliente para consultar os dados do ERP nesta conversa."}</p> : null}
+          <details key={selected ? "selected" : "unselected"} open={selected ? true : undefined} className="rounded-lg bg-muted/40 p-3">
+            <summary className="cursor-pointer text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2">{selected ? "Operações do ERP" : "Vincular cliente"}</summary>
+            <div className="mt-3 flex flex-col gap-3">
           <form aria-label="Vincular cliente" className="flex flex-col gap-2" onSubmit={submitLink}>
             <label className="text-sm">Cliente no ERP <input value={customerId} onChange={(event) => setCustomerId(event.target.value)} autoComplete="off" /></label>
             <label className="text-sm">Contrato no ERP <input value={contractId} onChange={(event) => setContractId(event.target.value)} autoComplete="off" /></label>
@@ -361,14 +372,6 @@ export function ErpPanel({ principal, conversationId, localProtocol }: Props) {
             {customerLine(identify.data) ? <p>Identificação: {customerLine(identify.data)}</p> : null}
             {identify.data?.outcome === "not_found" ? <p>Cadastro não encontrado.</p> : null}
           </form>
-          <section aria-label="Resumo do cliente" className="flex flex-col gap-1">
-            <h3 className="text-sm font-medium">Resumo do cliente</h3>
-            {!selected ? <p className="text-sm">Escolha um vínculo para ver o resumo.</p> : null}
-            {selected && summary.isPending ? <p>Carregando resumo…</p> : null}
-            {selected && customerLine(summary.data) ? <p>{customerLine(summary.data)}</p> : null}
-            {selected && summary.data?.outcome === "not_found" ? <p>Cadastro não encontrado.</p> : null}
-            {selected && summary.isError && !denied(summary.error) && !connectorMessage(summary.error) ? <p role="status">{errorText(summary.error)}</p> : null}
-          </section>
           {grantDenied ? <p>Sem permissão para faturas e segunda via.</p> : (
             <form aria-label="Faturas em aberto" className="flex flex-col gap-2" onSubmit={consultInvoices}>
               <label className="text-sm">Verificação <input value={verification} onChange={(event) => setVerification(event.target.value)} autoComplete="off" /></label>
@@ -400,6 +403,8 @@ export function ErpPanel({ principal, conversationId, localProtocol }: Props) {
             <label className="text-sm">Protocolo no ERP <input value={protocol} onChange={(event) => setProtocol(event.target.value)} autoComplete="off" /></label>
             <button type="submit" disabled={busy || !selected}>Associar protocolo</button>
           </form>
+            </div>
+          </details>
           {formError ? <p role="status">{formError}</p> : null}
           {actionError ? <p role="status">{errorText(actionError)}</p> : null}
           {secondCopy.isError && !denied(secondCopy.error) && !connectorMessage(secondCopy.error) ? <p role="status">{errorText(secondCopy.error)}</p> : null}

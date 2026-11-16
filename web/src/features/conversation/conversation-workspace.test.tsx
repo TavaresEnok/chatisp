@@ -61,6 +61,24 @@ function mockViewport() {
 describe("workspace de atendimento", () => {
   let restore = () => undefined as void;
 
+  it("abre histórico separado das integrações e devolve o foco ao recolher detalhes", async () => {
+    const user = userEvent.setup();
+    render(<ConversationWorkspace scope={scope} listStatus="ready" conversations={[card()]} detailConversationId="conversa-a" detailStatus="ready" entries={[]} onSelect={vi.fn()} onAssume={vi.fn()} onSend={vi.fn()} onClose={vi.fn()} onFarewell={vi.fn()} renderHistory={() => <p>Protocolos anteriores</p>} renderSide={() => <p>Integrações do cliente</p>} />);
+    await user.click(screen.getByRole("option"));
+    const toggle = screen.getByRole("button", { name: "Detalhes" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    const history = screen.getByRole("tab", { name: "Histórico" });
+    await user.click(history);
+    expect(history).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Protocolos anteriores").closest('[role="tabpanel"]')).toHaveAttribute("data-active", "true");
+    expect(screen.getByText("Integrações do cliente").closest('[role="tabpanel"]')).toHaveAttribute("data-active", "false");
+    await user.keyboard("{Escape}");
+    expect(toggle).toHaveFocus();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("complementary", { name: "Detalhes do atendimento" })).not.toBeInTheDocument();
+  });
+
   afterEach(() => {
     restore();
     restore = () => undefined;

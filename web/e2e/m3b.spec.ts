@@ -144,6 +144,7 @@ export async function runM3B(browser: Browser, testInfo: { attach(name: string, 
     const secondHistory = await api<History>(a.page,`${secondItem}/history`,agent.CSRF);
     expect((await api(a.page,`${secondItem}/assume`,agent.CSRF,"POST",{expected_version:secondHistory.body.head.version})).status).toBe(409);
 
+    if (await a.page.getByRole("button", { name: "Detalhes", exact: true }).isVisible()) await a.page.getByRole("button", { name: "Detalhes", exact: true }).click();
     await a.page.getByRole("button",{name:"Transferir para atendente",exact:true}).click();
     const assignment = a.page.getByRole("dialog",{name:"Confirmar atribuição"});
     await assignment.getByRole("combobox", { name: "Atendente", exact: true }).selectOption(destination.Member);
@@ -191,6 +192,7 @@ export async function runM3B(browser: Browser, testInfo: { attach(name: string, 
 
     // Populate all three real caches before the authorization change.
     expect(await cached(a.page,"m3bsegredo")).toBe(true);
+    if (await b.page.getByRole("button", { name: "Detalhes", exact: true }).isVisible()) await b.page.getByRole("button", { name: "Detalhes", exact: true }).click();
     await b.page.getByRole("button",{name:"Transferir para setor",exact:true}).click();
     const transfer = b.page.getByRole("dialog",{name:"Confirmar atribuição"});
     await transfer.getByRole("combobox", { name: "Setor", exact: true }).selectOption(f.M3B.Destination);

@@ -55,6 +55,8 @@ it("mostra o circuito do ERP e mantém o atendimento e o painel externo", async 
     </QueryClientProvider>,
   );
   await user.click(screen.getByRole("option"));
+  await user.click(screen.getByRole("button", { name: "Detalhes" }));
+  await user.click(screen.getByRole("tab", { name: "Integrações" }));
   const erp = await screen.findByRole("region", { name: "ERP" });
   expect(await within(erp).findByRole("alert")).toHaveTextContent("circuito do erp aberto");
   expect(screen.getByRole("region", { name: "Painel externo" })).toHaveTextContent("Painel embutido");

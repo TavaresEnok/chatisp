@@ -1,0 +1,37 @@
+/* Keep secondary details and indicators readable in a narrow queue. */
+.queue-controls .queue-item { align-items: flex-start; }
+.queue-controls .queue-body { gap: 5px; }
+.queue-controls .queue-line strong {
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 600;
+}
+.queue-controls .queue-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
+}
+.queue-controls .queue-protocol,
+.queue-controls .queue-sector { max-width: 100%; }
+.queue-controls .queue-sector::before { content: none; }
+.queue-controls .queue-flags {
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: 0;
+}
+.queue-controls .queue-wait,
+.queue-controls .queue-flag,
+.queue-controls .unread-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  height: auto;
+  padding: 2px 6px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.25;
+}
+.queue-controls .unread-count { border-color: transparent; }

@@ -66,6 +66,7 @@ function setup(deferred = false) {
     return screen.findByRole("textbox", { name: "Mensagem" });
   }
   async function transfer() {
+    await user.click(screen.getByRole("button", { name: "Detalhes" }));
     await user.click(screen.getByRole("button", { name: "Transferir para setor" }));
     await screen.findByRole("option", { name: "Destino fora dos vínculos" });
     await user.selectOptions(screen.getByLabelText("Setor", { selector: 'div[role="dialog"] select' }), "s2");

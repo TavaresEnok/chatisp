@@ -88,7 +88,10 @@ it("vincula o contato, identifica por referência e mostra o resumo", async () =
   }));
   const user = userEvent.setup();
   renderPanel();
-  await user.type(await screen.findByLabelText("Cliente no ERP"), "+5511999999999");
+  expect(await screen.findByText("Nenhum vínculo nesta conversa.")).toBeInTheDocument();
+  expect(screen.getByLabelText("Cliente no ERP")).not.toBeVisible();
+  await user.click(screen.getByText("Vincular cliente"));
+  await user.type(screen.getByLabelText("Cliente no ERP"), "+5511999999999");
   await user.click(screen.getByRole("button", { name: "Vincular" }));
   expect(await screen.findByText("Telefone não escolhe o vínculo.")).toBeInTheDocument();
   expect(posts).toHaveLength(0);
@@ -183,6 +186,7 @@ it("mostra circuito aberto e capacidade indisponível sem apagar o vínculo", as
   const view = renderPanel();
   const panel = await screen.findByRole("region", { name: "ERP" });
   expect(await within(panel).findByRole("alert")).toHaveTextContent("circuito do erp aberto");
+  await user.click(within(panel).getByText("Vincular cliente"));
   await user.type(within(panel).getByLabelText("Cliente no ERP"), "fake-customer-casa");
   expect(within(panel).getByLabelText("Cliente no ERP")).toHaveValue("fake-customer-casa");
   view.unmount();

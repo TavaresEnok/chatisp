@@ -1,8 +1,9 @@
 import { ArrowLeft, PanelRight, MessagesSquare, RotateCcw, X } from "lucide-react";
+import { useInterfaceStore } from "@/stores/interface-store";
 import { ContactDocument } from "@/features/contactdocs/contact-document";
 import { ConversationSidebar } from "@/features/conversation/conversation-sidebar";
-import { useCallback, useContext, useEffect, useId, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import { useCallback, useContext, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { QueryClientContext, type QueryClient } from "@tanstack/react-query";
 import { downloadAttachment } from "@/api/attachments";
@@ -49,6 +50,7 @@ export type ConversationWorkspaceProps = {
   renderQueue?: (selectedId: string | null, select: (id: string) => void) => ReactNode;
   renderActions?: (conversationId: string) => ReactNode;
   renderSide?: (conversationId: string) => ReactNode;
+  renderHistory?: (conversationId: string) => ReactNode;
   onTyping?: (conversationId: string) => void;
   inboxId?: string;
   connectorType?: string;
@@ -67,13 +69,23 @@ type Session = {
   card: ConversationCard | null;
 };
 
-/** Os três grupos de sempre: responsável/setor/notas, contato/canal/anexos e cadastro/integrações. */
+/** Histórico separado das integrações para consulta durante o atendimento. */
 const contextGroups = [
   { key: "attendance", label: "Atendimento", title: "Responsável, setor e notas" },
   { key: "contact", label: "Contato", title: "Contato, canal e anexos" },
+  { key: "history", label: "Histórico", title: "Atendimentos anteriores deste contato" },
   { key: "integrations", label: "Integrações", title: "Cadastro e integrações" },
 ] as const;
 type ContextGroup = (typeof contextGroups)[number]["key"];
+
+const desktopQuery = "(min-width: 1440px)";
+function subscribeDesktop(onChange: () => void) {
+  if (!window.matchMedia) return () => {};
+  const media = window.matchMedia(desktopQuery);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+function desktopSnapshot() { return window.matchMedia?.(desktopQuery).matches ?? false; }
 
 type AssumeState = {
   conversationId: string;
@@ -161,6 +173,7 @@ function WorkspaceSession({
   renderQueue,
   renderActions,
   renderSide,
+  renderHistory,
   onTyping,
   inboxId,
   connectorType = "",
@@ -171,6 +184,25 @@ function WorkspaceSession({
   const [mobileConversation, setMobileConversation] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   const [contextGroup, setContextGroup] = useState<ContextGroup>("attendance");
+  const desktop = useSyncExternalStore(subscribeDesktop, desktopSnapshot, () => false);
+  const queueWidth = useInterfaceStore(s => s.queueWidth);
+  const detailsExpanded = useInterfaceStore(s => s.detailsExpanded);
+  const setDetailsExpanded = useInterfaceStore(s => s.setDetailsExpanded);
+  const contextVisible = desktop ? detailsExpanded : contextOpen;
+  const contextToggle = useRef<HTMLButtonElement>(null);
+  const contextPanel = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!contextVisible && contextPanel.current?.contains(document.activeElement)) contextToggle.current?.focus();
+  }, [contextVisible]);
+  const groups = contextGroups.filter(group => group.key !== "history" || renderHistory);
+  function showContext(open: boolean) {
+    if (desktop) setDetailsExpanded(open);
+    else setContextOpen(open);
+  }
+  function closeContext() {
+    showContext(false);
+    contextToggle.current?.focus();
+  }
   const contextId = useId();
   const [session, setSession] = useState<Session>({
     selectedId: null,
@@ -214,7 +246,7 @@ function WorkspaceSession({
     [inboxId, selectedId],
   );
   const detailMatches = card !== null && detailConversationId === card.id;
-  const hasContext = Boolean(principal || renderSide || renderActions);
+  const hasContext = Boolean(principal || renderSide || renderActions || renderHistory);
   const timelineStatus = detailMatches ? detailStatus : "loading";
   const timelineEntries = detailMatches && detailStatus === "ready" ? entries : [];
 
@@ -254,7 +286,7 @@ function WorkspaceSession({
         if (onNote) onNote(card.id);
         else {
           // As notas ficam no primeiro grupo dos detalhes: ele precisa estar à vista para receber o foco.
-          flushSync(() => { setContextGroup("attendance"); setContextOpen(true); });
+          flushSync(() => { setContextGroup("attendance"); showContext(true); });
           field?.focus();
         }
       }
@@ -305,14 +337,14 @@ function WorkspaceSession({
   function changeContextGroup(event: ReactKeyboardEvent<HTMLButtonElement>, index: number) {
     let next: number;
     switch (event.key) {
-      case "ArrowRight": next = (index + 1) % contextGroups.length; break;
-      case "ArrowLeft": next = (index + contextGroups.length - 1) % contextGroups.length; break;
+      case "ArrowRight": next = (index + 1) % groups.length; break;
+      case "ArrowLeft": next = (index + groups.length - 1) % groups.length; break;
       case "Home": next = 0; break;
-      case "End": next = contextGroups.length - 1; break;
+      case "End": next = groups.length - 1; break;
       default: return;
     }
     event.preventDefault();
-    const group = contextGroups[next];
+    const group = groups[next];
     if (!group) return;
     setContextGroup(group.key);
     event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
@@ -343,7 +375,7 @@ function WorkspaceSession({
   }
 
   return (
-    <div ref={workspace} className="conversation-workspace" data-mobile-conversation={mobileConversation && Boolean(card)} data-context-open={contextOpen} onKeyDown={handleShortcut}>
+    <div ref={workspace} className="conversation-workspace" data-mobile-conversation={mobileConversation && Boolean(card)} style={{ "--chat-queue-width": `${queueWidth}px` } as CSSProperties} data-context-open={contextVisible} onKeyDown={handleShortcut}>
       <div className="workspace-queue">{renderQueue ? renderQueue(card?.id ?? null, id => { selectConversation(id); setMobileConversation(true); }) : <ConversationList
         status={listStatus}
         conversations={conversations}
@@ -363,7 +395,7 @@ function WorkspaceSession({
               onAssume={() => void assume()}
               onClose={() => setCloseOpen(true)}
               leading={<button type="button" className="mobile-back" title="Fila de conversas" onClick={() => setMobileConversation(false)}><ArrowLeft size={16} aria-hidden="true" /><span className="visually-hidden">Fila de conversas</span></button>}
-              trailing={hasContext ? <button type="button" className="context-toggle" title={contextOpen ? "Fechar detalhes" : "Detalhes"} aria-expanded={contextOpen} aria-controls="conversation-context" onClick={() => setContextOpen(!contextOpen)}><PanelRight size={16} strokeWidth={1.6} aria-hidden="true" /><span className="visually-hidden">{contextOpen ? "Fechar detalhes" : "Detalhes"}</span></button> : null}
+              trailing={hasContext ? <button type="button" className="context-toggle" ref={contextToggle} title={contextVisible ? "Fechar detalhes" : "Detalhes"} aria-expanded={contextVisible} aria-controls="conversation-context" onClick={() => showContext(!contextVisible)}><PanelRight size={16} strokeWidth={1.6} aria-hidden="true" /><span className="visually-hidden">{contextVisible ? "Fechar detalhes" : "Detalhes"}</span></button> : null}
             />
             <MessageTimeline
               scope={{ ...scope, conversationId: card.id }}
@@ -402,10 +434,10 @@ function WorkspaceSession({
         )}
       </div>
       {card && hasContext ? (
-        <aside id="conversation-context" className="workspace-context" aria-label="Detalhes do atendimento">
-          <div className="context-heading"><h2>Detalhes<span className="visually-hidden"> do atendimento</span></h2><button type="button" onClick={() => setContextOpen(false)} className="context-close" title="Fechar detalhes"><X size={16} aria-hidden="true" /><span className="visually-hidden">Fechar detalhes</span></button></div>
+        <aside ref={contextPanel} id="conversation-context" className="workspace-context" hidden={!contextVisible} aria-label="Detalhes do atendimento" onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); closeContext(); } }}>
+          <div className="context-heading"><h2>Detalhes<span className="visually-hidden"> do atendimento</span></h2><button type="button" onClick={closeContext} className="context-close" title="Fechar detalhes"><X size={16} aria-hidden="true" /><span className="visually-hidden">Fechar detalhes</span></button></div>
           <div role="tablist" aria-label="Grupo de detalhes" className="context-tabs">
-            {contextGroups.map((group, index) => (
+            {groups.map((group, index) => (
               <button key={group.key} type="button" role="tab" id={`${contextId}-tab-${group.key}`} title={group.title}
                 aria-selected={contextGroup === group.key} aria-controls={`${contextId}-${group.key}`} tabIndex={contextGroup === group.key ? 0 : -1}
                 onClick={() => setContextGroup(group.key)} onKeyDown={(event) => changeContextGroup(event, index)}>
@@ -413,7 +445,7 @@ function WorkspaceSession({
               </button>
             ))}
           </div>
-          <div className="context-scroll">
+          <div className="context-scroll" tabIndex={0} role="region" aria-label="Conteúdo dos detalhes">
             <div role="tabpanel" id={`${contextId}-attendance`} aria-labelledby={`${contextId}-tab-attendance`} className="context-section" data-active={contextGroup === "attendance"}>
               <dl className="context-facts">
                 <div><dt>Protocolo</dt><dd className="context-protocol">{presentationText(card.protocol, "indisponível")}</dd></div>
@@ -433,6 +465,9 @@ function WorkspaceSession({
                 </>
               ) : null}
             </div>
+            {renderHistory ? <div role="tabpanel" id={`${contextId}-history`} aria-labelledby={`${contextId}-tab-history`} className="context-section" data-active={contextGroup === "history"}>
+              {renderHistory(card.id)}
+            </div> : null}
             <div role="tabpanel" id={`${contextId}-integrations`} aria-labelledby={`${contextId}-tab-integrations`} className="context-section" data-active={contextGroup === "integrations"}>
               <ConversationSidebar principal={principal} conversationId={card.id} protocol={card.protocol}>
                 {renderSide?.(card.id)}

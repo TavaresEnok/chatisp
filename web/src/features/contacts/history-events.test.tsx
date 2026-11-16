@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { ContactHistory } from "@/features/contacts/contact-history";
@@ -65,11 +65,17 @@ it("atualiza histórico nos eventos reais e remove dados do supervisor ao trocar
   render(<QueryClientProvider client={client}><MemoryRouter><ConversationsPage /></MemoryRouter></QueryClientProvider>);
   fireEvent.change(await screen.findByLabelText("Caixa de atendimento"), { target: { value: "i1" } });
   fireEvent.click(await screen.findByRole("button", { name: /Protocolo PRIVADO-123/ }));
-  expect(await screen.findByText("PRIVADO-123 — Aberta")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Detalhes" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Histórico" }));
+  const historyPanel = await screen.findByRole("complementary", { name: "Histórico do contato" });
+  const expectState = async (protocol: string, state: string) => {
+    await waitFor(() => expect(within(historyPanel).getByText(protocol).closest("li")).toHaveTextContent(state));
+  };
+  await expectState("PRIVADO-123", "Aberta");
   const socket = sockets[0]!; const send = (id: string, type: string) => act(() => socket.onmessage?.({ data: JSON.stringify({ type: "events", inbox_id: "i1", events: [{ ID: id, Seq: Number(id), Type: type }] }) }));
-  status = "closed"; send("1", "conversation.closed"); await screen.findByText("PRIVADO-123 — Encerrada");
-  status = "waiting_customer"; send("2", "conversation.reopened"); await screen.findByText("PRIVADO-123 — Aguardando cliente");
-  status = "future_private_enum"; added = true; send("3", "conversation.opened"); await screen.findByText("PRIVADO-123 — Status desconhecido"); await screen.findByText("NOVA-456 — Aberta"); expect(document.body.textContent).not.toContain("future_private_enum"); expect(historyCalls).toBeGreaterThanOrEqual(4);
+  status = "closed"; send("1", "conversation.closed"); await expectState("PRIVADO-123", "Encerrada");
+  status = "waiting_customer"; send("2", "conversation.reopened"); await expectState("PRIVADO-123", "Aguardando cliente");
+  status = "future_private_enum"; added = true; send("3", "conversation.opened"); await expectState("PRIVADO-123", "Status desconhecido"); await expectState("NOVA-456", "Aberta"); expect(document.body.textContent).not.toContain("future_private_enum"); expect(historyCalls).toBeGreaterThanOrEqual(4);
   act(() => useSessionStore.getState().applySession({ ...principal, role: "agent", membershipId: "outro" }, "csrf"));
   await waitFor(() => expect(client.getQueryCache().findAll().some(q => JSON.stringify(q.state.data)?.includes("PRIVADO-123"))).toBe(false));
 });

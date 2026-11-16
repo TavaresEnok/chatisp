@@ -3,6 +3,7 @@ import { ContactAvatar } from "@/components/ui/contact-avatar";
 import { useEffect, useId, useRef } from "react";
 import type { KeyboardEvent } from "react";
 import { QueueSearch } from "./queue-search";
+import "./queue-controls.css";
 import type { QueueFilterOptions, QueueFilters, QueueItem, QueueOrder, QueueResultState, QueueTab } from "./queue-types";
 
 export type QueueControlsProps = {
@@ -149,7 +150,7 @@ export function QueueControls(props: QueueControlsProps) {
         ))}
       </div>
       <p className="visually-hidden">Todas mostra as conversas disponíveis no seu acesso.</p>
-      <div className="queue-results" role="tabpanel" id={`${id}-results`} aria-labelledby={`${id}-${props.tab}`} tabIndex={0}>
+      <div className="queue-results" role="tabpanel" id={`${id}-results`} aria-labelledby={`${id}-${props.tab}`} tabIndex={props.resultState === "ready" && props.items.length > 0 ? -1 : 0}>
         {props.resultState === "loading" && <p role="status" aria-busy="true">Carregando conversas.</p>}
         {props.resultState === "error" && <p role="alert">Não foi possível carregar as conversas.</p>}
         {props.resultState === "ready" && props.items.length === 0 && <p>Nenhuma conversa encontrada.</p>}
@@ -163,18 +164,18 @@ export function QueueControls(props: QueueControlsProps) {
                   <ContactAvatar label={item.avatarLabel ?? item.contactLabel} size={40} />
                   <span className="queue-body">
                     <span className="queue-line">
-                      <strong>{item.contactLabel}</strong>
+                      <strong title={item.contactLabel}>{item.contactLabel}</strong>
                       {messageTime(item.lastMessageAt) && <time className="queue-message-time" dateTime={item.lastMessageAt} title={`Última mensagem: ${messageTime(item.lastMessageAt)}`}>{compactTime(item.lastMessageAt)}</time>}
                     </span>
-                    <span className="queue-line">
-                      <span className="visually-hidden">Protocolo {item.protocol}</span><span className="queue-protocol" aria-hidden="true">{item.protocol}</span>
-                      {item.sectorLabel && <span className="queue-sector">{item.sectorLabel}</span>}
-                      <span className="queue-flags">
-                        {item.priorityLabel && <span className="queue-flag"><Flag size={12} strokeWidth={2} aria-hidden="true" /><span className="visually-hidden">Prioridade: </span>{item.priorityLabel}</span>}
-                        {item.waitAlert && <span className="queue-wait" title="Passou do tempo de espera"><Clock size={14} strokeWidth={1.8} aria-hidden="true" /><span className="visually-hidden">Passou do tempo de espera.</span></span>}
-                        {item.unreadCount > 0 && <span className="unread-count">{item.unreadCount}<span className="visually-hidden"> não lida(s)</span></span>}
-                      </span>
+                    <span className="queue-details">
+                      <span className="visually-hidden">Protocolo {item.protocol}</span><span className="queue-protocol" aria-hidden="true" title={`Protocolo ${item.protocol}`}>{item.protocol}</span>
+                      {item.sectorLabel && <span className="queue-sector" title={item.sectorLabel}>{item.sectorLabel}</span>}
                     </span>
+                    {(item.priorityLabel || item.waitAlert || item.unreadCount > 0) && <span className="queue-flags">
+                      {item.priorityLabel && <span className="queue-flag"><Flag size={12} strokeWidth={2} aria-hidden="true" /><span className="visually-hidden">Prioridade: </span>{item.priorityLabel}</span>}
+                      {item.waitAlert && <span className="queue-wait"><Clock size={14} strokeWidth={1.8} aria-hidden="true" />Passou do tempo de espera.</span>}
+                      {item.unreadCount > 0 && <span className="unread-count">{item.unreadCount} não lida(s)</span>}
+                    </span>}
                     {(item.statusLabel || item.assigneeLabel) && (
                       <span className="queue-line">
                         {item.statusLabel && <span className="queue-state" data-state={stateMark[item.statusLabel]}>{item.statusLabel}</span>}

@@ -51,7 +51,7 @@ export function ConversationHeader({
       <div className="conversation-identity">
         <ContactAvatar label={contact} size={36} />
         <div className="conversation-title">
-          <h2>{contact}</h2>
+          <h2 title={contact}>{contact}</h2>
           {/* A linha compacta é só visual; as três frases abaixo são o que leitores de tela anunciam. */}
           <p className="conversation-meta" aria-hidden="true">
             <span className="conversation-protocol">{protocolLabel}</span>
@@ -66,7 +66,7 @@ export function ConversationHeader({
       <div className="conversation-actions">
         {open ? (
           <>
-            <Button type="button" className="conversation-assume" disabled={assuming} onClick={onAssume}>
+            <Button type="button" className="conversation-assume" data-assigned={Boolean(assigneeLabel.trim())} disabled={assuming} onClick={onAssume}>
               Assumir
             </Button>
             <Button type="button" variant="outline" className="conversation-close" title="Encerrar com motivo" disabled={assuming} onClick={onClose}>

@@ -84,6 +84,7 @@ it("transfere para setor fora dos vínculos e remove o conteúdo da conversa", a
   await user.selectOptions(await screen.findByRole("combobox", { name: "Caixa de atendimento" }), "i1");
   await user.click(await screen.findByRole("button", { name: /Protocolo P1/ }));
   await screen.findByLabelText("Mensagem");
+  await user.click(screen.getByRole("button", { name: "Detalhes" }));
   await user.click(await screen.findByRole("button", { name: "Transferir para setor" }));
   await screen.findByRole("option", { name: "Destino permitido" });
   await user.selectOptions(await screen.findByLabelText("Setor", { selector: 'div[role="dialog"] select' }), "s2");
