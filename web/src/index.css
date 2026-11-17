@@ -2899,12 +2899,12 @@ li:focus > .message-line > .entry-reply,
   font-weight: 600;
 }
 
-@media (min-width: 1440px) {
+@media (min-width: 1280px) {
   .conversation-workspace[data-context-open="true"]:has(.workspace-context) {
     grid-template-columns: min(var(--chat-queue-width, 320px), 27%) minmax(0, 1fr) 304px;
   }
 }
-@media (max-width: 1439px) {
+@media (max-width: 1279px) {
   .workspace-context {
     display: none;
   }

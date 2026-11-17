@@ -78,7 +78,7 @@ const contextGroups = [
 ] as const;
 type ContextGroup = (typeof contextGroups)[number]["key"];
 
-const desktopQuery = "(min-width: 1440px)";
+const desktopQuery = "(min-width: 1280px)";
 function subscribeDesktop(onChange: () => void) {
   if (!window.matchMedia) return () => {};
   const media = window.matchMedia(desktopQuery);
