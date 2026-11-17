@@ -126,6 +126,9 @@ var restrictStatements = []string{
 	`REVOKE ALL ON TABLE river.river_job FROM PUBLIC, chatisp_platform`,
 	`GRANT SELECT, INSERT, UPDATE ON TABLE river.river_job TO chatisp_app, chatisp_ingress`,
 	`GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE river.river_job TO chatisp_jobs`,
+	// O reindexador periódico do River roda no worker e precisa de MAINTAIN
+	// (PostgreSQL 17+) para o REINDEX CONCURRENTLY dos índices da fila.
+	`GRANT MAINTAIN ON TABLE river.river_job TO chatisp_jobs`,
 	`REVOKE ALL ON TABLE river.river_leader FROM PUBLIC, chatisp_app, chatisp_platform, chatisp_ingress`,
 	`GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE river.river_leader TO chatisp_jobs`,
 	`REVOKE ALL ON TABLE river.river_queue FROM PUBLIC, chatisp_app, chatisp_platform, chatisp_ingress`,

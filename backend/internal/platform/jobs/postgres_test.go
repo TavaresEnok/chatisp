@@ -157,6 +157,9 @@ func TestQueuePrivileges(t *testing.T) {
 		{RoleJobs, `SELECT has_table_privilege('chatisp_jobs', 'river.river_migration', 'SELECT')`, false},
 		{RoleJobs, `SELECT has_function_privilege('chatisp_jobs', 'river.chatisp_job_update_guard()', 'EXECUTE')`, true},
 		{roleApp, `SELECT has_function_privilege('chatisp_app', 'river.chatisp_job_update_guard()', 'EXECUTE')`, false},
+		{RoleJobs, `SELECT has_table_privilege('chatisp_jobs', 'river.river_job', 'MAINTAIN')`, true},
+		{roleApp, `SELECT has_table_privilege('chatisp_app', 'river.river_job', 'MAINTAIN')`, false},
+		{roleIngress, `SELECT has_table_privilege('chatisp_ingress', 'river.river_job', 'MAINTAIN')`, false},
 	}
 	for _, check := range checks {
 		var got bool
@@ -661,4 +664,15 @@ func randomPassword() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(buf), nil
+}
+
+// O reindexador de manutenção do River roda com o papel do worker.
+func TestJobsRoleCanReindexQueue(t *testing.T) {
+	ctx := context.Background()
+	pool := mustPool(t, testJobsURL, RoleJobs)
+	for _, index := range []string{"river_job_kind", "river_job_state_and_finalized_at_index"} {
+		if _, err := pool.Exec(ctx, "REINDEX INDEX CONCURRENTLY river."+index); err != nil {
+			t.Fatalf("REINDEX %s como chatisp_jobs: %v", index, err)
+		}
+	}
 }
